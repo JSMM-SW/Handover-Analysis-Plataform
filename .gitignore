@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Environment
+.env
+
+# Datos de entrada/salida (no versionar archivos reales de medición)
+data/input/*
+data/processed/*
+data/rejected/*
+!data/input/.gitkeep
+!data/processed/.gitkeep
+!data/rejected/.gitkeep
+
+# Editor/OS
+.vscode/
+.idea/
+Thumbs.db
