@@ -8,6 +8,11 @@ es válido para *cualquier* Excel: extensión, tamaño y que no esté vacío.
 
 from app.core.config import Settings
 from app.core.exceptions import FileValidationError
+from app.etl.constants import (
+    MOTIVO_CELL_ID_CERO,
+    MOTIVO_GPS_SIN_FIX,
+    MOTIVO_RSRP_CENTINELA,
+)
 from app.utils.file_utils import get_extension
 
 
@@ -31,3 +36,21 @@ def validate_uploaded_file(filename: str, content: bytes, settings: Settings) ->
             f"El archivo supera el tamaño máximo permitido "
             f"({settings.max_upload_size_mb} MB)."
         )
+
+
+def validate_record(data: dict) -> str | None:
+    """Valida un registro ya extraído contra las reglas de invalidez dura
+    confirmadas con datos reales. Devuelve el motivo de rechazo, o None si
+    el registro es válido.
+
+    Orden de precedencia (primera condición que aplica gana): un registro
+    con Cell ID/ECI = 0 en los datos reales siempre trae también RSRP = 99,
+    así que se reporta el motivo más específico primero.
+    """
+    if data["Cell ID/ECI"] == 0:
+        return MOTIVO_CELL_ID_CERO
+    if data["RSRP"] == 99:
+        return MOTIVO_RSRP_CENTINELA
+    if data["Latitud"] == 0 and data["Longitud"] == 0:
+        return MOTIVO_GPS_SIN_FIX
+    return None

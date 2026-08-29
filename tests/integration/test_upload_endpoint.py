@@ -20,18 +20,29 @@ def client(tmp_path):
     app.dependency_overrides.clear()
 
 
-def test_upload_valid_xlsx_returns_sheet_info(client, sample_xlsx_bytes):
+def test_upload_valid_xlsx_returns_sheet_info(client, sample_handover_xlsx_bytes):
+    response = client.post(
+        "/api/v1/ingestion/upload",
+        files={"file": ("handover.xlsx", sample_handover_xlsx_bytes, "application/vnd.ms-excel")},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "uploaded"
+    assert body["original_filename"] == "handover.xlsx"
+    assert body["sheets"][0]["name"] == "Datos 1"
+    assert "upload_id" in body
+    assert "stored_filename" in body
+
+
+def test_upload_rejects_missing_required_columns(client, sample_xlsx_bytes):
     response = client.post(
         "/api/v1/ingestion/upload",
         files={"file": ("handover.xlsx", sample_xlsx_bytes, "application/vnd.ms-excel")},
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "success"
-    assert body["original_filename"] == "handover.xlsx"
-    assert body["sheets"][0]["name"] == "Handover"
-    assert "execution_id" in body
+    assert response.status_code == 422
+    assert "estructura esperada" in response.json()["detail"]
 
 
 def test_upload_rejects_non_xlsx_extension(client):

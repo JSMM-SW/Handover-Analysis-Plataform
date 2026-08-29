@@ -134,17 +134,22 @@ body {
     font-weight: 600;
 }
 
-.sheets-table {
-    width: 100%;
-    border-collapse: collapse;
+.plain-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px;
     font-size: 0.9rem;
 }
 
-.sheets-table th,
-.sheets-table td {
-    text-align: left;
-    padding: 8px 10px;
+.plain-list li {
+    padding: 4px 0;
     border-bottom: 1px solid var(--color-border);
+}
+
+.plain-list li.muted {
+    color: var(--color-muted);
+    font-style: italic;
+    border-bottom: none;
 }
 
 .error-card {

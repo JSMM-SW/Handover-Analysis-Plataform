@@ -43,25 +43,24 @@ uploadBtn.addEventListener("click", async () => {
     uploadBtn.disabled = true;
     resetPanels();
     addStatus("Archivo seleccionado");
-    addStatus("Subiendo y validando archivo...");
-
-    const formData = new FormData();
-    formData.append("file", file);
 
     try {
-        const response = await fetch("/api/v1/ingestion/upload", {
-            method: "POST",
-            body: formData,
-        });
+        const uploadData = await uploadFile(file);
+        addStatus("Validando archivo", "success");
+        addStatus(`Extrayendo datos (${uploadData.sheets.length} hoja(s) detectada(s))`, "success");
 
-        const data = await response.json();
+        const result = await processFile(uploadData);
+        addStatus("Validando información", "success");
+        addStatus("Limpiando datos", "success");
+        addStatus("Normalizando datos", "success");
+        addStatus("Generando dataset", "success");
 
-        if (!response.ok) {
-            throw new Error(data.detail || "Error desconocido al procesar el archivo.");
+        if (result.status === "completed") {
+            addStatus("Procesamiento completado", "success");
+        } else {
+            addStatus("Procesamiento finalizado con errores", "error");
         }
-
-        addStatus("Procesamiento completado", "success");
-        renderResult(data);
+        renderResult(result);
     } catch (error) {
         addStatus("Error durante el procesamiento", "error");
         errorMessage.textContent = error.message;
@@ -71,36 +70,64 @@ uploadBtn.addEventListener("click", async () => {
     }
 });
 
+async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch("/api/v1/ingestion/upload", {
+        method: "POST",
+        body: formData,
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.detail || "Error desconocido al subir el archivo.");
+    }
+    return data;
+}
+
+async function processFile(uploadData) {
+    const response = await fetch("/api/v1/ingestion/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            stored_filename: uploadData.stored_filename,
+            original_filename: uploadData.original_filename,
+        }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data.detail || "Error desconocido al procesar el archivo.");
+    }
+    return data;
+}
+
 function renderResult(result) {
     document.getElementById("result-execution-id").textContent = result.execution_id;
-    document.getElementById("result-filename").textContent = result.original_filename;
-    document.getElementById("result-size").textContent = formatBytes(result.file_size_bytes);
+    document.getElementById("result-filename").textContent = result.filename;
+    document.getElementById("result-read").textContent = result.records_read;
+    document.getElementById("result-valid").textContent = result.records_valid;
+    document.getElementById("result-rejected").textContent = result.records_rejected;
     document.getElementById("result-time").textContent = `${result.processing_time_seconds} s`;
 
-    const tbody = document.getElementById("sheets-table-body");
-    tbody.innerHTML = "";
-    for (const sheet of result.sheets) {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-            <td>${escapeHtml(sheet.name)}</td>
-            <td>${sheet.num_rows}</td>
-            <td>${sheet.num_cols}</td>
-            <td>${escapeHtml(sheet.headers.join(", "))}</td>
-        `;
-        tbody.appendChild(row);
-    }
+    renderList("result-warnings", result.warnings, "Sin advertencias");
+    renderList("result-errors", result.errors, "Sin errores");
 
     resultSection.classList.remove("hidden");
 }
 
-function formatBytes(bytes) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function escapeHtml(value) {
-    const div = document.createElement("div");
-    div.textContent = value;
-    return div.innerHTML;
+function renderList(elementId, items, emptyText) {
+    const list = document.getElementById(elementId);
+    list.innerHTML = "";
+    if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = emptyText;
+        li.classList.add("muted");
+        list.appendChild(li);
+        return;
+    }
+    for (const item of items) {
+        const li = document.createElement("li");
+        li.textContent = item;
+        list.appendChild(li);
+    }
 }
