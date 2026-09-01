@@ -12,8 +12,8 @@ from pathlib import Path
 import openpyxl
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.core.exceptions import ExtractionError
-from app.schemas.ingestion import SheetInfo
+from app.shared.exceptions import ExtractionError
+from app.modules.ingesta.schemas import SheetInfo
 
 logger = logging.getLogger(__name__)
 

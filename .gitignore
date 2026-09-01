@@ -20,3 +20,18 @@ data/rejected/*
 .vscode/
 .idea/
 Thumbs.db
+
+
+# Frontend / Node.js
+node_modules/
+dist/
+dist-ssr/
+.eslintcache
+npm-debug.log*
+
+# Variables de entorno locales de Vite
+.env.local
+.env.*.local
+
+# Sistema Operativo (Buenas prácticas si algún compañero usa macOS)
+.DS_Store

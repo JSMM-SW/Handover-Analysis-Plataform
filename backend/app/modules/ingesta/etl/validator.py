@@ -6,9 +6,9 @@ vez analizado un archivo real de handover. Este módulo solo valida lo que
 es válido para *cualquier* Excel: extensión, tamaño y que no esté vacío.
 """
 
-from app.core.config import Settings
-from app.core.exceptions import FileValidationError
-from app.utils.file_utils import get_extension
+from app.shared.config import Settings
+from app.shared.exceptions import FileValidationError
+from app.shared.file_utils import get_extension
 
 
 def validate_uploaded_file(filename: str, content: bytes, settings: Settings) -> None:
