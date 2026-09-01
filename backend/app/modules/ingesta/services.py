@@ -3,13 +3,14 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from app.core.config import Settings
-from app.etl.extractor import extract_basic_info
-from app.etl.validator import validate_uploaded_file
-from app.schemas.ingestion import UploadResult
-from app.utils.file_utils import sanitize_filename
+from app.shared.config import Settings
+from app.shared.file_utils import sanitize_filename
+from app.modules.ingesta.etl.extractor import extract_basic_info
+from app.modules.ingesta.etl.validator import validate_uploaded_file
+from app.modules.ingesta.schemas import UploadResult
 
 logger = logging.getLogger(__name__)
+
 
 
 def process_upload(filename: str, content: bytes, settings: Settings) -> UploadResult:

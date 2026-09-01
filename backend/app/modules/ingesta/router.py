@@ -1,16 +1,14 @@
 import logging
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
-from app.core.config import Settings, get_settings
-from app.core.exceptions import ExtractionError, FileValidationError
-from app.schemas.ingestion import UploadResult
-from app.services.ingestion_service import process_upload
+from app.shared.config import Settings, get_settings
+from app.shared.exceptions import ExtractionError, FileValidationError
+from app.modules.ingesta.schemas import UploadResult
+from app.modules.ingesta.services import process_upload
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/ingestion", tags=["ingestion"])
-
+router = APIRouter(prefix="/ingestion", tags=["Ingesta"])
 
 @router.post("/upload", response_model=UploadResult)
 async def upload_file(
@@ -18,7 +16,6 @@ async def upload_file(
     settings: Settings = Depends(get_settings),
 ) -> UploadResult:
     content = await file.read()
-
     try:
         return process_upload(file.filename or "", content, settings)
     except FileValidationError as exc:
