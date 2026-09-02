@@ -12,3 +12,10 @@ class ExtractionError(IngestionError):
     """Raised when a file cannot be parsed as a valid Excel workbook
     (corrupted file, unsupported format, or no readable sheets).
     """
+
+
+class SchemaValidationError(IngestionError):
+    """Raised when a sheet does not contain the columns required to run the
+    handover pipeline (structural mismatch, blocks the whole file — this is
+    not a per-record rejection).
+    """

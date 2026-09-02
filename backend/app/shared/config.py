@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     data_processed_dir: Path = Path("data/processed")
     data_rejected_dir: Path = Path("data/rejected")
 
+    # Placeholder no funcional: solo para que Settings() siga siendo
+    # instanciable sin .env (usado por los tests de Iteración 1 que no
+    # necesitan base de datos). La base real vive en Supabase; .env debe
+    # sobrescribir esto con la cadena de conexión real.
+    database_url: str = "postgresql+psycopg://user:password@localhost:5432/postgres"
+
     @property
     def max_upload_size_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
@@ -37,3 +43,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+# Singleton de conveniencia para módulos que no participan del sistema de
+# dependencias de FastAPI (p. ej. app.core.database, scripts, tests de
+# integración del repositorio).
+settings = get_settings()

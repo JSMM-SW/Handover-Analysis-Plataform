@@ -6,8 +6,7 @@ from pydantic import BaseModel, Field
 
 class SheetInfo(BaseModel):
     """Información básica de una hoja del Excel, sin interpretar su contenido
-    (eso corresponde a las etapas de Validate/Extract de negocio, aún no
-    implementadas porque dependen de la estructura real del archivo)."""
+    (eso corresponde a las etapas de negocio: Validate/Clean/Normalize)."""
 
     name: str
     num_rows: int
@@ -17,21 +16,52 @@ class SheetInfo(BaseModel):
     )
 
 
-class UploadResult(BaseModel):
-    """Resultado trazable de la carga de un archivo.
-
-    Los campos de trazabilidad completos (records_read/valid/rejected) se
-    incorporarán cuando exista una etapa real de extracción de registros;
-    en esta iteración el archivo solo se inspecciona a nivel de hoja.
+class UploadResponse(BaseModel):
+    """Resultado de recibir y almacenar el archivo (etapas Validate de
+    archivo + Extract de estructura). Todavía no crea una ejecución en base
+    de datos ni corre las reglas de negocio por registro: eso ocurre en
+    POST /ingestion/process, usando `upload_id`/`stored_filename` de aquí.
     """
 
-    execution_id: str
+    upload_id: str
     original_filename: str
     stored_filename: str
     file_size_bytes: int
     upload_timestamp: datetime
     sheets: list[SheetInfo]
-    processing_time_seconds: float
+    status: Literal["uploaded"]
+
+
+class ProcessRequest(BaseModel):
+    stored_filename: str
+    original_filename: str
+
+
+class ProcessResult(BaseModel):
+    """Resultado trazable de una corrida completa del pipeline ETL,
+    reflejando la fila persistida en `etl_execution`."""
+
+    execution_id: str
+    filename: str
+    records_read: int
+    records_valid: int
+    records_rejected: int
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
-    status: Literal["success", "error"]
+    processing_time_seconds: float
+    status: Literal["completed", "failed"]
+
+
+class StatusResponse(BaseModel):
+    """Lectura del estado persistido de una ejecución (GET /ingestion/status/{id})."""
+
+    execution_id: str
+    filename: str
+    status: str
+    processing_date: datetime
+    records_read: int
+    records_valid: int
+    records_rejected: int
+    warnings: list[str]
+    errors: list[str]
+    processing_time_seconds: float | None
