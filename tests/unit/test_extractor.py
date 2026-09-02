@@ -1,7 +1,7 @@
 import pytest
 
-from app.core.exceptions import ExtractionError
-from app.etl.extractor import extract_basic_info
+from app.shared.exceptions import ExtractionError
+from app.modules.ingesta.etl.extractor import extract_basic_info
 
 
 def test_extracts_sheet_info(tmp_path, sample_xlsx_bytes):

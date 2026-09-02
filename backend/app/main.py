@@ -1,30 +1,28 @@
+# main.py corregido
 from pathlib import Path
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
-
-from app.api.routes import health, ingestion
-from app.core.logging import setup_logging
+from app.shared.logging import setup_logging
+from app.api.routes.health import router as health_router  # <-- RUTA CORREGIDA
+from app.modules.ingesta.router import router as ingesta_router
 
 setup_logging()
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-FRONTEND_DIR = PROJECT_ROOT / "frontend"
-
 app = FastAPI(
-    title="Handover Ingestion ETL",
-    description="Módulo de ingesta y procesamiento de datos de handover",
-    version="0.1.0",
+    title="Plataforma de Análisis de Handovers",
+    description="API para ingesta, análisis temporal, geoespacial y métricas QoE",
+    version="1.0.0",
 )
 
-app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=FRONTEND_DIR / "templates")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-app.include_router(health.router, prefix="/api/v1")
-app.include_router(ingestion.router, prefix="/api/v1")
-
-
-@app.get("/")
-def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+# Inclusión de Enrutadores Modulares
+app.include_router(health_router, prefix="/api/v1") # <-- Endpoint del sistema
+app.include_router(ingesta_router, prefix="/api/v1")

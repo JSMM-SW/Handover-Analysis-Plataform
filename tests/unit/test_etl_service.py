@@ -1,6 +1,10 @@
-from app.core.exceptions import SchemaValidationError
-from app.etl.constants import MOTIVO_CELL_ID_CERO, MOTIVO_DUPLICADO, MOTIVO_GPS_SIN_FIX
-from app.services.etl_service import run_pipeline
+from app.shared.exceptions import SchemaValidationError
+from app.modules.ingesta.etl.constants import (
+    MOTIVO_CELL_ID_CERO,
+    MOTIVO_DUPLICADO,
+    MOTIVO_GPS_SIN_FIX,
+)
+from app.modules.ingesta.services import run_pipeline
 
 
 def test_pipeline_end_to_end_with_known_bad_rows(tmp_path, sample_handover_xlsx_bytes):

@@ -13,8 +13,8 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from app.core.config import settings
-from app.repositories.data_repository import HandoverRepository
+from app.shared.config import settings
+from app.modules.ingesta.repository import HandoverRepository
 
 
 @pytest.fixture()

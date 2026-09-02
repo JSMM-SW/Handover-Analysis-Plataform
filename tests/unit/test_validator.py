@@ -1,8 +1,8 @@
 import pytest
 
-from app.core.config import Settings
-from app.core.exceptions import FileValidationError
-from app.etl.validator import validate_uploaded_file
+from app.shared.config import Settings
+from app.shared.exceptions import FileValidationError
+from app.modules.ingesta.etl.validator import validate_uploaded_file
 
 
 @pytest.fixture

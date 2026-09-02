@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.etl.transformer import structure_record
+from app.modules.ingesta.etl.transformer import structure_record
 
 
 def test_structure_record_adds_origin_fields():

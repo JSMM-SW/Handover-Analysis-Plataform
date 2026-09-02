@@ -1,5 +1,8 @@
-from app.etl.cleaner import deduplicate, validate_ranges
-from app.etl.constants import MOTIVO_COORDENADAS_FUERA_DE_RANGO, MOTIVO_RSRP_FUERA_DE_RANGO
+from app.modules.ingesta.etl.cleaner import deduplicate, validate_ranges
+from app.modules.ingesta.etl.constants import (
+    MOTIVO_COORDENADAS_FUERA_DE_RANGO,
+    MOTIVO_RSRP_FUERA_DE_RANGO,
+)
 
 
 def _record(**overrides) -> dict:

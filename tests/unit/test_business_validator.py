@@ -1,5 +1,9 @@
-from app.etl.constants import MOTIVO_CELL_ID_CERO, MOTIVO_GPS_SIN_FIX, MOTIVO_RSRP_CENTINELA
-from app.etl.validator import validate_record
+from app.modules.ingesta.etl.constants import (
+    MOTIVO_CELL_ID_CERO,
+    MOTIVO_GPS_SIN_FIX,
+    MOTIVO_RSRP_CENTINELA,
+)
+from app.modules.ingesta.etl.validator import validate_record
 
 
 def _record(**overrides) -> dict:

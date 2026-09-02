@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.etl.normalizer import normalize_record, normalize_timestamp
+from app.modules.ingesta.etl.normalizer import normalize_record, normalize_timestamp
 
 
 def test_normalize_timestamp_converts_local_to_utc():

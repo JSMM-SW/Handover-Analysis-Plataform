@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 
-from app.core.config import settings
+from app.shared.config import settings
 from app.main import app
 
 REAL_FILE_PATH = (
