@@ -1,0 +1,436 @@
+.ingesta-page {
+    --color-bg: #f7f8fa;
+    --color-surface: #ffffff;
+    --color-border: #e5e7eb;
+    --color-text: #111827;
+    --color-text-muted: #6b7280;
+    --color-text-faint: #9ca3af;
+    --color-primary: #2563eb;
+    --color-primary-hover: #1d4ed8;
+    --color-primary-soft: #eff6ff;
+    --color-success: #16a34a;
+    --color-success-soft: #f0fdf4;
+    --color-error: #dc2626;
+    --color-error-soft: #fef2f2;
+    --color-warning: #b45309;
+    --color-warning-soft: #fffbeb;
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
+    --radius: 12px;
+
+    min-height: 100vh;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: -apple-system, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+    .ingesta-page {
+        --color-bg: #0b0d12;
+        --color-surface: #14171f;
+        --color-border: #262b36;
+        --color-text: #f3f4f6;
+        --color-text-muted: #9aa2b1;
+        --color-text-faint: #6b7280;
+        --color-primary: #4f8cff;
+        --color-primary-hover: #6ea0ff;
+        --color-primary-soft: rgba(79, 140, 255, 0.12);
+        --color-success: #34d399;
+        --color-success-soft: rgba(52, 211, 153, 0.1);
+        --color-error: #f87171;
+        --color-error-soft: rgba(248, 113, 113, 0.1);
+        --color-warning: #fbbf24;
+        --color-warning-soft: rgba(251, 191, 36, 0.1);
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+}
+
+.ingesta-page * {
+    box-sizing: border-box;
+}
+
+.ingesta-shell {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+}
+
+/* Header */
+.ingesta-header {
+    margin-bottom: 32px;
+}
+
+.ingesta-eyebrow {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-primary);
+    background: var(--color-primary-soft);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+}
+
+.ingesta-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px;
+}
+
+.ingesta-subtitle {
+    font-size: 15px;
+    color: var(--color-text-muted);
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Cards */
+.ingesta-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-sm);
+    padding: 28px;
+}
+
+.ingesta-card + .ingesta-card {
+    margin-top: 20px;
+}
+
+.ingesta-card-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 4px;
+}
+
+.ingesta-card-hint {
+    font-size: 13px;
+    color: var(--color-text-muted);
+    margin: 0 0 20px;
+}
+
+/* Dropzone */
+.ingesta-dropzone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    border: 1.5px dashed var(--color-border);
+    border-radius: var(--radius);
+    padding: 32px 20px;
+    background: var(--color-bg);
+    transition: border-color 150ms ease, background-color 150ms ease;
+    cursor: pointer;
+}
+
+.ingesta-dropzone:hover,
+.ingesta-dropzone:focus-within {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+
+.ingesta-dropzone.is-dragging {
+    border-color: var(--color-primary);
+    background: var(--color-primary-soft);
+}
+
+.ingesta-dropzone.has-file {
+    border-style: solid;
+    border-color: var(--color-success);
+    background: var(--color-success-soft);
+}
+
+.ingesta-dropzone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+.ingesta-dropzone-icon {
+    width: 36px;
+    height: 36px;
+    color: var(--color-text-faint);
+}
+
+.ingesta-dropzone.has-file .ingesta-dropzone-icon {
+    color: var(--color-success);
+}
+
+.ingesta-dropzone-text {
+    font-size: 14px;
+    color: var(--color-text);
+    font-weight: 500;
+}
+
+.ingesta-dropzone-filename {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+    word-break: break-all;
+}
+
+.ingesta-dropzone-hint {
+    font-size: 12px;
+    color: var(--color-text-faint);
+}
+
+/* Button */
+.ingesta-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 20px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--color-primary);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background-color 150ms ease, transform 100ms ease;
+}
+
+.ingesta-btn:hover:not(:disabled) {
+    background: var(--color-primary-hover);
+}
+
+.ingesta-btn:active:not(:disabled) {
+    transform: scale(0.99);
+}
+
+.ingesta-btn:disabled {
+    background: var(--color-border);
+    color: var(--color-text-faint);
+    cursor: not-allowed;
+}
+
+.ingesta-spinner {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: #fff;
+    animation: ingesta-spin 700ms linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes ingesta-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Steps */
+.ingesta-steps {
+    list-style: none;
+    margin: 24px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ingesta-step {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 4px;
+    font-size: 13.5px;
+    color: var(--color-text-muted);
+}
+
+.ingesta-step-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ingesta-step-icon svg {
+    width: 12px;
+    height: 12px;
+}
+
+.ingesta-step.is-success .ingesta-step-icon {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.ingesta-step.is-success {
+    color: var(--color-text);
+}
+
+.ingesta-step.is-error .ingesta-step-icon {
+    background: var(--color-error-soft);
+    color: var(--color-error);
+}
+
+.ingesta-step.is-error {
+    color: var(--color-error);
+}
+
+.ingesta-step.is-pending .ingesta-step-icon {
+    background: var(--color-bg);
+    border: 1.5px solid var(--color-border);
+}
+
+/* Alerts */
+.ingesta-alert {
+    display: flex;
+    gap: 12px;
+    padding: 16px 18px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.ingesta-alert-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.ingesta-alert.is-error {
+    background: var(--color-error-soft);
+    color: var(--color-error);
+}
+
+.ingesta-alert-title {
+    font-weight: 600;
+    margin: 0 0 2px;
+}
+
+/* Results */
+.ingesta-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+.ingesta-status-pill.is-completed {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.ingesta-status-pill.is-failed {
+    background: var(--color-error-soft);
+    color: var(--color-error);
+}
+
+.ingesta-result-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
+.ingesta-result-meta {
+    font-size: 12.5px;
+    color: var(--color-text-faint);
+    margin: 0 0 20px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.ingesta-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.ingesta-stat {
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    padding: 14px 12px;
+    text-align: center;
+}
+
+.ingesta-stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.ingesta-stat-label {
+    font-size: 11.5px;
+    color: var(--color-text-muted);
+    margin-top: 2px;
+}
+
+.ingesta-stat.is-valid .ingesta-stat-value {
+    color: var(--color-success);
+}
+
+.ingesta-stat.is-rejected .ingesta-stat-value {
+    color: var(--color-error);
+}
+
+.ingesta-section {
+    margin-top: 24px;
+}
+
+.ingesta-section-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-faint);
+    margin: 0 0 10px;
+}
+
+.ingesta-note-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ingesta-note {
+    font-size: 13.5px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    line-height: 1.4;
+}
+
+.ingesta-note.is-warning {
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
+}
+
+.ingesta-note.is-empty {
+    color: var(--color-text-faint);
+    font-style: italic;
+    padding-left: 2px;
+}
+
+@media (max-width: 520px) {
+    .ingesta-shell {
+        padding: 32px 16px 60px;
+    }
+
+    .ingesta-stat-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
