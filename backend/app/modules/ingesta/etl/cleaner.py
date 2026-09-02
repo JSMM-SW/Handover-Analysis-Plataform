@@ -2,7 +2,7 @@
 pasaron las validaciones estructurales duras del Validator (etl/validator.py).
 """
 
-from app.etl.constants import (
+from app.modules.ingesta.etl.constants import (
     LATITUD_MAX,
     LATITUD_MIN,
     LONGITUD_MAX,

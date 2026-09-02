@@ -1,6 +1,8 @@
 // frontend/src/modules/ingesta/IngestaPage.jsx
 import { useState } from 'react';
 
+const API_BASE = "http://localhost:8000/api/v1";
+
 export default function IngestaPage() {
     const [file, setFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -16,54 +18,79 @@ export default function IngestaPage() {
         setError(null);
     };
 
+    const pushStatus = (text, kind = "") => {
+        setStatusList(prev => [...prev, { text, kind }]);
+    };
+
+    const uploadFile = async () => {
+        const formData = new FormData();
+        formData.append("file", file);
+
+        const response = await fetch(`${API_BASE}/ingestion/upload`, {
+            method: "POST",
+            body: formData,
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || "Error desconocido al subir el archivo.");
+        }
+        return data;
+    };
+
+    const processFile = async (uploadData) => {
+        const response = await fetch(`${API_BASE}/ingestion/process`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                stored_filename: uploadData.stored_filename,
+                original_filename: uploadData.original_filename,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || "Error desconocido al procesar el archivo.");
+        }
+        return data;
+    };
+
     const handleUpload = async () => {
         if (!file) return;
 
         setIsUploading(true);
         setResult(null);
         setError(null);
-        setStatusList([
-            { text: "Archivo seleccionado", kind: "" },
-            { text: "Subiendo y validando archivo...", kind: "" }
-        ]);
-
-        const formData = new FormData();
-        formData.append("file", file);
+        setStatusList([{ text: "Archivo seleccionado", kind: "" }]);
 
         try {
-            // Nota: Aquí se usa la URL de tu backend
-            const response = await fetch("http://localhost:8000/api/v1/ingestion/upload", {
-                method: "POST",
-                body: formData,
-            });
+            const uploadData = await uploadFile();
+            pushStatus("Validando archivo", "success");
+            pushStatus(`Extrayendo datos (${uploadData.sheets.length} hoja(s) detectada(s))`, "success");
 
-            const data = await response.json();
+            const processData = await processFile(uploadData);
+            pushStatus("Validando información", "success");
+            pushStatus("Limpiando datos", "success");
+            pushStatus("Normalizando datos", "success");
+            pushStatus("Generando dataset", "success");
 
-            if (!response.ok) {
-                throw new Error(data.detail || "Error desconocido al procesar el archivo.");
+            if (processData.status === "completed") {
+                pushStatus("Procesamiento completado", "success");
+            } else {
+                pushStatus("Procesamiento finalizado con errores", "error");
             }
-
-            setStatusList(prev => [...prev, { text: "Procesamiento completado", kind: "success" }]);
-            setResult(data);
+            setResult(processData);
         } catch (err) {
-            setStatusList(prev => [...prev, { text: "Error durante el procesamiento", kind: "error" }]);
+            pushStatus("Error durante el procesamiento", "error");
             setError(err.message);
         } finally {
             setIsUploading(false);
         }
     };
 
-    const formatBytes = (bytes) => {
-        if (bytes < 1024) return `${bytes} B`;
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-    };
-
     return (
         <div className="container mx-auto p-4">
             <div className="card bg-white shadow-md rounded p-6 mb-4">
                 <h2 className="text-xl font-bold mb-4">Carga de datos de handover</h2>
-                
+
                 <div className="flex items-center gap-4 mb-4">
                     <input type="file" accept=".xlsx" onChange={handleFileChange} />
                     <span className="text-gray-500">
@@ -71,8 +98,8 @@ export default function IngestaPage() {
                     </span>
                 </div>
 
-                <button 
-                    onClick={handleUpload} 
+                <button
+                    onClick={handleUpload}
                     disabled={!file || isUploading}
                     className="bg-blue-600 text-white px-4 py-2 rounded disabled:bg-gray-400"
                 >
@@ -82,7 +109,7 @@ export default function IngestaPage() {
                 <ul className="mt-4">
                     {statusList.map((status, index) => (
                         <li key={index} className={
-                            status.kind === 'success' ? 'text-green-600' : 
+                            status.kind === 'success' ? 'text-green-600' :
                             status.kind === 'error' ? 'text-red-600' : 'text-gray-600'
                         }>
                             {status.text}
@@ -104,35 +131,40 @@ export default function IngestaPage() {
                     <dl className="grid grid-cols-2 gap-4 mb-6">
                         <dt className="text-gray-500">Identificador de ejecución</dt>
                         <dd className="font-semibold">{result.execution_id}</dd>
+
                         <dt className="text-gray-500">Archivo</dt>
-                        <dd className="font-semibold">{result.original_filename}</dd>
-                        <dt className="text-gray-500">Tamaño</dt>
-                        <dd className="font-semibold">{formatBytes(result.file_size_bytes)}</dd>
+                        <dd className="font-semibold">{result.filename}</dd>
+
+                        <dt className="text-gray-500">Registros leídos</dt>
+                        <dd className="font-semibold">{result.records_read}</dd>
+
+                        <dt className="text-gray-500">Registros válidos</dt>
+                        <dd className="font-semibold">{result.records_valid}</dd>
+
+                        <dt className="text-gray-500">Registros rechazados</dt>
+                        <dd className="font-semibold">{result.records_rejected}</dd>
+
                         <dt className="text-gray-500">Tiempo de procesamiento</dt>
                         <dd className="font-semibold">{result.processing_time_seconds} s</dd>
                     </dl>
 
-                    <h3 className="font-bold mb-2">Hojas detectadas</h3>
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="border-b">
-                                <th className="py-2">Hoja</th>
-                                <th className="py-2">Filas</th>
-                                <th className="py-2">Columnas</th>
-                                <th className="py-2">Encabezados</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {result.sheets.map((sheet, index) => (
-                                <tr key={index} className="border-b">
-                                    <td className="py-2">{sheet.name}</td>
-                                    <td className="py-2">{sheet.num_rows}</td>
-                                    <td className="py-2">{sheet.num_cols}</td>
-                                    <td className="py-2">{sheet.headers.join(", ")}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <h3 className="font-bold mb-2">Advertencias</h3>
+                    <ul className="mb-6">
+                        {result.warnings.length === 0 ? (
+                            <li className="text-gray-400 italic">Sin advertencias</li>
+                        ) : (
+                            result.warnings.map((warning, index) => <li key={index}>{warning}</li>)
+                        )}
+                    </ul>
+
+                    <h3 className="font-bold mb-2">Errores</h3>
+                    <ul>
+                        {result.errors.length === 0 ? (
+                            <li className="text-gray-400 italic">Sin errores</li>
+                        ) : (
+                            result.errors.map((err, index) => <li key={index}>{err}</li>)
+                        )}
+                    </ul>
                 </div>
             )}
         </div>

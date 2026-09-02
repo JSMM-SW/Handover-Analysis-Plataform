@@ -5,7 +5,7 @@ formato estándar de salida (Objetivo 3 del plan de tesis).
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from app.etl.constants import TIMEZONE_ORIGEN
+from app.modules.ingesta.etl.constants import TIMEZONE_ORIGEN
 
 _ORIGEN_TZ = ZoneInfo(TIMEZONE_ORIGEN)
 
