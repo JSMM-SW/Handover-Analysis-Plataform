@@ -5,6 +5,7 @@ openpyxl>=3.1
 pydantic>=2.9
 pydantic-settings>=2.5
 python-multipart>=0.0.12
+python-dotenv>=1.0.0
 
 # persistencia (Repository Pattern + PostgreSQL)
 sqlalchemy>=2.0
