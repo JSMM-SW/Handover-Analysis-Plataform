@@ -27,6 +27,8 @@ node_modules/
 dist/
 dist-ssr/
 .eslintcache
+test-results/
+playwright-report/
 npm-debug.log*
 
 # Variables de entorno locales de Vite
