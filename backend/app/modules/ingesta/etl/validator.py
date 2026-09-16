@@ -10,8 +10,13 @@ from app.shared.config import Settings
 from app.shared.exceptions import FileValidationError
 from app.modules.ingesta.etl.constants import (
     MOTIVO_CELL_ID_CERO,
+    MOTIVO_CID_CENTINELA,
     MOTIVO_GPS_SIN_FIX,
+    MOTIVO_GPS_SIN_FIX_CSV,
     MOTIVO_RSRP_CENTINELA,
+    NET_TYPE_3G,
+    NET_TYPE_LTE,
+    SENTINEL_INT32_MAX,
 )
 from app.shared.file_utils import get_extension
 
@@ -38,7 +43,7 @@ def validate_uploaded_file(filename: str, content: bytes, settings: Settings) ->
         )
 
 
-def validate_record(data: dict) -> str | None:
+def validate_record_xlsx(data: dict) -> str | None:
     """Valida un registro ya extraído contra las reglas de invalidez dura
     confirmadas con datos reales. Devuelve el motivo de rechazo, o None si
     el registro es válido.
@@ -53,4 +58,26 @@ def validate_record(data: dict) -> str | None:
         return MOTIVO_RSRP_CENTINELA
     if data["Latitud"] == 0 and data["Longitud"] == 0:
         return MOTIVO_GPS_SIN_FIX
+    return None
+
+
+def validate_record_csv(data: dict) -> str | None:
+    """Equivalente csv de `validate_record_xlsx`. Devuelve el motivo de
+    rechazo, o None si el registro es válido.
+
+    Orden de precedencia: `cid` centinela primero (rechazo específico e
+    inequívoco), luego GPS sin fix (dos formas equivalentes en los datos
+    reales: gps=0 y lat=long=-1 siempre coinciden), y por último un
+    net_type fuera de los 3 valores confirmados con datos reales (LTE,
+    UMTS, HSPA+) — no se inventa un mapeo de tecnología para un valor no
+    confirmado, se rechaza el registro para que quede visible en la
+    cuarentena en vez de fallar silenciosamente o adivinar.
+    """
+    if data["cid"] == SENTINEL_INT32_MAX:
+        return MOTIVO_CID_CENTINELA
+    if data["gps"] == 0 or (data["lat"] == -1 and data["long"] == -1):
+        return MOTIVO_GPS_SIN_FIX_CSV
+    net_type = data["net_type"]
+    if net_type != NET_TYPE_LTE and net_type not in NET_TYPE_3G:
+        return f"net_type desconocido: '{net_type}' (no es LTE, UMTS ni HSPA+)"
     return None
