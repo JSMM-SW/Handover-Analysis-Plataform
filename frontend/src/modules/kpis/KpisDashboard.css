@@ -218,3 +218,15 @@
     font-weight: 600;
     font-size: 14px;
 }
+
+.kpis-filtros-resumen-pdf {
+    display: none;
+    gap: 24px;
+    font-size: 13px;
+    color: #9aa2b1;
+    padding: 10px 16px;
+    background: #14171f;
+    border: 1px solid #262b36;
+    border-radius: 10px;
+    margin-top: 12px;
+}
