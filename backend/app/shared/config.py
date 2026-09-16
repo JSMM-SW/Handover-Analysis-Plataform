@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     )
 
     max_upload_size_mb: int = 20
-    allowed_extensions: str = ".xlsx"
+    allowed_extensions: str = ".xlsx,.csv"
 
     data_input_dir: Path = Path("data/input")
     data_processed_dir: Path = Path("data/processed")
