@@ -95,10 +95,17 @@ CREATE TABLE IF NOT EXISTS handover_record (
     tac                INTEGER NULL,
     earfcn             INTEGER NULL,
 
-    tecnologia         SMALLINT NOT NULL CHECK (tecnologia IN (0, 1, 2)),  -- 0 = sin señal, 1 = LTE/4G, 2 = 3G/UMTS
+    tecnologia         SMALLINT NOT NULL CHECK (tecnologia IN (0, 1, 2, 3)),  -- 0=sin señal, 1=LTE/4G, 2=3G, 3=2G (GSM/EDGE/GPRS)
 
-    latitud             NUMERIC(10,6) NOT NULL CHECK (latitud BETWEEN -5 AND 2),
-    longitud            NUMERIC(10,6) NOT NULL CHECK (longitud BETWEEN -92 AND -75),
+    -- NULL solo posible en origen csv, cuando gps=0 o lat/long traen el
+    -- centinela -1 ("sin fix"): confirmado con Session_43_20260623_165825.csv
+    -- que rechazar el registro completo por esto tira el 92% del archivo, y
+    -- el módulo de visualización temporal no usa coordenadas. La fila se
+    -- conserva (cid/tech/rsrp/timestamp intactos) con latitud/longitud NULL
+    -- en vez de rechazarse. Siempre poblado para xlsx (que sigue rechazando
+    -- GPS sin fix sin cambios, ver chk_gps_con_fix).
+    latitud             NUMERIC(10,6) NULL CHECK (latitud BETWEEN -5 AND 2),
+    longitud            NUMERIC(10,6) NULL CHECK (longitud BETWEEN -92 AND -75),
 
     -- Rango físicamente posible de RSRP en LTE: -140 a -1 dBm. Esto excluye el
     -- marcador de error del equipo de medición (99) pero permite señales
@@ -112,10 +119,43 @@ CREATE TABLE IF NOT EXISTS handover_record (
     -- y NULL también cuando el equipo reporta el centinela 2147483647.
     node_id             INTEGER NULL,
     psc_pci             INTEGER NULL,
+    -- DEPRECATED desde Session_43: significaba magnitudes distintas según
+    -- `tech` (RSRP en LTE, RSCP en WCDMA, RSSI en GSM), lo cual mezclaba tres
+    -- unidades físicas en una sola serie. Las filas de csv anteriores a esta
+    -- migración la tienen poblada (no se tocan/migran); las filas nuevas ya
+    -- no la usan: van a rsrp_dbm/rscp_dbm/rssi_dbm según `tech`.
     rssi                SMALLINT NULL,
     rsrq                SMALLINT NULL,
     rssnr               SMALLINT NULL,
     accuracy            SMALLINT NULL,
+
+    -- Desambiguación de `rssi` por tecnología (Session_43_20260623_165825.csv,
+    -- 86,398 filas reales): la app reporta LTE/WCDMA/GSM bajo un solo campo
+    -- `rssi`, pero la magnitud es distinta en cada caso (medianas reales:
+    -- LTE -104 dBm = RSRP, WCDMA -102 dBm = RSCP, GSM -95 dBm = RSSI). Cada
+    -- fila puebla como máximo una de las tres según su `tech`; rsrp_dbm ya
+    -- existe (compartida con xlsx), rscp_dbm/rssi_dbm son nuevas.
+    rscp_dbm            SMALLINT NULL,
+    rssi_dbm            SMALLINT NULL,
+
+    -- Identificadores crudos de celda (csv), preservados TAL CUAL además de
+    -- seguir alimentando cell_id/tac (no se retiran, otros módulos podrían
+    -- depender de ellos). Ver comentario de cell_id para la advertencia de
+    -- identidad de celda en LTE.
+    cid                 BIGINT NULL,
+    lac_tac_raw         INTEGER NULL,
+
+    -- Contador secuencial del equipo de medición (columna `report` del csv),
+    -- verificado sin huecos en los archivos reales. Da un orden estable
+    -- cuando el timestamp por sí solo no alcanza (resolución de 1s, con
+    -- timestamps duplicados reales). NULL en xlsx, que no tiene este campo.
+    report_index        INTEGER NULL,
+
+    -- Contexto de tecnología y estado (csv). NULL en xlsx.
+    net_type            TEXT NULL,   -- LTE, HSPA, HSPA+, EDGE, UMTS, GPRS, UNKNOWN
+    tech                TEXT NULL,   -- LTE, WCDMA, GSM (RAT real; fuente de verdad es net_type, no tech)
+    data_state          TEXT NULL,   -- DISCONNECTED, CONNECTED, CONNECTING
+    call_state          TEXT NULL,   -- IDLE, OFFHOOK
 
     archivo_origen      TEXT NOT NULL,
     hoja_origen         TEXT NULL,                   -- 'Datos 1'/'Datos 2'/'Datos 3' (xlsx); NULL en csv, que no tiene hojas
@@ -123,15 +163,19 @@ CREATE TABLE IF NOT EXISTS handover_record (
 
     -- Distancia Haversine / tiempo contra el registro anterior de la misma
     -- sesión (misma hoja_origen). NULL si es el primero de su sesión, si el
-    -- registro actual o el anterior fueron rechazados por GPS sin fix, o si
+    -- registro actual o el anterior no tienen posición (xlsx rechazado por
+    -- GPS sin fix, o csv con latitud/longitud NULL por gps sin fix), o si
     -- la diferencia de tiempo es 0. Valores > 200 km/h se conservan con un
     -- warning en vez de rechazarse (podría ser ruido de GPS, no se fuerza).
     velocidad_kmh       NUMERIC(6,2) NULL,
 
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    -- Un registro con GPS (0,0) [xlsx] o lat=long=-1 [csv] es "sin fix", no
-    -- una coordenada real en Ecuador.
+    -- Defensa en profundidad: el ETL nunca debería insertar el centinela
+    -- literal (0,0 en xlsx, -1,-1 en csv) — xlsx lo rechaza, csv lo convierte
+    -- a NULL antes de insertar. Un NULL satisface el CHECK automáticamente
+    -- (semántica de 3 valores de SQL), así que esto no bloquea la nueva
+    -- política de csv.
     CONSTRAINT chk_gps_con_fix CHECK (NOT (latitud = 0 AND longitud = 0) AND NOT (latitud = -1 AND longitud = -1))
 );
 
@@ -140,7 +184,11 @@ COMMENT ON TABLE handover_record IS
     'por los módulos de visualización temporal, geoespacial y KPIs.';
 COMMENT ON COLUMN handover_record.cell_id IS
     'Identificador de celda (xlsx: Cell ID/ECI; csv: cid). Un handover se detecta cuando este valor '
-    'cambia entre registros consecutivos del mismo recorrido.';
+    'cambia entre registros consecutivos del mismo recorrido. ADVERTENCIA (origen csv, verificado con '
+    'Session_43_20260623_165825.csv): en LTE este valor es el SECTOR LOCAL dentro del eNodeB '
+    '(rango 70-210), NO una identidad de celda confiable — el mismo cid aparece bajo múltiples '
+    'node_id (9 de 26 valores de cid observados). Para identidad de celda correcta, usar '
+    '(tech, node_id, cid, lac_tac_raw) directamente, no este campo.';
 COMMENT ON COLUMN handover_record.tac IS
     'Tracking/Location Area Code (xlsx: TAC/LAC; csv: lac_tac). NULL cuando el csv reporta '
     'el centinela 2147483647 (sin dato); siempre poblado para xlsx.';
@@ -148,11 +196,42 @@ COMMENT ON COLUMN handover_record.earfcn IS
     'E-UTRA Absolute Radio Frequency Channel Number (xlsx: EARFCN; csv: arfcn). NULL cuando el '
     'csv reporta el centinela 2147483647 (sin dato); siempre poblado para xlsx.';
 COMMENT ON COLUMN handover_record.tecnologia IS
-    '0 = sin señal (xlsx), 1 = LTE/4G, 2 = 3G/UMTS (HSPA+/UMTS). Para csv se deriva de '
-    'net_type (más confiable que tech: net_type refleja el cambio real de tecnología antes '
+    '0 = sin señal (xlsx), 1 = LTE/4G, 2 = 3G (UMTS/HSPA/HSPA+), 3 = 2G (GSM/EDGE/GPRS). Para csv se '
+    'deriva de net_type (más confiable que tech: net_type refleja el cambio real de tecnología antes '
     'que tech/cid durante una transición); para xlsx viene directo de la columna Tecnología.';
 COMMENT ON COLUMN handover_record.rsrp_dbm IS
-    'Reference Signal Received Power, en dBm. Rango real observado en el dataset xlsx: -128 a -29 dBm.';
+    'Reference Signal Received Power, en dBm. xlsx: columna RSRP directa, rango real -128 a -29 dBm. '
+    'csv: proviene de `rssi` cuando tech=LTE (mediana real -104 dBm); NULL para WCDMA/GSM (ver '
+    'rscp_dbm/rssi_dbm) y para xlsx si no aplica.';
+COMMENT ON COLUMN handover_record.rscp_dbm IS
+    'Received Signal Code Power, en dBm (csv: `rssi` cuando tech=WCDMA, mediana real -102 dBm). '
+    'NULL para xlsx, para LTE/GSM, o centinela.';
+COMMENT ON COLUMN handover_record.rssi_dbm IS
+    'Received Signal Strength Indicator propiamente dicho, en dBm (csv: `rssi` cuando tech=GSM, '
+    'mediana real -95 dBm). NULL para xlsx, para LTE/WCDMA, o centinela.';
+COMMENT ON COLUMN handover_record.cid IS
+    'Identificador crudo de celda tal como lo reporta el csv (Network Cell Info), sin reinterpretar. '
+    'NULL para xlsx. Ver advertencia de identidad en el comentario de cell_id.';
+COMMENT ON COLUMN handover_record.lac_tac_raw IS
+    'Tracking/Location Area Code crudo del csv (mismo valor que `tac`, con el nombre que espera el '
+    'contrato de datos del módulo de visualización temporal). NULL para xlsx.';
+COMMENT ON COLUMN handover_record.report_index IS
+    'Contador secuencial del equipo de medición (csv: `report`, verificado 0..n-1 sin huecos). '
+    'Da un orden estable cuando timestamp_medicion por sí solo no alcanza (resolución de 1s, con '
+    'timestamps duplicados reales). NULL para xlsx.';
+COMMENT ON COLUMN handover_record.net_type IS
+    'Tipo de servicio de red tal como lo reporta el csv (LTE, HSPA, HSPA+, EDGE, UMTS, GPRS, '
+    'UNKNOWN). Fuente de verdad para `tecnologia`. NULL para xlsx.';
+COMMENT ON COLUMN handover_record.tech IS
+    'RAT (Radio Access Technology) tal como lo reporta el csv (LTE, WCDMA, GSM). Puede discrepar '
+    'brevemente de net_type durante una transición real de tecnología (net_type es la fuente de '
+    'verdad, no tech). NULL para xlsx.';
+COMMENT ON COLUMN handover_record.data_state IS
+    'Estado de conexión de datos del csv (DISCONNECTED, CONNECTED, CONNECTING). Aproxima si el '
+    'terminal estaba en modo RRC connected (posible handover real) o idle (posible reselección). '
+    'NULL para xlsx.';
+COMMENT ON COLUMN handover_record.call_state IS
+    'Estado de llamada del csv (IDLE, OFFHOOK). Contexto de llamada activa. NULL para xlsx.';
 COMMENT ON COLUMN handover_record.node_id IS
     'Identificador del nodo de red servidor (csv: node_id). NULL para xlsx o cuando el csv '
     'reporta el centinela 2147483647.';
@@ -160,7 +239,9 @@ COMMENT ON COLUMN handover_record.psc_pci IS
     'Physical Cell Identity / PSC (csv: psc_pci). NULL para xlsx o cuando el csv reporta el '
     'centinela 2147483647.';
 COMMENT ON COLUMN handover_record.rssi IS
-    'Received Signal Strength Indicator en dBm (csv: rssi). NULL para xlsx o centinela.';
+    'DEPRECATED desde Session_43_20260623_165825.csv: mezclaba RSRP/RSCP/RSSI según tech en una sola '
+    'columna. Filas csv anteriores a esa corrección la tienen poblada (no se migran); filas nuevas '
+    'ya no la usan, van a rsrp_dbm/rscp_dbm/rssi_dbm según tech. NULL para xlsx o centinela.';
 COMMENT ON COLUMN handover_record.rsrq IS
     'Reference Signal Received Quality en dB (csv: rsrq). NULL para xlsx, para tecnologías '
     'no-LTE, o cuando el csv reporta el centinela 2147483647.';

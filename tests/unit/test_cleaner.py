@@ -85,6 +85,7 @@ def _csv_raw_record(**overrides) -> dict:
         "net_type": "LTE",
         "lat": -0.180653,
         "long": -78.467838,
+        "gps": 1,
         "node_id": 28886,
         "psc_pci": 61,
         "rssi": -90,
@@ -132,6 +133,41 @@ def test_apply_sentinels_csv_does_not_mutate_original():
     apply_sentinels_csv(record["data"])
 
     assert record["data"] == original
+
+
+def test_apply_sentinels_csv_nulls_latlong_on_gps_zero():
+    """Desde Session_43_20260623_165825.csv: gps=0 ya no rechaza el registro
+    (ver validator.py), se anulan lat/long y se conserva el resto."""
+    record = _csv_raw_record(gps=0, lat=-1, long=-1)
+
+    cleaned, nulled = apply_sentinels_csv(record["data"])
+
+    assert cleaned["lat"] is None
+    assert cleaned["long"] is None
+    assert cleaned["cid"] == 192  # no tocado
+    assert "gps" in nulled
+
+
+def test_apply_sentinels_csv_nulls_latlong_on_sentinel_even_if_gps_flag_is_one():
+    """En los datos reales gps=0 y lat=long=-1 siempre coinciden, pero la
+    regla verifica ambas condiciones de forma independiente por robustez."""
+    record = _csv_raw_record(gps=1, lat=-1, long=-1)
+
+    cleaned, nulled = apply_sentinels_csv(record["data"])
+
+    assert cleaned["lat"] is None
+    assert cleaned["long"] is None
+    assert "gps" in nulled
+
+
+def test_apply_sentinels_csv_keeps_latlong_when_gps_fix_present():
+    record = _csv_raw_record(gps=1)
+
+    cleaned, nulled = apply_sentinels_csv(record["data"])
+
+    assert cleaned["lat"] == record["data"]["lat"]
+    assert cleaned["long"] == record["data"]["long"]
+    assert "gps" not in nulled
 
 
 def test_deduplicate_csv_keeps_first_and_flags_rest():

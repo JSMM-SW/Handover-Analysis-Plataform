@@ -63,6 +63,13 @@ REQUIRED_COLUMNS_CSV = [
     "lac_tac",
     "arfcn",
     "net_type",
+    # Agregadas al soportar Session_43_20260623_165825.csv (export real de
+    # NetMonitor Lite, 86,398 filas): ya estaban presentes en los archivos
+    # csv anteriores, pero no se extraían porque nada las necesitaba todavía.
+    "report",
+    "tech",
+    "data_state",
+    "call_state",
 ]
 
 # Equivalente csv de DEDUP_KEY_XLSX: mismas 7 columnas de negocio que ya se
@@ -87,12 +94,25 @@ LONGITUD_SIN_FIX_CSV = -1
 TECNOLOGIA_SIN_SENAL = 0
 TECNOLOGIA_LTE = 1
 TECNOLOGIA_3G = 2
+TECNOLOGIA_2G = 3
 
 NET_TYPE_LTE = "LTE"
-NET_TYPE_3G = {"UMTS", "HSPA+"}
+# HSPA (sin '+') confirmado en Session_43_20260623_165825.csv (145 filas
+# reales), además de HSPA+/UMTS ya confirmados antes.
+NET_TYPE_3G = {"UMTS", "HSPA+", "HSPA"}
+# Confirmado en el mismo archivo real (EDGE 466 filas, GPRS 51 filas). 'GSM'
+# es un valor de `tech`, no de `net_type` — nunca aparece aquí.
+NET_TYPE_2G = {"EDGE", "GPRS"}
 
 MOTIVO_CID_CENTINELA = "cid = 2147483647 (sin dato, equipo de medición)"
-MOTIVO_GPS_SIN_FIX_CSV = "gps sin fix (centinela lat/long = -1)"
+
+# Ya NO es motivo de rechazo (a diferencia de MOTIVO_GPS_SIN_FIX en xlsx):
+# confirmado con Session_43_20260623_165825.csv que rechazar por esto tira el
+# 92% del archivo (solo 8.0% de las filas trae fix de GPS) y contradice R3
+# del módulo de visualización temporal, que no usa coordenadas. Desde esta
+# corrección, `cleaner.apply_sentinels_csv` anula lat/long a NULL en vez de
+# que `validator.validate_record_csv` rechace el registro; el warning
+# agregado se construye en services.py.
 
 TIMEZONE_ORIGEN = "America/Guayaquil"  # UTC-5, sin DST (xlsx y csv)
 
