@@ -17,6 +17,19 @@
 .geo-filter-panel h2 { font-size: 18px; margin: 0 0 6px; }
 .geo-filter-hint { font-size: 12px; color: #65778a; margin: 0 0 22px; }
 .geo-filter-panel .geo-source { flex-direction: column; align-items: stretch; }
+.geo-page .geo-session-toggle { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; text-align: left; font-weight: 600; }
+.geo-session-toggle span { margin-left: auto; }
+.geo-session-toggle .geo-session-selection { flex: 1; min-width: 0; margin-left: 0; overflow-wrap: anywhere; }
+.geo-session-caption { display: block; margin-bottom: 5px; color: #166c62; }
+.geo-page button:disabled { opacity: 0.5; cursor: not-allowed; }
+.geo-session-toggle[aria-expanded=true] { border-color: #168779; }
+.geo-session-list { min-width: 0; max-height: 260px; overflow-y: auto; border: 1px solid #d3dee8; border-radius: 8px; padding: 8px 10px; }
+.geo-session-list legend { font-size: 12px; font-weight: 700; padding: 0 4px; }
+.geo-page .geo-session-option { flex-direction: row; align-items: start; gap: 9px; padding: 7px 2px; font-weight: 500; cursor: pointer; overflow-wrap: anywhere; }
+.geo-session-option input { margin-top: 2px; flex: none; }
+.geo-session-option small { display: block; color: #65778a; margin-top: 2px; font-size: 11px; }
+.geo-date-range { background: #e7f3ef; color: #17594f; border-radius: 8px; padding: 10px; margin: 0; line-height: 1.5; font-size: 12px; }
+.geo-date-range strong { display: block; margin-bottom: 3px; }
 .geo-filter-panel select { width: 100%; text-overflow: ellipsis; }
 .geo-filters { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
 .geo-results { min-width: 0; }
@@ -26,14 +39,25 @@
 .geo-view-description { font-size: 12px; color: #65778a; line-height: 1.6; margin: 14px 0; }
 .geo-heat-legend { align-items: center; }
 .geo-heat-legend i { width: 90px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3066d6, #15bba5, #ffd45c, #e5504b); }
+.geo-handover-tooltip { text-align: left; min-width: 145px; line-height: 1.55; font-size: 12px; }
+.geo-handover-tooltip strong { display: block; margin-bottom: 5px; color: #166c62; }
 @media (max-width: 1100px) { .geo-workspace { grid-template-columns: 235px minmax(0, 1fr); gap: 16px; } .geo-page { padding: 24px 18px; } }
 @media (max-width: 900px) { .geo-workspace { grid-template-columns: minmax(0, 1fr); } .geo-tabs { flex-wrap: wrap; } }
 .geo-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 20px 0; }
 .geo-stats > div { background: white; border: 1px solid #e0e7ed; border-radius: 10px; padding: 18px 22px; }
 .geo-stats strong { display: block; font-size: 26px; line-height: 1.4; }
 .geo-stats span { color: #708295; font-size: 12px; }
+.geo-stats small { display: block; color: #708295; font-size: 11px; margin-top: 4px; }
 .geo-toolbar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; font-size: 13px; }
 .geo-toolbar label { flex-direction: row; align-items: center; font-weight: 400; }
+.geo-radio-summary { border-left: 3px solid #7953a8; background: #f4f0fa; border-radius: 6px; padding: 12px 15px; margin-bottom: 14px; font-size: 12px; line-height: 1.5; }
+.geo-radio-summary p { margin: 5px 0; }
+.geo-radio-summary summary { cursor: pointer; margin-top: 8px; }
+.geo-radio-base-marker { color: #fff; background: #7953a8; border: 2px solid white; border-radius: 6px; box-shadow: 0 1px 5px #0005; display: grid; place-items: center; font-size: 16px; }
+.geo-radio-base-marker:focus { outline: 3px solid #142e43; }
+.geo-radio-popup { max-height: 280px; overflow-y: auto; overflow-wrap: anywhere; line-height: 1.6; }
+.geo-radio-popup section + section { border-top: 1px solid #d3dee8; margin-top: 12px; padding-top: 12px; }
+.geo-radio-popup strong { display: block; color: #654093; margin-bottom: 7px; }
 .geo-map-wrap { position: relative; border: 1px solid #cddae5; border-radius: 12px; overflow: hidden; }
 .geo-map { height: 540px; width: 100%; background: #e2e9ee; z-index: 0; }
 .geo-zone-button { position: absolute; z-index: 500; top: 12px; right: 12px; box-shadow: 0 2px 8px #0002; }
