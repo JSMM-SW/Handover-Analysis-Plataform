@@ -36,11 +36,22 @@ sesiones ni entre hojas diferentes. Los CSV no requieren hoja. El panel izquierd
 por fecha/hora de Ecuador (UTC-5), tecnología y zona visible del mapa.
 Las horas se seleccionan por minuto; «Hasta» incluye todo el minuto elegido.
 
-Las pestañas comparten filtros y preferencias de capas:
+Las pestañas comparten filtros; sus capas son independientes:
 
 - Mapa de rutas y handovers: capas Handovers, Trayectoria y Radios Base.
-- Mapa de calor: el calor de handovers se muestra al abrir la pestaña; las
-  capas Handovers y Trayectoria se pueden activar aparte.
+- Mapa de calor: selección exclusiva entre Handovers, RSSI y RSRQ. Handovers
+  muestra concentración de eventos, sin círculos individuales. No incluye Trayectoria.
+  RSSI y RSRQ muestran manchas suaves de calor centradas en cada handover,
+  con radio de 36 píxeles de pantalla y desvanecimiento hacia los bordes.
+  En las superposiciones se calcula un promedio en dBm o dB ponderado por
+  distancia; un evento aislado conserva su valor. La densidad no empeora
+  artificialmente el color. Los datos ausentes no entran al promedio y se
+  muestran en gris donde no hay valores disponibles.
+  El degradado va de rojo (RSSI ≤ −100 dBm, RSRQ ≤ −15 dB) a verde
+  (RSSI ≥ −80 dBm, RSRQ ≥ −10 dB). Son rangos de visualización,
+  no umbrales calibrados de cobertura. El suavizado cambia con el zoom y no
+  rellena zonas alejadas de los eventos. Al pasar el cursor sobre un handover
+  se consultan sus valores originales. La capa y su leyenda se exportan en PNG.
 
 La tarjeta Handovers cuenta los eventos de la consulta, independientemente de
 si su capa está visible. Datos analizados cuenta las mediciones. Un clic en
@@ -76,7 +87,27 @@ mayores de 60 segundos. La agrupación por hoja presupone un recorrido por hoja.
 
 La capa Radios Base calcula ubicaciones candidatas por celda, sin guardarlas
 en la base de datos. Ver [método, parámetros y limitaciones](radios_base_estimadas.md).
-No se implementan exportación del mapa ni filtro por velocidad.
+No se implementa filtro por velocidad.
+
+## Descargar la visualización
+
+El botón «Descargar mapa», a la derecha de las capas, guarda un PNG de la vista
+actual en ambas pestañas. Incluye el área y zoom visibles, las capas activas,
+la leyenda y la atribución de OpenStreetMap. Excluye filtros, navegación,
+controles del mapa y burbujas abiertas. El archivo se genera en el navegador,
+sin enviar la imagen al backend ni guardarla en la base de datos.
+
+El nombre indica la vista, la sesión analizada (o `varias_sesiones`) y la fecha
+de descarga en Ecuador, por ejemplo `mapa_handovers_sesion_14_2026-09-29.png`.
+Para las capas de señal se añade el parámetro: `mapa_calor_rsrq_sesion_14_2026-09-29.png`.
+Se captura a escala 2 para mejorar la legibilidad; no añade detalle cartográfico
+que no esté en la vista. La carpeta final depende de la configuración del navegador.
+
+Mientras se prepara la imagen se bloquean temporalmente los controles del
+análisis. Sin mediciones o durante la consulta, el botón está deshabilitado.
+Se espera a que carguen las imágenes del mapa base (hasta 12 segundos); si fallan
+o no permiten lectura mediante CORS, se muestra un error en lugar de descargar
+un mapa incompleto. Se utiliza `html2canvas`, cargado solo al exportar.
 
 ## API
 
