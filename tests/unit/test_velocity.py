@@ -35,6 +35,12 @@ def test_zero_time_difference_is_null():
     assert records[1]["velocidad_kmh"] is None
 
 
+def test_stationary_with_elapsed_time_is_zero():
+    records = [_record(0, -0.29, -78.55), _record(10, -0.29, -78.55)]
+    compute_velocities(records, [])
+    assert records[1]["velocidad_kmh"] == 0
+
+
 def test_gps_reject_anchor_nulls_next_record():
     records = [_record(0, -0.290000, -78.550000), _record(10, -0.291000, -78.550000)]
     # rechazo por gps sin fix justo entre los dos, misma hoja
