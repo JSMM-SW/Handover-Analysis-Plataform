@@ -6,7 +6,7 @@ import './GeoespacialPage.css';
 
 const formatTime = (value) => new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Guayaquil' }).format(new Date(value));
 const formatRange = (value) => new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Guayaquil' }).format(new Date(value));
-const sessionName = (row) => `handover_record_${row.execution_id}.csv`;
+const sessionName = (row) => row.sesion_label != null ? `Sesión ${row.sesion_label}` : `Sesión ${row.execution_id}`;
 const emptyFilters = { desde: '', hasta: '', tecnologia: '', bbox: '' };
 
 export default function GeoespacialPage() {
@@ -34,11 +34,11 @@ export default function GeoespacialPage() {
     {error && <p className="geo-error" role="alert">{error}</p>}
     {!executions && !error && <p role="status">Consultando ejecuciones…</p>}
     {executions?.length === 0 && <p className="geo-empty">No hay ejecuciones completadas. Procesa un archivo desde Ingesta y vuelve a Geoespacial.</p>}
-    {analysis.ids.length ? <DatasetView key={analysis.version} executionIds={analysis.ids} source={source} /> : <div className="geo-workspace"><aside className="geo-filter-panel" aria-label="Filtros geoespaciales"><h2>Filtros</h2>{source}<p className="geo-filter-hint">Selecciona una o varias sesiones para ver los mapas.</p></aside></div>}
+    {analysis.ids.length ? <DatasetView key={analysis.version} executionIds={analysis.ids} executions={executions} source={source} /> : <div className="geo-workspace"><aside className="geo-filter-panel" aria-label="Filtros geoespaciales"><h2>Filtros</h2>{source}<p className="geo-filter-hint">Selecciona una o varias sesiones para ver los mapas.</p></aside></div>}
   </section>;
 }
 
-function DatasetView({ executionIds, source }) {
+function DatasetView({ executionIds, executions, source }) {
   const [filters, setFilters] = useState(emptyFilters);
   const [query, setQuery] = useState(emptyFilters);
   const [result, setResult] = useState(null);
@@ -104,7 +104,7 @@ function DatasetView({ executionIds, source }) {
     {!loading && error && <p role="alert" className="geo-error">{error}</p>}
     {data?.total === 0 && <p role="status" className="geo-empty">No hay mediciones que coincidan con estos filtros.</p>}
     {data?.total > 0 && data.total_handovers === 0 && <p role="status" className="geo-empty">No se detectaron handovers con la regla de cambio de celda y nodo en estos datos.</p>}
-    <MapaGeoespacial data={data} layers={mapLayers} onSelect={setSelected} onZone={applyZone} />
+    <MapaGeoespacial data={data} layers={mapLayers} onSelect={setSelected} onZone={applyZone} executions={executions} />
     {tab === 'rutas' ? <div className="geo-legend"><span><i style={{ background: '#128777' }} />RSSI ≥ −80 dBm</span><span><i style={{ background: '#cf9209' }} />−100 ≤ RSSI &lt; −80 dBm</span><span><i style={{ background: '#cf4960' }} />RSSI &lt; −100 dBm</span><span><i style={{ background: '#81909f' }} />RSSI sin dato</span></div> : <div className="geo-legend geo-heat-legend"><i />Azul → rojo: menor → mayor concentración relativa; varía con el zoom.</div>}
     {shownSelected && <aside className="geo-detail"><h2>Detalle de handover</h2><button onClick={() => setSelected(null)} aria-label="Cerrar detalle">Cerrar</button><dl>{Object.entries({ 'Fecha y hora · Ecuador': formatTime(shownSelected.timestamp_medicion), 'Celda origen': shownSelected.celda_origen, 'Celda destino': shownSelected.cell_id, 'Nodo origen': shownSelected.nodo_origen, 'Nodo destino': shownSelected.node_id, Tecnología: shownSelected.tecnologia === 1 ? 'LTE / 4G' : shownSelected.tecnologia === 2 ? '3G / UMTS' : 'Sin señal', RSSI: shownSelected.rssi == null ? 'Sin dato' : `${shownSelected.rssi} dBm`, Velocidad: shownSelected.velocidad_kmh == null ? 'Sin dato' : `${shownSelected.velocidad_kmh.toLocaleString('es-EC', { maximumFractionDigits: 2 })} km/h`, Coordenadas: `${shownSelected.latitud}, ${shownSelected.longitud}` }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></aside>}
     </div>

@@ -27,10 +27,9 @@ En producción, configurar el servidor web para resolver las rutas a `index.html
 
 Abrir el desplegable, marcar una o varias sesiones y pulsar «Analizar sesiones»
 para cargar los mapas. Cambiar los checks no actualiza el análisis hasta pulsar
-el botón de nuevo. El selector muestra el nombre
-que tendría el CSV limpio descargado desde Ingesta (`handover_record_<execution_id>.csv`)
-y la cantidad de registros válidos. No se genera un archivo al procesar: el nombre
-se calcula para identificar los datos persistidos. Bajo la selección se muestra
+el botón de nuevo. El selector muestra «Sesión N» mediante `sesion_label`
+y la cantidad de registros válidos. Las consultas siguen usando `execution_id`.
+Bajo la selección se muestra
 el intervalo de mediciones disponible, en hora de Ecuador, para orientar los
 filtros de fecha. Se consultan todas sus hojas, sin unir recorridos entre
 sesiones ni entre hojas diferentes. Los CSV no requieren hoja. El panel izquierdo filtra
@@ -39,12 +38,12 @@ Las horas se seleccionan por minuto; «Hasta» incluye todo el minuto elegido.
 
 Las pestañas comparten filtros y preferencias de capas:
 
-- Mapa de rutas y handovers: capas Handovers y Trayectoria aproximada.
+- Mapa de rutas y handovers: capas Handovers, Trayectoria y Radios Base.
 - Mapa de calor: el calor de handovers se muestra al abrir la pestaña; las
-  capas Handovers y Trayectoria aproximada se pueden activar aparte.
+  capas Handovers y Trayectoria se pueden activar aparte.
 
 La tarjeta Handovers cuenta los eventos de la consulta, independientemente de
-si su capa está visible. Puntos analizados cuenta las mediciones. Un clic en
+si su capa está visible. Datos analizados cuenta las mediciones. Un clic en
 un handover muestra celdas y nodos de origen/destino, fecha y coordenadas.
 Al pasar el cursor aparece una burbuja con fecha, hora de Ecuador, RSSI,
 RSRQ y RSSNR. Los valores ausentes aparecen como «Sin dato».
@@ -94,23 +93,8 @@ Errores: filtros inválidos 422, ejecución/hoja inexistente 404, base no dispon
 
 ## Verificar
 
-Para recalcular velocidades de sesiones existentes con las reglas de Ingesta:
-
 ```powershell
-.\venv\Scripts\python.exe scripts/recalculate_velocities.py
-.\venv\Scripts\python.exe scripts/recalculate_velocities.py --apply
-```
-
-El primer comando solo presenta resultados. `--apply` actualiza velocidades
-y agrega advertencias de valores inusuales en una transacción; antes guarda
-los valores anteriores en `data/processed/velocidades_backup_*.json` (no versionado).
-Se calcula por ejecución y hoja, incorporando los rechazos por pérdida de GPS.
-Sin referencia o con tiempo cero se conserva NULL; sin desplazamiento y con
-tiempo positivo se guarda 0 km/h. Se reutiliza la fórmula de Ingesta con las
-coordenadas y horas persistidas.
-
-```powershell
-.\venv\Scripts\python.exe -m pytest tests/unit/test_geoespacial_service.py tests/integration/test_geoespacial_endpoints.py -q
+.\venv\Scripts\python.exe -m pytest tests/unit/test_geoespacial_service.py tests/unit/test_radio_bases.py tests/integration/test_geoespacial_endpoints.py -q
 .\venv\Scripts\python.exe tests/check_geoespacial_readonly.py
 cd frontend
 npm.cmd run build
@@ -122,3 +106,18 @@ E2E usa datos simulados y Edge en Windows (Chromium en otros sistemas).
 El script de solo lectura consulta la base real. Las preferencias de capas
 se guardan durante la sesión del navegador; filtros se reinician al salir.
 El mapa base usa Leaflet y OpenStreetMap y requiere Internet.
+
+## Integración con develop
+
+Revisar conjuntamente la navegación en `frontend/src/App.jsx`, los estilos globales,
+`backend/app/main.py` y las dependencias del frontend. El esquema compartido debe
+incluir `etl_execution.sesion_label` y las columnas de mediciones usadas por el
+módulo; geoespacial no crea ni migra tablas.
+
+Las radios base usan marcadores de 24 × 24 píxeles. Su burbuja muestra sesión,
+nodo, celda, tecnología y coordenadas. Los parámetros técnicos se agrupan en
+«Detalles de la estimación», cerrado inicialmente, y se conserva el aviso de
+ubicación aproximada. Cada sesión mantiene su propia estimación.
+
+Las pruebas E2E simulan la API: no sustituyen una comprobación conjunta de
+Ingesta y Geoespacial con la base del entorno de integración.

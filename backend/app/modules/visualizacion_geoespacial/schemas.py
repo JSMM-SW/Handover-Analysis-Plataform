@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class ExecutionSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     execution_id: UUID
+    sesion_label: int | None = None
     filename: str
     processing_date: datetime
     records_valid: int

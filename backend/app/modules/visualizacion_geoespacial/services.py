@@ -32,6 +32,7 @@ def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None):
             and (desde is None or row.timestamp_medicion >= desde)
             and (bbox is None or bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3])
         )
+        measurement = Measurement.model_validate(row) if selected else None
         tied = timestamps[(*session(row), row.timestamp_medicion)] > 1
         node = getattr(row, "node_id", None)
         valid_identity = node is not None and 0 < node < 2147483647 and 0 < row.cell_id < 2147483647
@@ -43,7 +44,7 @@ def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None):
             and before.node_id != node
         ):
             events.append(HandoverEvent(
-                **Measurement.model_validate(row).model_dump(),
+                **measurement.model_dump(),
                 registro_anterior_id=before.id_registro,
                 celda_origen=before.cell_id,
                 nodo_origen=before.node_id,
@@ -58,7 +59,7 @@ def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None):
                 segments.append(current)
             current = []
         if selected:
-            points.append(Measurement.model_validate(row))
+            points.append(measurement)
             if not tied:
                 current.append(row.id_registro)
         ambiguous = ambiguous or tied

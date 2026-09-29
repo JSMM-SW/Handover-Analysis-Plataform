@@ -11,11 +11,11 @@ class GeoespacialRepository:
         self.db = db
 
     def executions(self):
-        return [dict(execution_id=row.execution_id, filename=row.filename,
+        return [dict(execution_id=row.execution_id, sesion_label=row.sesion_label, filename=row.filename,
                      processing_date=row.processing_date, records_valid=row.records_valid,
                      status=row.status, fecha_inicio=row.fecha_inicio, fecha_fin=row.fecha_fin)
                 for row in self.db.execute(
-            select(EtlExecution.execution_id, EtlExecution.filename, EtlExecution.processing_date,
+            select(EtlExecution.execution_id, EtlExecution.sesion_label, EtlExecution.filename, EtlExecution.processing_date,
                    EtlExecution.records_valid, EtlExecution.status,
                    func.min(HandoverRecord.timestamp_medicion).label("fecha_inicio"),
                    func.max(HandoverRecord.timestamp_medicion).label("fecha_fin"))
