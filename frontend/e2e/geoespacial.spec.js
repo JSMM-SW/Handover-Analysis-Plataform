@@ -64,11 +64,18 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   expect(filterBox.x + filterBox.width).toBeLessThan(mapBox.x);
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
   await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
-  await expect(page.getByRole('checkbox', { name: 'Handovers', exact: true })).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Handovers', exact: true })).toBeChecked();
   await expect(page.getByRole('checkbox', { name: 'Mapa de calor', exact: true })).toHaveCount(0);
-  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).uncheck();
+  await expect(page.getByRole('checkbox', { name: 'Trayectoria', exact: true })).toHaveCount(0);
+  await page.getByRole('radio', { name: 'RSSI', exact: true }).check();
+  await expect(page.locator('.geo-signal-heat-layer')).toBeVisible();
+  await expect(page.locator('.leaflet-heatmap-layer')).toHaveCount(0);
+  await expect(page.locator('.geo-signal-legend')).toContainText('RSSI en handovers');
+  await page.getByRole('radio', { name: 'RSRQ', exact: true }).check();
+  await expect(page.locator('.geo-signal-legend')).toContainText('RSRQ en handovers');
+  await page.getByRole('radio', { name: 'Handovers', exact: true }).check();
+  await expect(page.locator('.geo-signal-heat-layer')).toHaveCount(0);
   await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
-  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).check();
   await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
   await expect(page.locator('.leaflet-heatmap-layer')).toHaveCount(0);
   // Select the point located at the map's geographic midpoint.
@@ -197,7 +204,7 @@ test('radio base layer shows estimated positions, coincident sessions and insuff
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
   await expect(page.locator('.geo-radio-base-marker')).toHaveCount(0);
   await page.getByRole('checkbox', { name: 'Radios Base', exact: true }).check();
-  await expect(page.getByText('2 estimaciones por celda', { exact: true })).toBeVisible();
+  await expect(page.getByText('Número de estimaciones: 2', { exact: true })).toBeVisible();
   await expect(page.locator('.geo-radio-base-marker')).toHaveCount(1);
   await page.locator('.geo-radio-base-marker').click();
   const popup = page.locator('.geo-radio-popup');
@@ -218,6 +225,6 @@ test('radio base layer shows estimated positions, coincident sessions and insuff
   await page.getByRole('checkbox', { name: 'Radios Base', exact: true }).check();
   await page.getByRole('combobox', { name: 'Tecnología', exact: true }).selectOption('2');
   await page.getByRole('button', { name: 'Aplicar filtros' }).click();
-  await expect(page.getByText('No hay datos suficientes para estimar ubicaciones con estos filtros.', { exact: true })).toBeVisible();
+  await expect(page.getByText('Número de estimaciones: 0', { exact: true })).toBeVisible();
   await expect(page.locator('.geo-radio-base-marker')).toHaveCount(0);
 });
