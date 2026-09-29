@@ -1,11 +1,10 @@
-# Visualización geoespacial
+﻿# Visualización geoespacial
 
-Primera versión conectada a PostgreSQL mediante la sesión compartida `get_db`.
-Solo consulta información: no modifica tablas ni vuelve a procesar archivos.
+Consulta PostgreSQL mediante `get_db`, sin modificar las mediciones.
 
-## Ejecutar en Windows
+## Ejecutar
 
-Desde la raíz, con el entorno virtual de este equipo:
+Desde la raíz:
 
 ```powershell
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload --app-dir backend
@@ -19,64 +18,99 @@ npm.cmd ci
 npm.cmd run dev
 ```
 
-Abrir http://localhost:5173/geoespacial o usar el menú lateral. Ingesta sigue
-disponible en `/ingesta`. En un despliegue, configurar el servidor del frontend
-para devolver `index.html` para las rutas de la aplicación.
+Abrir http://localhost:5173/geoespacial. La conexión se configura en `.env`
+mediante `DATABASE_URL`; el frontend usa `http://localhost:8000/api/v1` o
+`VITE_API_URL` en `frontend/.env.local`. No colocar credenciales en variables VITE.
+En producción, configurar el servidor web para resolver las rutas a `index.html`.
 
-La conexión real se configura exclusivamente en `.env` de la raíz, mediante
-`DATABASE_URL`. El frontend usa `http://localhost:8000/api/v1` por defecto; se
-puede cambiar con `VITE_API_URL` en `frontend/.env.local` y reiniciar Vite.
-No colocar credenciales de PostgreSQL en variables VITE.
+## Uso
 
-## Uso y límites
+Abrir el desplegable, marcar una o varias sesiones y pulsar «Analizar sesiones»
+para cargar los mapas. Cambiar los checks no actualiza el análisis hasta pulsar
+el botón de nuevo. El selector muestra el nombre
+que tendría el CSV limpio descargado desde Ingesta (`handover_record_<execution_id>.csv`)
+y la cantidad de registros válidos. No se genera un archivo al procesar: el nombre
+se calcula para identificar los datos persistidos. Bajo la selección se muestra
+el intervalo de mediciones disponible, en hora de Ecuador, para orientar los
+filtros de fecha. Se consultan todas sus hojas, sin unir recorridos entre
+sesiones ni entre hojas diferentes. Los CSV no requieren hoja. El panel izquierdo filtra
+por fecha/hora de Ecuador (UTC-5), tecnología y zona visible del mapa.
+Las horas se seleccionan por minuto; «Hasta» incluye todo el minuto elegido.
 
-1. Seleccionar una ejecución completada y una hoja.
-2. Ver puntos GPS y trayectoria aproximada. Un clic en un punto abre sus detalles.
-3. Aplicar filtros por fecha/hora de Ecuador (UTC-5), tecnología o celda.
-4. Para filtrar por zona, desplazar/acercar el mapa y pulsar **Filtrar por zona visible**.
-5. Cambiar entre **Mapa de rutas y handovers** y **Mapa de calor**. Los filtros
-   del panel izquierdo se conservan al cambiar de pestaña. La primera vista
-   muestra puntos y trayectoria; los handovers siguen pendientes de identificación.
-   La segunda muestra únicamente calor de mediciones. La elección de las capas
-   de puntos y trayectoria se conserva en sessionStorage. Las selecciones de
-   archivo y filtros se reinician al salir del módulo. En pantallas pequeñas,
-   el panel de filtros aparece encima del mapa.
+Las pestañas comparten filtros y preferencias de capas:
 
-El calor representa concentración relativa de **mediciones**, no handovers,
-y cambia con el zoom. Los colores de puntos representan intervalos de RSRP
-indicados en la leyenda; no son un diagnóstico de calidad de servicio.
+- Mapa de rutas y handovers: capas Handovers y Trayectoria aproximada.
+- Mapa de calor: el calor de handovers se muestra al abrir la pestaña; las
+  capas Handovers y Trayectoria aproximada se pueden activar aparte.
 
-La hoja se usa como agrupación provisional. Confirmar que representa un solo
-recorrido antes de interpretar su trayectoria. Se cortan las líneas en huecos
-mayores de 60 segundos, horas repetidas, cambios de hoja y puntos excluidos por
-los filtros. El umbral de 60 segundos es una regla inicial de visualización.
-No se estiman rutas por calles ni posiciones entre mediciones.
+La tarjeta Handovers cuenta los eventos de la consulta, independientemente de
+si su capa está visible. Puntos analizados cuenta las mediciones. Un clic en
+un handover muestra celdas y nodos de origen/destino, fecha y coordenadas.
+Al pasar el cursor aparece una burbuja con fecha, hora de Ecuador, RSSI,
+RSRQ y RSSNR. Los valores ausentes aparecen como «Sin dato».
+En CSV, la hora proviene de `sys_time`: la ingesta la guarda en UTC y la
+burbuja la muestra de nuevo en hora de Ecuador, incluyendo segundos.
+RSSI ausente se representa en gris y se excluye del promedio. Los colores del mapa usan intervalos de RSSI en dBm (desde -80, de -100 a -80 y menor de -100); la intensidad del calor indica concentración de eventos, no calidad de señal.
 
-La API admite hasta 20.000 registros por ejecución/hoja/intervalo temporal;
-si se supera, pide reducir el intervalo, sin truncar silenciosamente. Los
-filtros de celda, tecnología y zona se aplican después de leer esa secuencia
-para conservar los cortes entre puntos excluidos.
+## Regla de handover
 
-Velocidad, detección de handovers y estaciones base no están implementadas:
-requieren reglas o fuentes adicionales. Tampoco se implementa importación CSV,
-exportación de mapas ni cambio de proveedor del mapa base en esta entrega.
+Regla acordada con el usuario: `cell_id` cambia **y** `node_id` cambia respecto
+a la observación anterior del mismo recorrido. Cambiar solo uno no cuenta.
+Se calcula sobre registros ordenados por hoja y tiempo, antes de los filtros
+visuales. Se ubica el evento en la primera medición del destino.
+
+Se mantiene el criterio de continuidad de esta visualización: no comparar
+hojas diferentes, intervalos mayores de 60 segundos, tiempos repetidos ni
+identificadores ausentes/inválidos. La consulta lee hasta 60 segundos previos
+al inicio para detectar cambios en el borde temporal, sin mostrarlos como
+mediciones del intervalo. Los filtros se aplican sobre la medición de destino.
+
+La regla usa únicamente los registros persistidos, no confirma señalización
+ni éxito del procedimiento de red. Los Excel sin node_id no pueden producir
+eventos bajo esta regla. El calor usa exclusivamente eventos detectados,
+con igual peso, y su intensidad relativa varía con el zoom.
+
+La API admite hasta 20.000 registros leídos (incluido contexto temporal).
+Si se supera, pide reducir el intervalo, sin truncar silenciosamente.
+Las rutas se cortan en puntos excluidos por filtros, horas repetidas y huecos
+mayores de 60 segundos. La agrupación por hoja presupone un recorrido por hoja.
+
+La capa Radios Base calcula ubicaciones candidatas por celda, sin guardarlas
+en la base de datos. Ver [método, parámetros y limitaciones](radios_base_estimadas.md).
+No se implementan exportación del mapa ni filtro por velocidad.
 
 ## API
 
-- `GET /api/v1/geoespacial/ejecuciones`: ejecuciones completadas.
-- `GET /api/v1/geoespacial/ejecuciones/{execution_id}/hojas`: hojas disponibles.
-- `GET /api/v1/geoespacial/mediciones`: parámetros `execution_id`, `hoja`,
-  `desde`, `hasta`, `tecnologia`, `cell_id`, `bbox` (oeste,sur,este,norte).
+- `GET /api/v1/geoespacial/ejecuciones`: ejecuciones completadas y sus fechas mínima y máxima de medición.
+- `GET /api/v1/geoespacial/ejecuciones/{id}/hojas`: hojas; CSV devuelve `[null]`.
+- `GET /api/v1/geoespacial/mediciones`: uno o varios `execution_id` repetidos, `hoja` opcional,
+  `desde`, `hasta`, `tecnologia`, `cell_id` opcional y `bbox` (oeste,sur,este,norte).
 
-Las fechas de la API requieren zona horaria; los extremos temporales son inclusivos.
-La respuesta contiene `mediciones`, `tramos` (listas de IDs de puntos), `total`
-y `advertencias`. Consultas vacías devuelven 200, parámetros inválidos 422,
-ejecución/hoja inexistente 404 y fallos de base de datos 503 sin credenciales.
+Omitir hoja consulta toda la ejecución. Fechas con zona horaria y extremos
+inclusivos. Tecnología 0=sin señal, 1=LTE, 2=3G/UMTS. Respuesta: `mediciones`,
+`tramos`, `total`, `handovers`, `total_handovers` y `advertencias`.
+Errores: filtros inválidos 422, ejecución/hoja inexistente 404, base no disponible
+503. Una consulta vacía devuelve 200 y listas vacías.
 
-## Verificación
+## Verificar
+
+Para recalcular velocidades de sesiones existentes con las reglas de Ingesta:
 
 ```powershell
-.\venv\Scripts\python.exe -m pytest tests/unit tests/integration/test_upload_endpoint.py tests/integration/test_geoespacial_endpoints.py -q
+.\venv\Scripts\python.exe scripts/recalculate_velocities.py
+.\venv\Scripts\python.exe scripts/recalculate_velocities.py --apply
+```
+
+El primer comando solo presenta resultados. `--apply` actualiza velocidades
+y agrega advertencias de valores inusuales en una transacción; antes guarda
+los valores anteriores en `data/processed/velocidades_backup_*.json` (no versionado).
+Se calcula por ejecución y hoja, incorporando los rechazos por pérdida de GPS.
+Sin referencia o con tiempo cero se conserva NULL; sin desplazamiento y con
+tiempo positivo se guarda 0 km/h. Se reutiliza la fórmula de Ingesta con las
+coordenadas y horas persistidas.
+
+```powershell
+.\venv\Scripts\python.exe -m pytest tests/unit/test_geoespacial_service.py tests/integration/test_geoespacial_endpoints.py -q
 .\venv\Scripts\python.exe tests/check_geoespacial_readonly.py
 cd frontend
 npm.cmd run build
@@ -84,10 +118,7 @@ npm.cmd run lint
 npm.cmd run test:e2e
 ```
 
-Las pruebas automáticas usan datos de prueba. El script `check_geoespacial_readonly.py`
-consulta la base configurada, comprueba la ejecución más reciente y no escribe datos.
-Las pruebas de navegador usan Edge en Windows. En otros sistemas instalar Chromium
-con `npx playwright install chromium`. El servidor de pruebas usa el puerto 5174.
-
-El mapa usa [Leaflet](https://leafletjs.com/reference) y teselas de OpenStreetMap,
-que requieren Internet. La navegación usa [React Router](https://reactrouter.com/start/declarative/routing).
+E2E usa datos simulados y Edge en Windows (Chromium en otros sistemas).
+El script de solo lectura consulta la base real. Las preferencias de capas
+se guardan durante la sesión del navegador; filtros se reinician al salir.
+El mapa base usa Leaflet y OpenStreetMap y requiere Internet.
