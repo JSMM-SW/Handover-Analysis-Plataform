@@ -40,7 +40,9 @@ def main():
             sheets = response.json()
             print("Sheets:", len(sheets))
             for sheet in sheets:
-                params = {"execution_id": execution_id, "hoja": sheet}
+                params = {"execution_id": execution_id}
+                if sheet is not None:
+                    params["hoja"] = sheet
                 response = client.get("/api/v1/geoespacial/mediciones", params=params)
                 assert response.status_code == 200, "Measurement endpoint failed"
                 data = response.json()

@@ -26,7 +26,7 @@ def executions(repository=Depends(get_repository)):
     return repository.executions()
 
 
-@router.get("/ejecuciones/{execution_id}/hojas", response_model=list[str])
+@router.get("/ejecuciones/{execution_id}/hojas", response_model=list[str | None])
 def sheets(execution_id: UUID, repository=Depends(get_repository)):
     if repository.execution(execution_id) is None:
         raise HTTPException(404, "La ejecución no existe.")
@@ -35,11 +35,11 @@ def sheets(execution_id: UUID, repository=Depends(get_repository)):
 
 @router.get("/mediciones", response_model=MapData)
 def measurements(
-    execution_id: UUID,
-    hoja: str = Query(min_length=1),
+    execution_id: list[UUID] = Query(min_length=1),
+    hoja: str | None = Query(default=None, min_length=1),
     desde: datetime | None = None,
     hasta: datetime | None = None,
-    tecnologia: int | None = Query(default=None, ge=0, le=1),
+    tecnologia: int | None = Query(default=None, ge=0, le=2),
     cell_id: int | None = Query(default=None, gt=0),
     bbox: str | None = Query(default=None, description="oeste,sur,este,norte en grados"),
     repository=Depends(get_repository),
@@ -60,12 +60,13 @@ def measurements(
                 raise ValueError
         except ValueError:
             raise HTTPException(422, "Zona inválida: usa oeste,sur,este,norte.") from None
-    if repository.execution(execution_id) is None:
+    execution_ids = list(dict.fromkeys(execution_id))
+    if any(repository.execution(key) is None for key in execution_ids):
         raise HTTPException(404, "La ejecución no existe.")
-    if hoja not in repository.sheets(execution_id):
+    if hoja is not None and not any(hoja in repository.sheets(key) for key in execution_ids):
         raise HTTPException(404, "La hoja no existe en esta ejecución.")
-    records = repository.measurements(execution_id, hoja, desde, hasta)
+    records = repository.measurements(execution_ids, hoja, desde, hasta)
     try:
-        return prepare_map(records, tecnologia, cell_id, bounds)
+        return prepare_map(records, tecnologia, cell_id, bounds, desde=desde)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
