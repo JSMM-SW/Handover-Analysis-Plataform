@@ -4,7 +4,7 @@
 .geo-heading p { color: #65778a; font-size: 14px; }
 .geo-eyebrow { font-size: 11px; font-weight: 750; letter-spacing: 2px; color: #168779; }
 .geo-page label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; font-weight: 600; }
-.geo-page select, .geo-page input:not([type=checkbox]) { min-height: 40px; min-width: 0; border: 1px solid #d3dee8; border-radius: 7px; padding: 8px 10px; background: white; color: #24374a; font: inherit; }
+.geo-page select, .geo-page input:not([type=checkbox]):not([type=radio]) { min-height: 40px; min-width: 0; border: 1px solid #d3dee8; border-radius: 7px; padding: 8px 10px; background: white; color: #24374a; font: inherit; }
 .geo-page button { border: 1px solid #cad8e3; background: white; color: #24465b; border-radius: 7px; padding: 10px 14px; font: inherit; font-size: 13px; cursor: pointer; }
 .geo-page button:hover { background: #eaf2f7; }
 .geo-page button.geo-primary { background: #166c62; color: white; border-color: #166c62; }
@@ -35,7 +35,7 @@
 .geo-page .geo-tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; background: transparent; padding: 14px 16px; font-weight: 650; }
 .geo-page .geo-tabs button[aria-selected=true] { border-bottom-color: #168779; color: #146b61; background: #e6f3ee; }
 .geo-heat-legend { align-items: center; }
-.geo-heat-legend i { width: 90px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3066d6, #15bba5, #ffd45c, #e5504b); }
+.geo-legend.geo-heat-legend i { width: 90px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3066d6, #15bba5, #ffd45c, #e5504b); }
 .geo-handover-tooltip { text-align: left; min-width: 145px; line-height: 1.55; font-size: 12px; }
 .geo-handover-tooltip strong { display: block; margin-bottom: 5px; color: #166c62; }
 @media (max-width: 1100px) { .geo-workspace { grid-template-columns: 235px minmax(0, 1fr); gap: 16px; } .geo-page { padding: 24px 18px; } }
@@ -46,9 +46,13 @@
 .geo-stats span { color: #708295; font-size: 12px; }
 .geo-toolbar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; font-size: 13px; }
 .geo-toolbar label { flex-direction: row; align-items: center; font-weight: 400; }
+.geo-heat-options { display: flex; flex-wrap: wrap; gap: 18px; }
+.geo-signal-legend p { margin: 12px; font-size: 12px; color: #536579; }
+.geo-toolbar .geo-download { margin-left: auto; }
+.geo-export { background: #fff; padding-bottom: 1px; }
+.geo-export .geo-legend { padding: 0 12px; }
 .geo-radio-summary { border-left: 3px solid #7953a8; background: #f4f0fa; border-radius: 6px; padding: 12px 15px; margin-bottom: 14px; font-size: 12px; line-height: 1.5; }
 .geo-radio-summary p { margin: 5px 0; }
-.geo-radio-summary summary { cursor: pointer; margin-top: 8px; }
 .geo-radio-base-marker { box-sizing: border-box; width: 24px; height: 24px; max-width: 24px; max-height: 24px; padding: 0; color: #7953a8; background: #fff; border: 1.5px solid #7953a8; border-radius: 50%; box-shadow: 0 1px 3px #0004; display: grid; place-items: center; }
 .geo-radio-base-marker svg { width: 18px; height: 18px; }
 .geo-radio-base-count { position: absolute; top: -5px; right: -5px; min-width: 14px; height: 14px; padding: 0 2px; border: 1px solid #fff; border-radius: 8px; background: #7953a8; color: #fff; font: 700 9px/12px system-ui, sans-serif; text-align: center; }
@@ -66,6 +70,7 @@
 .geo-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 11px; margin: 12px 0 20px; }
 .geo-legend span { display: flex; align-items: center; gap: 6px; }
 .geo-legend i { height: 9px; width: 9px; border-radius: 50%; }
+.geo-legend .geo-signal-gradient { width: 120px; height: 10px; border-radius: 5px; align-self: center; background: linear-gradient(90deg, #cf4960, #cf9209, #128777); }
 .geo-error { padding: 14px; background: #fff0f0; color: #9f2738; border-radius: 8px; margin: 12px 0; }
 .geo-empty, .geo-zone { padding: 12px 0; font-size: 14px; }
 .geo-detail { background: white; padding: 22px; border: 1px solid #d3dee8; border-radius: 12px; margin-bottom: 18px; }

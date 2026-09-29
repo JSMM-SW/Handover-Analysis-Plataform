@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { getGeo } from './api';
+import { downloadMap } from './exportMap';
 import MapaGeoespacial from './components/MapaGeoespacial';
 import RadioBaseSummary from './components/RadioBaseSummary';
+import SignalLegend from './components/SignalLegend';
 import './GeoespacialPage.css';
 
 const formatTime = (value) => new Intl.DateTimeFormat('es-EC', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'America/Guayaquil' }).format(new Date(value));
@@ -39,12 +41,17 @@ export default function GeoespacialPage() {
 }
 
 function DatasetView({ executionIds, executions, source }) {
+  const exportArea = useRef(null);
+  const exportBusy = useRef(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [filters, setFilters] = useState(emptyFilters);
   const [query, setQuery] = useState(emptyFilters);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [selected, setSelected] = useState(null);
   const [tab, setTab] = useState('rutas');
+  const [heatMetric, setHeatMetric] = useState('handovers');
   const sequence = useRef(0);
   const [layers, setLayers] = useState(() => {
     try { return { handovers: true, rutas: true, ...JSON.parse(sessionStorage.getItem('geo-event-layers') || '{}') }; }
@@ -71,9 +78,27 @@ function DatasetView({ executionIds, executions, source }) {
   const shownSelected = selected && data?.handovers?.find((p) => p.id_registro === selected.id_registro);
   const change = (e) => setFilters((old) => ({ ...old, [e.target.name]: e.target.value }));
   const applyZone = (bbox) => { const next = { ...query, bbox }; setFilters(next); setQuery(next); setSelected(null); };
-  const mapLayers = { ...layers, calor: tab === 'calor', radiosBase: tab === 'rutas' && Boolean(layers.radiosBase) };
+  const mapLayers = tab === 'calor'
+    ? { calor: heatMetric === 'handovers', signalMetric: heatMetric === 'handovers' ? null : heatMetric }
+    : { ...layers, calor: false, signalMetric: null };
   const changeTab = (value) => { setTab(value); setSelected(null); };
-  return <div className="geo-workspace">
+  const exportCurrentMap = async () => {
+    if (exportBusy.current || !data?.total) return;
+    exportBusy.current = true;
+    setExporting(true);
+    setExportError('');
+    try {
+      await downloadMap(exportArea.current, {
+        tab, heatMetric, sessionLabels: executionIds.map((id) => executions.find((row) => row.execution_id === id)?.sesion_label ?? id),
+      });
+    } catch (error) {
+      setExportError(error.name === 'SecurityError' ? 'El mapa base no permite exportar sus imágenes. Recarga la página y vuelve a intentar.' : error.message || 'No se pudo descargar el mapa. Vuelve a intentar.');
+    } finally {
+      exportBusy.current = false;
+      setExporting(false);
+    }
+  };
+  return <div className="geo-workspace" inert={exporting} aria-busy={exporting}>
     <aside className="geo-filter-panel" aria-label="Filtros geoespaciales">
     <h2>Filtros</h2>
     {source}
@@ -98,14 +123,17 @@ function DatasetView({ executionIds, executions, source }) {
     </div>
     <div id="geo-map-panel" role="tabpanel" aria-labelledby={`geo-tab-${tab}`}>
     <div className="geo-stats"><div><strong>{data ? data.total.toLocaleString('es-EC') : '—'}</strong><span>Datos analizados</span></div><div><strong>{data ? data.total_handovers : '—'}</strong><span>Handovers</span></div><div><strong>{signalPoints.length ? `${Math.round(signalPoints.reduce((sum, p) => sum + p.rssi, 0) / signalPoints.length)} dBm` : '—'}</strong><span>RSSI promedio</span></div></div>
-    <div className="geo-toolbar"><span>Capas</span>{[['handovers', 'Handovers'], ['rutas', 'Trayectoria'], ...(tab === 'rutas' ? [['radiosBase', 'Radios Base']] : [])].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(layers[key])} onChange={(e) => setLayers((old) => ({ ...old, [key]: e.target.checked }))} />{label}</label>)}</div>
+    <div className="geo-toolbar"><span>Capas</span>{tab === 'calor' ? <div className="geo-heat-options" role="radiogroup" aria-label="Capas del mapa de calor">{[['handovers', 'Handovers'], ['rssi', 'RSSI'], ['rsrq', 'RSRQ']].map(([key, label]) => <label key={key}><input type="radio" name="heatMetric" checked={heatMetric === key} onChange={() => setHeatMetric(key)} />{label}</label>)}</div> : [['handovers', 'Handovers'], ['rutas', 'Trayectoria'], ['radiosBase', 'Radios Base']].map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(layers[key])} onChange={(e) => setLayers((old) => ({ ...old, [key]: e.target.checked }))} />{label}</label>)}<button className="geo-download" type="button" disabled={exporting || loading || !data?.total} onClick={exportCurrentMap}><span aria-hidden="true">↓</span> {exporting ? 'Preparando imagen…' : 'Descargar mapa'}</button></div>
+    {exportError && <p className="geo-error" role="alert">{exportError}</p>}
     {mapLayers.radiosBase && data && <RadioBaseSummary data={data} />}
     {loading && <p role="status" className="geo-empty">Consultando mediciones…</p>}
     {!loading && error && <p role="alert" className="geo-error">{error}</p>}
     {data?.total === 0 && <p role="status" className="geo-empty">No hay mediciones que coincidan con estos filtros.</p>}
     {data?.total > 0 && data.total_handovers === 0 && <p role="status" className="geo-empty">No se detectaron handovers con la regla de cambio de celda y nodo en estos datos.</p>}
+    <div className="geo-export" ref={exportArea}>
     <MapaGeoespacial data={data} layers={mapLayers} onSelect={setSelected} onZone={applyZone} executions={executions} />
-    {tab === 'rutas' ? <div className="geo-legend"><span><i style={{ background: '#128777' }} />RSSI ≥ −80 dBm</span><span><i style={{ background: '#cf9209' }} />−100 ≤ RSSI &lt; −80 dBm</span><span><i style={{ background: '#cf4960' }} />RSSI &lt; −100 dBm</span><span><i style={{ background: '#81909f' }} />RSSI sin dato</span></div> : <div className="geo-legend geo-heat-legend"><i />Azul → rojo: menor → mayor concentración relativa; varía con el zoom.</div>}
+    {tab === 'rutas' || heatMetric !== 'handovers' ? <SignalLegend metric={tab === 'rutas' ? 'rssi' : heatMetric} aggregated={tab === 'calor'} /> : <div className="geo-legend geo-heat-legend"><i />Azul → rojo: menor → mayor concentración relativa; varía con el zoom.</div>}
+    </div>
     {shownSelected && <aside className="geo-detail"><h2>Detalle de handover</h2><button onClick={() => setSelected(null)} aria-label="Cerrar detalle">Cerrar</button><dl>{Object.entries({ 'Fecha y hora · Ecuador': formatTime(shownSelected.timestamp_medicion), 'Celda origen': shownSelected.celda_origen, 'Celda destino': shownSelected.cell_id, 'Nodo origen': shownSelected.nodo_origen, 'Nodo destino': shownSelected.node_id, Tecnología: shownSelected.tecnologia === 1 ? 'LTE / 4G' : shownSelected.tecnologia === 2 ? '3G / UMTS' : 'Sin señal', RSSI: shownSelected.rssi == null ? 'Sin dato' : `${shownSelected.rssi} dBm`, Velocidad: shownSelected.velocidad_kmh == null ? 'Sin dato' : `${shownSelected.velocidad_kmh.toLocaleString('es-EC', { maximumFractionDigits: 2 })} km/h`, Coordenadas: `${shownSelected.latitud}, ${shownSelected.longitud}` }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></aside>}
     </div>
     </section>

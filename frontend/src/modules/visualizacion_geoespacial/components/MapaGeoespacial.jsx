@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.heat';
+import { signalColor } from '../signalHeat';
+import SignalHeatLayer from './SignalHeatLayer';
 
-const color = (rssi) => rssi == null ? '#81909f' : rssi >= -80 ? '#128777' : rssi >= -100 ? '#cf9209' : '#cf4960';
+const color = (rssi) => signalColor(rssi, 'rssi');
 const formatDate = (value) => new Intl.DateTimeFormat('es-EC', {
   dateStyle: 'medium', timeZone: 'America/Guayaquil',
 }).format(new Date(value));
@@ -80,7 +82,7 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
     const map = L.map(host.current, { preferCanvas: true }).setView([-0.2, -78.5], 11);
     mapRef.current = map;
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19, crossOrigin: 'anonymous', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).on('tileerror', () => setTileError(true)).addTo(map);
     const resize = new ResizeObserver(() => map.invalidateSize());
     resize.observe(host.current);
@@ -105,6 +107,12 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
     if (layers.handovers) for (const p of events) {
       const marker = L.circleMarker([p.latitud, p.longitud], { radius: 7, color: '#fff', weight: 2, fillColor: color(p.rssi), fillOpacity: 0.95 }).addTo(group);
       marker.bindTooltip(handoverTooltip(p), { direction: 'top', offset: [0, -8] }).on('click', () => onSelect(p));
+    }
+    if (layers.signalMetric) {
+      new SignalHeatLayer(events, layers.signalMetric).addTo(group);
+      for (const event of events) L.circleMarker([event.latitud, event.longitud], {
+        radius: 8, stroke: false, fillOpacity: 0,
+      }).bindTooltip(handoverTooltip(event)).addTo(group);
     }
     if (layers.radiosBase) {
       // Identical uploads may yield coincident candidates. Share a marker but
@@ -132,7 +140,7 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
   }, [data, layers, onSelect, executions]);
   return <div className="geo-map-wrap">
     <div className="geo-map" ref={host} aria-label="Mapa de mediciones GPS" />
-    <button type="button" className="geo-zone-button" onClick={() => {
+    <button type="button" className="geo-zone-button" data-html2canvas-ignore onClick={() => {
       const b = mapRef.current.getBounds();
       onZone([Math.max(-180, b.getWest()), Math.max(-90, b.getSouth()), Math.min(180, b.getEast()), Math.min(90, b.getNorth())].join(','));
     }}>Filtrar por zona visible</button>
