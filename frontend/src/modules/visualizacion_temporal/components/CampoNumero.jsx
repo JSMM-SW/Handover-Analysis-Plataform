@@ -7,13 +7,17 @@
  * propaga hacia arriba cuando el valor es válido.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 export default function CampoNumero({ valor, onCambio, min = 1, max = 1000, ...resto }) {
   const [texto, setTexto] = useState(String(valor));
+  const [valorAnterior, setValorAnterior] = useState(valor);
 
   // Si el valor cambia desde fuera (p. ej. al pulsar un preset), el campo lo refleja.
-  useEffect(() => setTexto(String(valor)), [valor]);
+  if (!Object.is(valor, valorAnterior)) {
+    setValorAnterior(valor);
+    setTexto(String(valor));
+  }
 
   const alEscribir = (evento) => {
     const nuevo = evento.target.value;

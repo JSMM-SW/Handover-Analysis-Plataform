@@ -166,7 +166,8 @@ def test_el_sql_de_datos_de_prueba_esta_sincronizado():
 
 def test_el_sql_declara_la_verdad_de_referencia():
     """El script debe documentar cuántos HO se esperan (criterio de cierre de la Fase 1)."""
-    sql = SQL_DATOS_PRUEBA.read_text(encoding="utf-8")
+    # Validate the generated script even in clones without the author's local docs/sql/.
+    sql = generar_sql()
 
     assert f"HANDOVERS ESPERADOS : {TOTAL_HANDOVERS_ESPERADOS}" in sql
     assert SESION_ID in sql
