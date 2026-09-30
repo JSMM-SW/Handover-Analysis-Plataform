@@ -34,6 +34,7 @@ o perjudicó?).
 
 from datetime import date
 from typing import Callable
+from app.modules.kpis.repository import KpisRepository
 
 from app.modules.kpis.schemas import (
     DiaSemanaResponse,
@@ -202,8 +203,8 @@ def _detectar_eventos_handover(secuencia: list[tuple]) -> list[dict]:
     return eventos
 
 
-def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str]) -> dict[str, dict]:
-    """Agrupa eventos de handover según `funcion_clave(evento) -> str` y
+def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str | int]) -> dict[str | int, dict]:
+    """Agrupa eventos de handover según `funcion_clave(evento) -> str | int` y
     acumula los conteos por categoría dentro de cada grupo. Reutilizado por
     distribución horaria, franja horaria y tendencia por periodo -- lo único
     que cambia entre esas tres es cómo se agrupa, no cómo se cuenta.
@@ -211,7 +212,7 @@ def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str]) 
     No incluye UHO en el conteo -- hoy UHO solo se muestra en el resumen
     (`calcular_resumen_kpis`), no está desglosado por hora/franja/periodo.
     """
-    grupos: dict[str, dict] = {}
+    grupos: dict[str | int, dict] = {}
     for evento in eventos:
         clave = funcion_clave(evento)
         bucket = grupos.setdefault(clave, dict(_CONTADOR_VACIO))
@@ -220,6 +221,7 @@ def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str]) 
         if evento["ping_pong"]:
             bucket["ping_pongs"] += 1
     return grupos
+
 
 
 def calcular_resumen_kpis(
