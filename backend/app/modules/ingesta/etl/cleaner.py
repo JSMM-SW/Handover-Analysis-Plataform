@@ -7,8 +7,10 @@ from app.modules.ingesta.etl.constants import (
     CAMPOS_CENTINELA_CSV_NULEABLES,
     LATITUD_MAX,
     LATITUD_MIN,
+    LATITUD_SIN_FIX_CSV,
     LONGITUD_MAX,
     LONGITUD_MIN,
+    LONGITUD_SIN_FIX_CSV,
     MOTIVO_COORDENADAS_FUERA_DE_RANGO,
     MOTIVO_RSRP_FUERA_DE_RANGO,
     RSRP_MAX_VALID,
@@ -43,6 +45,11 @@ def apply_sentinels_csv(data: dict) -> tuple[dict, list[str]]:
     `accuracy` usa un centinela propio (-1) distinto del resto (2147483647),
     pero se trata igual: se guarda NULL y se cuenta para el warning agregado.
 
+    `gps`/`lat`/`long` reciben el mismo tratamiento desde Session_43: "sin
+    fix" (gps=0, o lat=long=-1 como respaldo si esa correlación llegara a
+    fallar) YA NO rechaza el registro (ver constants.py), solo anula lat/long
+    y se cuenta bajo la clave "gps" para el warning agregado.
+
     No modifica `data` en el lugar: devuelve una copia, porque `data` original
     se usa como `datos_crudos` si el registro terminara rechazado por otra
     regla posterior (duplicado).
@@ -56,6 +63,12 @@ def apply_sentinels_csv(data: dict) -> tuple[dict, list[str]]:
     if cleaned["accuracy"] == ACCURACY_SIN_DATO:
         cleaned["accuracy"] = None
         nulled_fields.append("accuracy")
+    if cleaned["gps"] == 0 or (
+        cleaned["lat"] == LATITUD_SIN_FIX_CSV and cleaned["long"] == LONGITUD_SIN_FIX_CSV
+    ):
+        cleaned["lat"] = None
+        cleaned["long"] = None
+        nulled_fields.append("gps")
     return cleaned, nulled_fields
 
 
