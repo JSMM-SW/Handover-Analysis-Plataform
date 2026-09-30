@@ -12,18 +12,21 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
-  "dependencies": {
+    "dependencies": {
     "@tanstack/react-query": "^5.102.8",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
     "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3",
+    "recharts": "^3.10.1",
     "zustand": "^5.0.15"
   },
+
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",

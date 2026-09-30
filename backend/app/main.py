@@ -1,10 +1,11 @@
-# main.py corregido
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.shared.logging import setup_logging
 from app.api.routes.health import router as health_router  # <-- RUTA CORREGIDA
 from app.modules.ingesta.router import router as ingesta_router
+from app.modules.kpis.router import router as kpis_router
 from app.modules.visualizacion_geoespacial.router import router as geoespacial_router
 from app.modules.visualizacion_temporal.router import router as vis_temporal_router
 
@@ -27,5 +28,6 @@ app.add_middleware(
 # Inclusión de Enrutadores Modulares
 app.include_router(health_router, prefix="/api/v1") # <-- Endpoint del sistema
 app.include_router(ingesta_router, prefix="/api/v1")
+app.include_router(kpis_router, prefix="/api/v1") # <-- Endpoint de KPIs
 app.include_router(geoespacial_router, prefix="/api/v1")
 app.include_router(vis_temporal_router, prefix="/api/v1")  # <-- Modulo 2

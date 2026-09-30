@@ -21,6 +21,9 @@ data/rejected/*
 .idea/
 Thumbs.db
 
+# Claude Code
+CLAUDE.md
+
 
 # Frontend / Node.js
 node_modules/
