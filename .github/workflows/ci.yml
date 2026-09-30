@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - run: python -m pytest tests/unit tests/integration/test_geoespacial_endpoints.py -q
+      - run: python -m pytest tests/unit tests/integration/test_geoespacial_endpoints.py tests/integration/test_module_registration.py -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -41,6 +41,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
