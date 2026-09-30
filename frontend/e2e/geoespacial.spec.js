@@ -89,6 +89,8 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).not.toContainText('RSSNR:');
   await expect(page.locator('.geo-signal-legend p')).toHaveCount(0);
   await page.getByRole('radio', { name: 'Handovers', exact: true }).check();
+  // Leaflet keeps closed tooltips in the DOM during its fade-out animation.
+  await expect(signalBubble).toHaveCount(0);
   await expect(page.locator('.geo-signal-heat-layer')).toHaveCount(0);
   await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
   await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
@@ -98,6 +100,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   const box = await map.boundingBox();
   await map.hover({ position: { x: box.width / 2, y: box.height / 2 } });
   const bubble = page.locator('.leaflet-tooltip .geo-handover-tooltip');
+  await expect(bubble).toHaveCount(1);
   await expect(bubble).toBeVisible();
   await expect(bubble).toContainText('Fecha:');
   await expect(bubble).toContainText('Hora: 08:00:01');
