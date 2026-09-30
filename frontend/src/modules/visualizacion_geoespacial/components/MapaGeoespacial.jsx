@@ -22,7 +22,7 @@ function appendFields(container, fields) {
   }
 }
 
-function handoverTooltip(point) {
+function handoverTooltip(point, metric = null) {
   const content = document.createElement('div');
   content.className = 'geo-handover-tooltip';
   const title = document.createElement('strong');
@@ -34,7 +34,7 @@ function handoverTooltip(point) {
     ['RSSI', point.rssi == null ? 'Sin dato' : `${point.rssi} dBm`],
     ['RSRQ', point.rsrq == null ? 'Sin dato' : `${point.rsrq} dB`],
     ['RSSNR', point.rssnr == null ? 'Sin dato' : String(point.rssnr)],
-  ]);
+  ].filter(([label]) => !metric || !['RSSI', 'RSRQ', 'RSSNR'].includes(label) || label === metric.toUpperCase()));
   return content;
 }
 
@@ -112,7 +112,7 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
       new SignalHeatLayer(events, layers.signalMetric).addTo(group);
       for (const event of events) L.circleMarker([event.latitud, event.longitud], {
         radius: 8, stroke: false, fillOpacity: 0,
-      }).bindTooltip(handoverTooltip(event)).addTo(group);
+      }).bindTooltip(handoverTooltip(event, layers.signalMetric)).addTo(group);
     }
     if (layers.radiosBase) {
       // Identical uploads may yield coincident candidates. Share a marker but

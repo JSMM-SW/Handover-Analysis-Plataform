@@ -47,7 +47,6 @@
 .geo-toolbar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; font-size: 13px; }
 .geo-toolbar label { flex-direction: row; align-items: center; font-weight: 400; }
 .geo-heat-options { display: flex; flex-wrap: wrap; gap: 18px; }
-.geo-signal-legend p { margin: 12px; font-size: 12px; color: #536579; }
 .geo-toolbar .geo-download { margin-left: auto; }
 .geo-export { background: #fff; padding-bottom: 1px; }
 .geo-export .geo-legend { padding: 0 12px; }
