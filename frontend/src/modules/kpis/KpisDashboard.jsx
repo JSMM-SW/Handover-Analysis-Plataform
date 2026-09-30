@@ -81,14 +81,14 @@ export default function KpisDashboard() {
         }
     };
 
-       useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- loadData()
-        // llama a setLoading/setError de forma sincrona antes del primer await,
-        // que es el patron estandar de fetching de datos (ver "You Might Not
-        // Need an Effect" / "Fetching data" en la doc de React). Una solucion
-        // mas "correcta" seria migrar a @tanstack/react-query (ya disponible
-        // en el proyecto gracias al merge con develop), pero es un cambio
-        // mas grande que no corresponde hacer solo para pasar el lint.
+      useEffect(() => {
+        // loadData() llama a setLoading/setError de forma sincrona antes del
+        // primer await, que es el patron estandar de fetching de datos (ver
+        // "You Might Not Need an Effect" / "Fetching data" en la doc de React).
+        // Una solucion mas "correcta" seria migrar a @tanstack/react-query (ya
+        // disponible en el proyecto gracias al merge con develop), pero es un
+        // cambio mas grande que no corresponde hacer solo para pasar el lint.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadData();
     }, [startDate, endDate, tecnologia, periodo, franja, sesionLabel]);
 
