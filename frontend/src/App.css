@@ -182,3 +182,120 @@
     border-right-color: var(--border);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Lienzo de la aplicación
+ *
+ * `index.css` (plantilla de Vite) limita #root a 1126 px con bordes y, con
+ * el tema oscuro del sistema, pinta el fondo casi negro a los lados. Se
+ * sustituye por el blanco azulado de trabajo y el contenido ocupa el ancho
+ * completo; cada módulo centra lo suyo (ingesta ya limita su contenido a
+ * 720 px).
+ * ------------------------------------------------------------------ */
+
+html,
+body {
+  background: #f2f7fa;
+}
+
+#root {
+  width: 100%;
+  max-width: none;
+  border-inline: none;
+}
+
+.app {
+  min-height: 100svh;
+  background: #f2f7fa;
+}
+
+/* ------------------------------------------------------------------ *
+ * Navegación entre módulos (añadida en la Fase 4 del Módulo 2)
+ *
+ * Paleta pastel (docs/11-sistema-visual.md): blanco azulado en lugar del
+ * azul oscuro original, y la pestaña activa en azul pastel.
+ * ------------------------------------------------------------------ */
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 10px 24px;
+  background: #f7fbfd;
+  border-bottom: 1px solid #dce7ef;
+  color: #2e3a45;
+  flex-wrap: wrap;
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+
+.app-nav__marca {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+  font-size: 0.92rem;
+  letter-spacing: -0.005em;
+}
+
+/* Un punto verde pastel como único elemento de marca: suficiente para anclar la vista. */
+.app-nav__marca::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #7fcb9f;
+  box-shadow: 0 0 0 3px #e3f4ea;
+}
+
+.app-nav__lista {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-nav__boton {
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #5b6873;
+  font: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.app-nav__boton:hover {
+  background: #e9f1f6;
+  color: #2e3a45;
+}
+
+.app-nav__boton--activo,
+.app-nav__boton--activo:hover {
+  background: #e3f4ea;
+  border-color: #bfdcef;
+  color: #2e6c9a;
+}
+
+.app-nav__boton:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(127, 181, 218, 0.4);
+}
+
+@media (max-width: 599px) {
+  .app-nav {
+    gap: 8px;
+    padding: 10px 16px;
+  }
+
+  .app-nav__lista {
+    width: 100%;
+  }
+
+  .app-nav__boton {
+    flex: 1;
+  }
+}
