@@ -140,6 +140,28 @@ El mapa base usa Leaflet y OpenStreetMap y requiere Internet.
 
 ## Integración con develop
 
+El workflow `.github/workflows/ci.yml` ejecuta pruebas unitarias y de API
+geoespacial, lint, compilación y Playwright en los PR hacia `develop` y `master`.
+No utiliza credenciales de producción ni ejecuta los scripts contra la base real.
+En CI se usa Chromium; la validación local en Windows usa Edge.
+
+Organización del código:
+
+- `GeoespacialPage.jsx`: carga de sesiones y confirmación de la selección.
+- `components/SessionSelector.jsx`: desplegable y rango de fechas.
+- `components/DatasetView.jsx`: estado de filtros, capas y descarga del análisis.
+- `hooks/useMeasurements.js`: consultas cancelables y protección ante respuestas antiguas.
+- `components/MapControls.jsx` y `HandoverDetail.jsx`: controles y detalle del evento.
+- `components/MapaGeoespacial.jsx`: ciclo de vida del mapa y sus capas Leaflet.
+- `mapPopups.js` y `formatters.js`: burbujas seguras y formatos compartidos.
+- `signalHeat.js`, `components/SignalHeatLayer.js` y `exportMap.js`: cálculo de calor,
+  representación en canvas y descarga PNG.
+- `backend/.../visualizacion_geoespacial/constants.py`: límites compartidos por consulta y análisis.
+
+Las opciones de capas se memorizan para no recrear los objetos Leaflet al editar
+filtros todavía no aplicados o abrir detalles. Las preferencias guardadas solo
+aceptan las claves y valores booleanos de las capas existentes.
+
 Revisar conjuntamente la navegación en `frontend/src/App.jsx`, los estilos globales,
 `backend/app/main.py` y las dependencias del frontend. El esquema compartido debe
 incluir `etl_execution.sesion_label` y las columnas de mediciones usadas por el

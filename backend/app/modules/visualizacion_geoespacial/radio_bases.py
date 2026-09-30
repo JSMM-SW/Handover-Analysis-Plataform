@@ -12,6 +12,7 @@ import math
 from statistics import median
 
 from .schemas import RadioBaseEstimate, RadioBaseSummary
+from .constants import INVALID_NETWORK_ID
 
 EARTH_RADIUS_M = 6371008.8
 
@@ -32,7 +33,7 @@ DEFAULT_PARAMETERS = EstimationParameters()
 
 
 def _identity(value):
-    return value is not None and 0 < value < 2147483647
+    return value is not None and 0 < value < INVALID_NETWORK_ID
 
 
 def estimate_radio_bases(points, parameters=DEFAULT_PARAMETERS):
@@ -49,7 +50,7 @@ def estimate_radio_bases(points, parameters=DEFAULT_PARAMETERS):
     for point in points:
         if point.execution_id is None or not _identity(point.node_id) or not _identity(point.cell_id):
             excluded['Sin identificadores válidos de sesión, nodo o celda'] += 1
-        elif point.tecnologia not in (1, 2) or point.earfcn is None or not 0 <= point.earfcn < 2147483647:
+        elif point.tecnologia not in (1, 2) or point.earfcn is None or not 0 <= point.earfcn < INVALID_NETWORK_ID:
             excluded['Sin tecnología o frecuencia válida'] += 1
         elif not (math.isfinite(point.latitud) and math.isfinite(point.longitud)
                   and -85 < point.latitud < 85 and -180 <= point.longitud <= 180
