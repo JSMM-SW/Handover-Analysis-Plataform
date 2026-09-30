@@ -3,8 +3,12 @@ import {
     fetchKpiSummary,
     fetchHourlyDistribution,
     fetchFranjaHoraria,
+    fetchDistribucionDiaSemana,
     fetchTrend,
+    fetchSesiones,
 } from '../../services/kpisService';
+
+
 import {
     ComposedChart, LineChart, PieChart, Bar, Line, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -27,10 +31,15 @@ export default function KpisDashboard() {
     const [tecnologia, setTecnologia] = useState('');
     const [periodo, setPeriodo] = useState('diario');
     const [franja, setFranja] = useState('');
+    const [sesionLabel, setSesionLabel] = useState('');
+    const [sesiones, setSesiones] = useState([]);
+
 
     const [summaryData, setSummaryData] = useState(null);
     const [hourlyData, setHourlyData] = useState([]);
     const [franjaData, setFranjaData] = useState([]);
+    const [diaSemanaData, setDiaSemanaData] = useState([]);
+
     const [trendData, setTrendData] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -41,12 +50,14 @@ export default function KpisDashboard() {
         setLoading(true);
         setError(null);
         try {
-            const [summary, hourly, franjaResultado, trend] = await Promise.all([
-                fetchKpiSummary(startDate, endDate, tecnologia, franja),
-                fetchHourlyDistribution(startDate, endDate, tecnologia, franja),
-                fetchFranjaHoraria(startDate, endDate, tecnologia),
-                fetchTrend(startDate, endDate, periodo, tecnologia, franja),
+                const [summary, hourly, franjaResultado, diaSemana, trend] = await Promise.all([
+                fetchKpiSummary(startDate, endDate, tecnologia, franja, sesionLabel),
+                fetchHourlyDistribution(startDate, endDate, tecnologia, franja, sesionLabel),
+                fetchFranjaHoraria(startDate, endDate, tecnologia, sesionLabel),
+                fetchDistribucionDiaSemana(startDate, endDate, tecnologia, franja, sesionLabel),
+                fetchTrend(startDate, endDate, periodo, tecnologia, franja, sesionLabel),
             ]);
+
 
             const horaConEtiqueta = hourly.map(item => ({
                 ...item,
@@ -57,10 +68,12 @@ export default function KpisDashboard() {
                 franja_etiqueta: ETIQUETAS_FRANJA[item.franja] ?? item.franja,
             }));
 
-            setSummaryData(summary);
+                       setSummaryData(summary);
             setHourlyData(horaConEtiqueta);
             setFranjaData(franjaConEtiqueta);
+            setDiaSemanaData(diaSemana);
             setTrendData(trend);
+
         } catch (err) {
             setError(err.message);
         } finally {
@@ -70,7 +83,14 @@ export default function KpisDashboard() {
 
     useEffect(() => {
         loadData();
-    }, [startDate, endDate, tecnologia, periodo, franja]);
+    }, [startDate, endDate, tecnologia, periodo, franja, sesionLabel]);
+
+   
+    useEffect(() => {
+        fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
+    }, []);
+
+   
 
     const exportToPDF = async () => {
         const element = dashboardRef.current;
@@ -141,6 +161,19 @@ export default function KpisDashboard() {
                             <option value="noche">Noche (19-06)</option>
                         </select>
                     </div>
+                                        <div className="kpis-date-filter">
+                        <span className="kpis-date-label">Sesión</span>
+                        <select className="kpis-input" value={sesionLabel} onChange={(e) => setSesionLabel(e.target.value)}>
+                            <option value="">Todas</option>
+                            {sesiones.map((sesion) => (
+                                                                <option key={sesion.sesion_label} value={sesion.sesion_label}>
+                                    Sesión #{sesion.sesion_label} ({sesion.records_valid} registros)
+                                </option>
+
+                            ))}
+                        </select>
+                    </div>
+
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
@@ -165,6 +198,7 @@ export default function KpisDashboard() {
                     <span>Tecnología: {ETIQUETAS_TECNOLOGIA[tecnologia] ?? 'Todas'}</span>
                     <span>Franja horaria: {ETIQUETAS_FRANJA[franja] ?? 'Todas'}</span>
                     <span>Periodicidad: {ETIQUETAS_PERIODO[periodo]}</span>
+                    <span>Sesión: {sesionLabel ? `#${sesionLabel}` : 'Todas'}</span>
                 </div>
             </header>
 
@@ -265,6 +299,7 @@ export default function KpisDashboard() {
                         </div>
                     </div>
 
+
                     <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
@@ -304,6 +339,27 @@ export default function KpisDashboard() {
                             </div>
                         </div>
                     </div>
+                                        <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
+                        <div className="kpis-card" style={{ margin: 0 }}>
+                            <h3 className="kpis-card-title">Distribución por Día de la Semana</h3>
+                            <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={diaSemanaData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#262b36" vertical={false} />
+                                        <XAxis dataKey="etiqueta" stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <Legend verticalAlign="top" height={50} iconType="circle" />
+                                        <Bar dataKey="exitosos" stackId="eventos" fill={COLOR_EXITOSO} name="Exitosos" />
+                                        <Bar dataKey="fallidos" stackId="eventos" fill={COLOR_FALLIDO} name="Fallidos" />
+                                        <Bar dataKey="indeterminados" stackId="eventos" fill={COLOR_INDETERMINADO} name="Indeterminados" radius={[4, 4, 0, 0]} />
+                                        <Line type="monotone" dataKey="ping_pongs" stroke={COLOR_PING_PONG} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
                 </>
             )}
         </div>

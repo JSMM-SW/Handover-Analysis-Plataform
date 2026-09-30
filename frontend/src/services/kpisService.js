@@ -21,24 +21,31 @@ async function obtenerJSON(url, mensajeError) {
     return response.json();
 }
 
-export const fetchKpiSummary = async (startDate, endDate, tecnologia, franja) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja });
+export const fetchKpiSummary = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
     return obtenerJSON(`${URL_BASE}/summary?${query}`, "Error al cargar el resumen de KPIs");
 };
 
-export const fetchHourlyDistribution = async (startDate, endDate, tecnologia, franja) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja });
+export const fetchHourlyDistribution = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
     return obtenerJSON(`${URL_BASE}/hourly?${query}`, "Error al cargar la distribución por horas");
 };
 
-export const fetchTrend = async (startDate, endDate, periodo = 'diario', tecnologia, franja) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, periodo, tecnologia, franja });
+export const fetchTrend = async (startDate, endDate, periodo = 'diario', tecnologia, franja, sesionLabel) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, periodo, tecnologia, franja, sesion_label: sesionLabel });
     return obtenerJSON(`${URL_BASE}/trend?${query}`, "Error al cargar la tendencia");
 };
 
-export const fetchFranjaHoraria = async (startDate, endDate, tecnologia) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia });
+export const fetchFranjaHoraria = async (startDate, endDate, tecnologia, sesionLabel) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, sesion_label: sesionLabel });
     return obtenerJSON(`${URL_BASE}/franja-horaria?${query}`, "Error al cargar la distribución por franja horaria");
 };
 
+export const fetchDistribucionDiaSemana = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
+    return obtenerJSON(`${URL_BASE}/dia-semana?${query}`, "Error al cargar la distribución por día de la semana");
+};
 
+export const fetchSesiones = async () => {
+    return obtenerJSON(`${URL_BASE}/sesiones`, "Error al cargar la lista de sesiones");
+};

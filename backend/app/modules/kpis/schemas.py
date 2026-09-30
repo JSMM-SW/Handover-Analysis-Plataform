@@ -1,8 +1,10 @@
 """Modelos de datos para las respuestas de los endpoints del módulo de KPIs."""
-from datetime import date
+from datetime import date, datetime
+
 
 from pydantic import BaseModel, Field
     
+
 
 class SignalMetricsResponse(BaseModel):
     """Respuesta de GET /kpis/daily: calidad de señal general de un día
@@ -13,6 +15,16 @@ class SignalMetricsResponse(BaseModel):
     promedio_rsrp: float = Field(description="Nivel promedio de señal RSRP en dBm")
     eventos_criticos: int = Field(description="Mediciones con señal severamente degradada (<-110 dBm)")
     tasa_riesgo: float = Field(description="Porcentaje de mediciones en estado crítico")
+
+
+class SesionResponse(BaseModel):
+    """Un elemento de la respuesta de GET /kpis/sesiones: una carga de
+    archivo disponible para filtrar los demás endpoints por sesión."""
+
+    sesion_label: int = Field(description="Identificador corto y amigable de la sesión (carga de archivo)")
+    filename: str = Field(description="Nombre del archivo original que se cargó")
+    processing_date: datetime = Field(description="Fecha y hora en que se procesó la carga")
+    records_valid: int = Field(description="Registros válidos que aportó esta sesión a handover_record")
 
 
 class KpiSummaryResponse(BaseModel):
@@ -62,6 +74,19 @@ class FranjaHorariaResponse(BaseModel):
     HourlyDistributionResponse pero agrupado en 3 franjas en vez de 24 horas."""
 
     franja: str = Field(description="'manana' (06-11:59), 'tarde' (12-18:59) o 'noche' (19-05:59)")
+    total: int
+    exitosos: int
+    fallidos: int
+    indeterminados: int
+    ping_pongs: int
+
+
+class DiaSemanaResponse(BaseModel):
+    """Un elemento de la respuesta de GET /kpis/dia-semana: desglose de los
+    handovers de un día de la semana (Lunes a Domingo) por categoría."""
+
+    dia: int = Field(description="Día de la semana: 0=Lunes ... 6=Domingo")
+    etiqueta: str = Field(description="Nombre del día en español, ej. 'Lunes'")
     total: int
     exitosos: int
     fallidos: int

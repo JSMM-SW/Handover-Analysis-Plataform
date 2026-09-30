@@ -8,7 +8,12 @@ from sqlalchemy import extract, func
 
 from sqlalchemy.orm import Session
 
-from app.shared.db.models import HandoverRecord
+from app.shared.db.models import EtlExecution, HandoverRecord
+
+
+
+import uuid
+
 
 # Rangos de hora [min, max] cerrados para mañana/tarde. "noche" no entra
 # aquí porque envuelve la medianoche (19-23 y 0-5), se maneja aparte.
@@ -47,6 +52,34 @@ class KpisRepository:
 
         return {"total": total, "promedio": float(promedio), "criticos": criticos}
 
+    def listar_sesiones(self) -> list[EtlExecution]:
+        """Lista las sesiones (ejecuciones) completadas, para poblar el
+        selector de sesión del frontend -- más recientes primero. No
+        incluye ejecuciones fallidas: no tienen datos en handover_record.
+        """
+        return (
+            self._db.query(EtlExecution)
+            .filter(EtlExecution.status == "completed")
+            .order_by(EtlExecution.sesion_label.desc())
+            .all()
+        )
+
+    def _resolver_execution_id_por_sesion(self, sesion_label: int) -> uuid.UUID:
+        """Traduce sesion_label (identificador corto y amigable) al
+        execution_id real para poder filtrar handover_record.
+
+        Si la sesión no existe, devuelve un UUID aleatorio (que por
+        construcción no va a coincidir con ningún execution_id real) en vez
+        de lanzar un error -- el filtro simplemente no encuentra nada, y el
+        frontend ya sabe mostrar el estado "sin datos" para ese caso.
+        """
+        ejecucion = (
+            self._db.query(EtlExecution)
+            .filter(EtlExecution.sesion_label == sesion_label)
+            .one_or_none()
+        )
+        return ejecucion.execution_id if ejecucion else uuid.uuid4()
+
 
     def contar_mediciones(
         self,
@@ -54,6 +87,7 @@ class KpisRepository:
         fecha_fin: date,
         tecnologia: int | None = None,
         franja: str | None = None,
+        sesion_label: int | None = None,
     ) -> int:
         """Total de mediciones (filas de handover_record) en el rango dado.
 
@@ -61,7 +95,8 @@ class KpisRepository:
         mediciones). `tecnologia` es opcional: 0=sin señal, 1=LTE/4G,
         2=3G/UMTS. `franja` es opcional: 'manana', 'tarde' o 'noche' (ver
         FRANJA_RANGOS_HORA) -- filtra por la hora del día de la medición,
-        no por fecha.
+        no por fecha. `sesion_label` es opcional: restringe a una sola
+        carga de archivo (ver `_resolver_execution_id_por_sesion`).
         """
         consulta = self._db.query(func.count(HandoverRecord.id_registro)).filter(
             func.date(HandoverRecord.timestamp_medicion).between(fecha_inicio, fecha_fin)
@@ -75,17 +110,27 @@ class KpisRepository:
             else:
                 hora_min, hora_max = FRANJA_RANGOS_HORA[franja]
                 consulta = consulta.filter(hora.between(hora_min, hora_max))
+        if sesion_label is not None:
+            consulta = consulta.filter(
+                HandoverRecord.execution_id == self._resolver_execution_id_por_sesion(sesion_label)
+            )
         return consulta.scalar() or 0
 
 
 
     def obtener_secuencia_completa(
-        self, fecha_inicio: date, fecha_fin: date, tecnologia: int | None = None
+        self,
+        fecha_inicio: date,
+        fecha_fin: date,
+        tecnologia: int | None = None,
+        sesion_label: int | None = None,
     ) -> list[tuple]:
         """Secuencia cronológica de mediciones del rango, con todos los
         indicadores de señal necesarios para detectar handovers y
         clasificarlos como exitosos/fallidos: cell_id, timestamp, rsrp_dbm,
         rssi, rsrq, rssnr.
+
+        `sesion_label` es opcional: restringe a una sola carga de archivo.
 
         Reemplaza a los antiguos `get_sequence_data_by_range`,
         `get_sequence_with_timestamps` y `get_full_sequence_data`: los tres
@@ -108,4 +153,8 @@ class KpisRepository:
         ).filter(func.date(HandoverRecord.timestamp_medicion).between(fecha_inicio, fecha_fin))
         if tecnologia is not None:
             consulta = consulta.filter(HandoverRecord.tecnologia == tecnologia)
+        if sesion_label is not None:
+            consulta = consulta.filter(
+                HandoverRecord.execution_id == self._resolver_execution_id_por_sesion(sesion_label)
+            )
         return consulta.order_by(HandoverRecord.timestamp_medicion.asc()).all()
