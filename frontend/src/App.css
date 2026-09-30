@@ -1,0 +1,12 @@
+.app-layout { display: flex; min-height: 100vh; background: #f4f7fa; }
+.app-sidebar { width: 210px; flex-shrink: 0; background: #142c3e; color: #d4e4ef; padding: 30px 18px; box-sizing: border-box; }
+.app-brand { font-weight: 800; letter-spacing: 1px; font-size: 18px; color: white; }
+.app-brand span { color: #4ad5b5; }
+.app-sidebar p, .app-sidebar small { font-size: 11px; color: #9eb4c5; }
+.app-sidebar p { margin: 8px 0 35px; }
+.app-sidebar nav { display: flex; flex-direction: column; gap: 8px; margin-bottom: 45px; }
+.app-sidebar a { text-decoration: none; color: #c7d9e6; padding: 12px 14px; font-size: 14px; border-radius: 7px; }
+.app-sidebar a:hover { background: #223f54; }
+.app-sidebar a.active { background: #245447; color: #b9f7df; }
+.app-content { flex: 1; min-width: 0; }
+@media (max-width: 760px) { .app-layout { flex-direction: column; } .app-sidebar { width: 100%; padding: 16px; } .app-sidebar p, .app-sidebar small { display: none; } .app-sidebar nav { flex-direction: row; flex-wrap: wrap; margin: 12px 0 0; } }
