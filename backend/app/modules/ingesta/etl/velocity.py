@@ -14,6 +14,12 @@ Cuando dos registros comparten exactamente el mismo `timestamp_medicion`
 (ocurre en datos reales de xlsx, resolución de 1 segundo), se tratan como
 el mismo instante: diferencia de tiempo 0 -> NULL. No se intenta desempatar
 cuál fue "primero".
+
+Un registro válido sin posición (latitud/longitud NULL — csv con gps sin
+fix desde Session_43, que ya no se rechaza, ver validator.py/cleaner.py) no
+puede aportar ni recibir un cálculo de distancia: su propia velocidad queda
+NULL, y también rompe la cadena para el siguiente registro de la sesión,
+igual que un `gps_reject_anchors` de xlsx.
 """
 
 import math
@@ -51,12 +57,19 @@ def compute_velocities(valid_records: list[dict], gps_reject_anchors: list[tuple
             "timestamp": record["timestamp_medicion"],
             "hoja_origen": record["hoja_origen"],
             "is_valid": True,
+            "has_position": record["latitud"] is not None and record["longitud"] is not None,
             "record": record,
         }
         for record in valid_records
     ]
     entries.extend(
-        {"timestamp": timestamp, "hoja_origen": hoja_origen, "is_valid": False, "record": None}
+        {
+            "timestamp": timestamp,
+            "hoja_origen": hoja_origen,
+            "is_valid": False,
+            "has_position": False,
+            "record": None,
+        }
         for timestamp, hoja_origen in gps_reject_anchors
     )
 
@@ -72,7 +85,7 @@ def compute_velocities(valid_records: list[dict], gps_reject_anchors: list[tuple
         for entry in group_entries:
             if entry["is_valid"]:
                 record = entry["record"]
-                if previous is None or not previous["is_valid"]:
+                if not entry["has_position"] or previous is None or not previous["has_position"]:
                     record["velocidad_kmh"] = None
                 else:
                     dt_seconds = (entry["timestamp"] - previous["timestamp"]).total_seconds()

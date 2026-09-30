@@ -16,7 +16,6 @@ from app.modules.ingesta.etl.constants import (
     DEDUP_KEY_XLSX,
     MOTIVO_DUPLICADO,
     MOTIVO_GPS_SIN_FIX,
-    MOTIVO_GPS_SIN_FIX_CSV,
     ORIGEN_CSV,
     ORIGEN_XLSX,
     RSRP_STRONG_SIGNAL_THRESHOLD,
@@ -31,9 +30,9 @@ from app.modules.ingesta.etl.extractor import (
     validate_required_columns_xlsx,
 )
 from app.modules.ingesta.etl.normalizer import (
+    RSSI_DESTINO_POR_TECH,
     normalize_record,
     normalize_record_csv,
-    normalize_sys_time,
     normalize_timestamp,
 )
 from app.modules.ingesta.etl.transformer import structure_record
@@ -146,7 +145,17 @@ def _run_pipeline_csv(path: Path, archivo_origen: str, execution_id: str) -> Pip
 
         cleaned_data, nulled_fields = apply_sentinels_csv(record["data"])
         for field_name in nulled_fields:
-            nulled_field_counts[field_name] = nulled_field_counts.get(field_name, 0) + 1
+            # `rssi` se desambigua por tech (rsrp_dbm/rscp_dbm/rssi_dbm): el
+            # warning debe nombrar la columna destino real, no el campo
+            # crudo genérico, para que sea accionable. `gps` se cuenta aparte
+            # (mensaje propio más abajo) porque ya no es un "campo nuleado"
+            # simple: anula dos columnas (lat/long) y ya no es motivo de
+            # rechazo desde Session_43.
+            if field_name == "rssi":
+                label = RSSI_DESTINO_POR_TECH.get(record["data"]["tech"], "rssi")
+            else:
+                label = field_name
+            nulled_field_counts[label] = nulled_field_counts.get(label, 0) + 1
 
         candidates.append(
             {
@@ -170,17 +179,28 @@ def _run_pipeline_csv(path: Path, archivo_origen: str, execution_id: str) -> Pip
             structure_record(normalized, record["hoja_origen"], archivo_origen, ORIGEN_CSV)
         )
 
-    warnings: list[str] = [
-        f"{count} registro(s) csv con {field_name} = centinela (sin dato), guardado como NULL"
-        for field_name, count in sorted(nulled_field_counts.items())
-    ]
+    warnings: list[str] = []
+    for field_name, count in sorted(nulled_field_counts.items()):
+        if field_name == "gps":
+            # Ya no es motivo de rechazo (ver validator.py/cleaner.py): se
+            # anulan latitud/longitud y se conserva el resto del registro
+            # (cid/tech/rsrp/timestamp), en vez de rechazar el registro
+            # completo — confirmado necesario con Session_43_20260623_165825.csv.
+            warnings.append(
+                f"{count} registro(s) csv con gps sin fix (centinela lat/long = -1), "
+                "latitud/longitud guardadas como NULL"
+            )
+        else:
+            warnings.append(
+                f"{count} registro(s) csv con {field_name} = centinela (sin dato), guardado como NULL"
+            )
 
-    gps_reject_anchors = [
-        (normalize_sys_time(r["datos_crudos"]["sys_time"]), r["hoja_origen"])
-        for r in rejected
-        if r["motivo_rechazo"] == MOTIVO_GPS_SIN_FIX_CSV
-    ]
-    warnings.extend(compute_velocities(valid_records, gps_reject_anchors))
+    # No hay `gps_reject_anchors` para csv: gps sin fix ya no rechaza el
+    # registro, así que nunca aparece en `rejected` con ese motivo. El
+    # "romper la cadena" de velocidad para estos casos lo maneja
+    # compute_velocities directamente vía has_position (latitud/longitud NULL
+    # en el propio valid_record).
+    warnings.extend(compute_velocities(valid_records, []))
 
     logger.info(
         "[%s] Pipeline csv: %d leídos, %d válidos, %d rechazados",
@@ -331,12 +351,21 @@ _EXPORT_COLUMNS = [
     "latitud",
     "longitud",
     "rsrp_dbm",
+    "rscp_dbm",
+    "rssi_dbm",
     "node_id",
     "psc_pci",
     "rssi",
     "rsrq",
     "rssnr",
     "accuracy",
+    "cid",
+    "lac_tac_raw",
+    "report_index",
+    "net_type",
+    "tech",
+    "data_state",
+    "call_state",
     "velocidad_kmh",
     "archivo_origen",
     "hoja_origen",

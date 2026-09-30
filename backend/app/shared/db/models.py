@@ -13,6 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     Column,
     DateTime,
@@ -96,8 +97,12 @@ class HandoverRecord(Base):
 
     tecnologia = Column(SmallInteger, nullable=False)  # 0=sin señal, 1=LTE/4G, 2=3G/UMTS
 
-    latitud = Column(Numeric(10, 6), nullable=False)
-    longitud = Column(Numeric(10, 6), nullable=False)
+    # NULL solo posible en origen csv, cuando gps sin fix (centinela lat/long
+    # = -1) ya no rechaza el registro completo (ver validator.py/cleaner.py,
+    # confirmado necesario con Session_43_20260623_165825.csv). Siempre
+    # poblado para xlsx, que sigue rechazando GPS sin fix sin cambios.
+    latitud = Column(Numeric(10, 6), nullable=True)
+    longitud = Column(Numeric(10, 6), nullable=True)
 
     # NULL solo posible en origen csv (Network Cell Info no reporta RSRP).
     rsrp_dbm = Column(SmallInteger, nullable=True)
@@ -107,10 +112,29 @@ class HandoverRecord(Base):
     # para accuracy).
     node_id = Column(Integer, nullable=True)
     psc_pci = Column(Integer, nullable=True)
+    # DEPRECATED desde Session_43: ver comentario en schema.sql. No se llena
+    # para filas nuevas; se mantiene solo por las filas csv previas a esto.
     rssi = Column(SmallInteger, nullable=True)
     rsrq = Column(SmallInteger, nullable=True)
     rssnr = Column(SmallInteger, nullable=True)
     accuracy = Column(SmallInteger, nullable=True)
+
+    # Desambiguación de `rssi` por tecnología (ver schema.sql). Cada fila csv
+    # puebla como máximo una de las tres según su `tech`.
+    rscp_dbm = Column(SmallInteger, nullable=True)
+    rssi_dbm = Column(SmallInteger, nullable=True)
+
+    # Identificadores crudos de celda (csv), además de cell_id/tac (no se
+    # retiran). Ver advertencia de identidad en el comentario de cell_id.
+    cid = Column(BigInteger, nullable=True)
+    lac_tac_raw = Column(Integer, nullable=True)
+
+    report_index = Column(Integer, nullable=True)
+
+    net_type = Column(Text, nullable=True)
+    tech = Column(Text, nullable=True)
+    data_state = Column(Text, nullable=True)
+    call_state = Column(Text, nullable=True)
 
     archivo_origen = Column(Text, nullable=False)
     hoja_origen = Column(Text, nullable=True)  # NULL en csv, que no tiene hojas
@@ -131,7 +155,7 @@ class HandoverRecord(Base):
 
     __table_args__ = (
         CheckConstraint("cell_id > 0", name="chk_cell_id_valido"),
-        CheckConstraint("tecnologia IN (0,1,2)", name="chk_tecnologia_valida"),
+        CheckConstraint("tecnologia IN (0,1,2,3)", name="chk_tecnologia_valida"),
         CheckConstraint("latitud BETWEEN -5 AND 2", name="chk_latitud_rango"),
         CheckConstraint("longitud BETWEEN -92 AND -75", name="chk_longitud_rango"),
         CheckConstraint("rsrp_dbm BETWEEN -140 AND -1", name="chk_rsrp_rango"),
