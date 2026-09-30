@@ -193,12 +193,20 @@
     padding: 12px 20px;
     font-size: 14px;
     font-weight: 600;
+    white-space: nowrap;
+    text-decoration: none;
     color: #fff;
     background: var(--color-primary);
     border: none;
     border-radius: 10px;
     cursor: pointer;
     transition: background-color 150ms ease, transform 100ms ease;
+}
+
+.ingesta-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 .ingesta-btn:hover:not(:disabled) {

@@ -51,61 +51,91 @@ function IconAlert() {
     );
 }
 
+function IconDownload() {
+    return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 4v12M12 16l-4-4M12 16l4-4" />
+            <path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
+        </svg>
+    );
+}
+
 function formatBytes(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+function makeId(file, index) {
+    return `${file.name}-${file.size}-${Date.now()}-${index}`;
+}
+
+function isSupportedFile(file) {
+    const name = file.name.toLowerCase();
+    return name.endsWith(".xlsx") || name.endsWith(".csv");
+}
+
+function newItem(file, index) {
+    return {
+        id: makeId(file, index),
+        file,
+        isProcessing: false,
+        completedSteps: [],
+        failedStep: null,
+        result: null,
+        error: null,
+    };
+}
+
 export default function IngestaPage() {
-    const [file, setFile] = useState(null);
+    const [items, setItems] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [isUploading, setIsUploading] = useState(false);
-    const [completedSteps, setCompletedSteps] = useState([]);
-    const [failedStep, setFailedStep] = useState(null);
-    const [result, setResult] = useState(null);
-    const [error, setError] = useState(null);
     const inputRef = useRef(null);
 
-    const resetOutcome = () => {
-        setResult(null);
-        setError(null);
-        setFailedStep(null);
+    const isProcessingAny = items.some((item) => item.isProcessing);
+
+    const updateItem = (id, patch) => {
+        setItems((prev) =>
+            prev.map((item) => (item.id === id ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) } : item))
+        );
     };
 
-    const pickFile = (selected) => {
-        if (!selected) return;
-        setFile(selected);
-        setCompletedSteps(["select"]);
-        resetOutcome();
+    const addFiles = (fileList) => {
+        const files = Array.from(fileList).filter(isSupportedFile);
+        if (files.length === 0) return;
+        setItems(files.map((file, index) => newItem(file, index)));
     };
 
-    const handleFileInput = (e) => pickFile(e.target.files[0]);
+    const handleFileInput = (e) => addFiles(e.target.files);
 
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
-        const dropped = e.dataTransfer.files?.[0];
-        if (dropped && dropped.name.toLowerCase().endsWith(".xlsx")) {
-            pickFile(dropped);
-        }
+        addFiles(e.dataTransfer.files);
     };
 
-    const advance = (key) => setCompletedSteps((prev) => [...prev, key]);
+    const clearAll = () => {
+        setItems([]);
+        if (inputRef.current) inputRef.current.value = "";
+    };
 
-    const uploadFile = async () => {
+    const uploadFile = async (file) => {
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("files", file);
 
         const response = await fetch(`${API_BASE}/ingestion/upload`, {
             method: "POST",
             body: formData,
         });
         const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.detail || "Error desconocido al subir el archivo.");
+        const item = Array.isArray(data) ? data[0] : null;
+        if (!response.ok || !item) {
+            throw new Error("Error desconocido al subir el archivo.");
         }
-        return data;
+        if (!item.ok) {
+            throw new Error(item.error || "Error desconocido al subir el archivo.");
+        }
+        return item.upload;
     };
 
     const processFile = async (uploadData) => {
@@ -124,15 +154,20 @@ export default function IngestaPage() {
         return data;
     };
 
-    const handleProcess = async () => {
-        if (!file) return;
+    const processItem = async (id, file) => {
+        updateItem(id, {
+            isProcessing: true,
+            completedSteps: ["select"],
+            failedStep: null,
+            result: null,
+            error: null,
+        });
 
-        setIsUploading(true);
-        resetOutcome();
-        setCompletedSteps(["select"]);
+        const advance = (key) =>
+            updateItem(id, (item) => ({ completedSteps: [...item.completedSteps, key] }));
 
         try {
-            const uploadData = await uploadFile();
+            const uploadData = await uploadFile(file);
             advance("validate_file");
             advance("extract");
 
@@ -141,37 +176,34 @@ export default function IngestaPage() {
             advance("clean");
             advance("normalize");
             advance("structure");
+            advance("done");
 
-            if (processData.status === "completed") {
-                advance("done");
-            } else {
-                setFailedStep("done");
+            if (processData.status !== "completed") {
+                updateItem(id, { failedStep: "done" });
             }
-            setResult(processData);
+            updateItem(id, { result: processData });
         } catch (err) {
-            const nextStepIndex = PIPELINE_STEPS.findIndex(
-                (step) => !completedSteps.includes(step.key)
-            );
-            setFailedStep(PIPELINE_STEPS[nextStepIndex]?.key ?? "done");
-            setError(err.message);
+            updateItem(id, (item) => {
+                const nextStepIndex = PIPELINE_STEPS.findIndex(
+                    (step) => !item.completedSteps.includes(step.key)
+                );
+                return {
+                    failedStep: PIPELINE_STEPS[nextStepIndex]?.key ?? "done",
+                    error: err.message,
+                };
+            });
         } finally {
-            setIsUploading(false);
+            updateItem(id, { isProcessing: false });
         }
     };
 
-    const clearFile = () => {
-        setFile(null);
-        setCompletedSteps([]);
-        resetOutcome();
-        if (inputRef.current) inputRef.current.value = "";
+    const handleProcessAll = () => {
+        items.forEach((item) => {
+            if (!item.isProcessing && !item.result) {
+                processItem(item.id, item.file);
+            }
+        });
     };
-
-    const stepsToShow = completedSteps.length > 0 || failedStep
-        ? PIPELINE_STEPS.filter((step, index) => {
-            const failedIndex = PIPELINE_STEPS.findIndex((s) => s.key === failedStep);
-            return failedIndex === -1 || index <= failedIndex;
-        })
-        : [];
 
     return (
         <div className="ingesta-page">
@@ -180,17 +212,17 @@ export default function IngestaPage() {
                     <span className="ingesta-eyebrow">Módulo de ingesta</span>
                     <h1 className="ingesta-title">Carga de datos de handover</h1>
                     <p className="ingesta-subtitle">
-                        Sube un archivo Excel con mediciones de handover para validarlo,
-                        limpiarlo y estructurarlo como dataset listo para análisis.
+                        Sube uno o varios archivos (Excel o CSV) con mediciones de handover para
+                        validarlos, limpiarlos y estructurarlos como dataset listo para análisis.
                     </p>
                 </header>
 
                 <section className="ingesta-card">
-                    <h2 className="ingesta-card-title">Archivo</h2>
-                    <p className="ingesta-card-hint">Formato soportado: .xlsx</p>
+                    <h2 className="ingesta-card-title">Archivos</h2>
+                    <p className="ingesta-card-hint">Formatos soportados: .xlsx, .csv — puedes seleccionar varios a la vez</p>
 
                     <label
-                        className={`ingesta-dropzone ${isDragging ? "is-dragging" : ""} ${file ? "has-file" : ""}`}
+                        className={`ingesta-dropzone ${isDragging ? "is-dragging" : ""} ${items.length > 0 ? "has-file" : ""}`}
                         onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                         onDragLeave={() => setIsDragging(false)}
                         onDrop={handleDrop}
@@ -198,37 +230,42 @@ export default function IngestaPage() {
                         <input
                             ref={inputRef}
                             type="file"
-                            accept=".xlsx"
+                            accept=".xlsx,.csv"
+                            multiple
                             onChange={handleFileInput}
-                            disabled={isUploading}
+                            disabled={isProcessingAny}
                         />
                         <span className="ingesta-dropzone-icon"><IconUpload /></span>
-                        {file ? (
+                        {items.length > 0 ? (
                             <>
-                                <span className="ingesta-dropzone-filename">{file.name}</span>
-                                <span className="ingesta-dropzone-hint">{formatBytes(file.size)} — clic para cambiar de archivo</span>
+                                <span className="ingesta-dropzone-filename">
+                                    {items.length === 1 ? items[0].file.name : `${items.length} archivos seleccionados`}
+                                </span>
+                                <span className="ingesta-dropzone-hint">clic para cambiar la selección</span>
                             </>
                         ) : (
                             <>
-                                <span className="ingesta-dropzone-text">Arrastra tu archivo aquí, o haz clic para seleccionarlo</span>
-                                <span className="ingesta-dropzone-hint">Datos_Tesis.xlsx, mediciones de campo, etc.</span>
+                                <span className="ingesta-dropzone-text">Arrastra tus archivos aquí, o haz clic para seleccionarlos</span>
+                                <span className="ingesta-dropzone-hint">Datos_Tesis.xlsx, Session_5.csv, etc.</span>
                             </>
                         )}
                     </label>
 
                     <button
                         className="ingesta-btn"
-                        onClick={handleProcess}
-                        disabled={!file || isUploading}
+                        onClick={handleProcessAll}
+                        disabled={items.length === 0 || isProcessingAny}
                     >
-                        {isUploading && <span className="ingesta-spinner" />}
-                        {isUploading ? "Procesando…" : "Procesar archivo"}
+                        {isProcessingAny && <span className="ingesta-spinner" />}
+                        {isProcessingAny
+                            ? "Procesando…"
+                            : `Procesar archivo${items.length > 1 ? "s" : ""}`}
                     </button>
 
-                    {file && !isUploading && !result && (
+                    {items.length > 0 && !isProcessingAny && (
                         <button
                             type="button"
-                            onClick={clearFile}
+                            onClick={clearAll}
                             style={{
                                 marginTop: 10,
                                 background: "none",
@@ -239,102 +276,134 @@ export default function IngestaPage() {
                                 padding: 0,
                             }}
                         >
-                            Quitar archivo
+                            Quitar selección
                         </button>
-                    )}
-
-                    {stepsToShow.length > 0 && (
-                        <ul className="ingesta-steps">
-                            {stepsToShow.map((step) => {
-                                const isDone = completedSteps.includes(step.key);
-                                const isFailed = failedStep === step.key;
-                                const state = isFailed ? "is-error" : isDone ? "is-success" : "is-pending";
-                                return (
-                                    <li key={step.key} className={`ingesta-step ${state}`}>
-                                        <span className="ingesta-step-icon">
-                                            {isFailed ? <IconCross /> : isDone ? <IconCheck /> : null}
-                                        </span>
-                                        {step.label}
-                                    </li>
-                                );
-                            })}
-                        </ul>
                     )}
                 </section>
 
-                {error && (
-                    <section className="ingesta-card">
-                        <div className="ingesta-alert is-error">
-                            <span className="ingesta-alert-icon"><IconAlert /></span>
-                            <div>
-                                <p className="ingesta-alert-title">No se pudo completar el procesamiento</p>
-                                <p>{error}</p>
-                            </div>
-                        </div>
-                    </section>
-                )}
-
-                {result && (
-                    <section className="ingesta-card">
-                        <div className="ingesta-result-header">
-                            <h2 className="ingesta-card-title">Resultado</h2>
-                            <span className={`ingesta-status-pill ${result.status === "completed" ? "is-completed" : "is-failed"}`}>
-                                {result.status === "completed" ? "Completado" : "Con errores"}
-                            </span>
-                        </div>
-                        <p className="ingesta-result-meta">
-                            {result.filename} · {result.execution_id}
-                        </p>
-
-                        <div className="ingesta-stat-grid">
-                            <div className="ingesta-stat">
-                                <div className="ingesta-stat-value">{result.records_read}</div>
-                                <div className="ingesta-stat-label">Leídos</div>
-                            </div>
-                            <div className="ingesta-stat is-valid">
-                                <div className="ingesta-stat-value">{result.records_valid}</div>
-                                <div className="ingesta-stat-label">Válidos</div>
-                            </div>
-                            <div className="ingesta-stat is-rejected">
-                                <div className="ingesta-stat-value">{result.records_rejected}</div>
-                                <div className="ingesta-stat-label">Rechazados</div>
-                            </div>
-                            <div className="ingesta-stat">
-                                <div className="ingesta-stat-value">{result.processing_time_seconds}s</div>
-                                <div className="ingesta-stat-label">Tiempo</div>
-                            </div>
-                        </div>
-
-                        <div className="ingesta-section">
-                            <h3 className="ingesta-section-title">Advertencias</h3>
-                            {result.warnings.length === 0 ? (
-                                <p className="ingesta-note is-empty">Sin advertencias</p>
-                            ) : (
-                                <ul className="ingesta-note-list">
-                                    {result.warnings.map((warning) => (
-                                        <li key={warning} className="ingesta-note is-warning">{warning}</li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-
-                        <div className="ingesta-section">
-                            <h3 className="ingesta-section-title">Errores</h3>
-                            {result.errors.length === 0 ? (
-                                <p className="ingesta-note is-empty">Sin errores</p>
-                            ) : (
-                                <ul className="ingesta-note-list">
-                                    {result.errors.map((err) => (
-                                        <li key={err} className="ingesta-note is-warning" style={{ color: "var(--color-error)", background: "var(--color-error-soft)" }}>
-                                            {err}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                    </section>
-                )}
+                {items.map((item) => (
+                    <FileResultCard key={item.id} item={item} />
+                ))}
             </div>
         </div>
+    );
+}
+
+function FileResultCard({ item }) {
+    const { file, completedSteps, failedStep, result, error } = item;
+    const hasStarted = completedSteps.length > 0 || failedStep;
+
+    const stepsToShow = hasStarted
+        ? PIPELINE_STEPS.filter((step, index) => {
+            const failedIndex = PIPELINE_STEPS.findIndex((s) => s.key === failedStep);
+            return failedIndex === -1 || index <= failedIndex;
+        })
+        : [];
+
+    return (
+        <section className="ingesta-card">
+            <div className="ingesta-result-header">
+                <h2 className="ingesta-card-title">{file.name}</h2>
+                <span className="ingesta-dropzone-hint">{formatBytes(file.size)}</span>
+            </div>
+
+            {stepsToShow.length > 0 && (
+                <ul className="ingesta-steps">
+                    {stepsToShow.map((step) => {
+                        const isDone = completedSteps.includes(step.key);
+                        const isFailed = failedStep === step.key;
+                        const state = isFailed ? "is-error" : isDone ? "is-success" : "is-pending";
+                        return (
+                            <li key={step.key} className={`ingesta-step ${state}`}>
+                                <span className="ingesta-step-icon">
+                                    {isFailed ? <IconCross /> : isDone ? <IconCheck /> : null}
+                                </span>
+                                {step.label}
+                            </li>
+                        );
+                    })}
+                </ul>
+            )}
+
+            {error && (
+                <div className="ingesta-alert is-error" style={{ marginTop: 16 }}>
+                    <span className="ingesta-alert-icon"><IconAlert /></span>
+                    <div>
+                        <p className="ingesta-alert-title">No se pudo completar el procesamiento</p>
+                        <p>{error}</p>
+                    </div>
+                </div>
+            )}
+
+            {result && (
+                <div style={{ marginTop: 16 }}>
+                    <div className="ingesta-result-header">
+                        <span className={`ingesta-status-pill ${result.status === "completed" ? "is-completed" : "is-failed"}`}>
+                            {result.status === "completed" ? "Completado" : "Con errores"}
+                        </span>
+                        {result.status === "completed" && (
+                            <a
+                                className="ingesta-btn"
+                                style={{ width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 13 }}
+                                href={`${API_BASE}/ingestion/export?execution_id=${result.execution_id}`}
+                            >
+                                <IconDownload />
+                                Descargar dataset limpio
+                            </a>
+                        )}
+                    </div>
+                    <p className="ingesta-result-meta">
+                        {result.sesion_label != null ? `Sesión #${result.sesion_label}` : result.execution_id}
+                    </p>
+
+                    <div className="ingesta-stat-grid">
+                        <div className="ingesta-stat">
+                            <div className="ingesta-stat-value">{result.records_read}</div>
+                            <div className="ingesta-stat-label">Leídos</div>
+                        </div>
+                        <div className="ingesta-stat is-valid">
+                            <div className="ingesta-stat-value">{result.records_valid}</div>
+                            <div className="ingesta-stat-label">Válidos</div>
+                        </div>
+                        <div className="ingesta-stat is-rejected">
+                            <div className="ingesta-stat-value">{result.records_rejected}</div>
+                            <div className="ingesta-stat-label">Rechazados</div>
+                        </div>
+                        <div className="ingesta-stat">
+                            <div className="ingesta-stat-value">{result.processing_time_seconds}s</div>
+                            <div className="ingesta-stat-label">Tiempo</div>
+                        </div>
+                    </div>
+
+                    <div className="ingesta-section">
+                        <h3 className="ingesta-section-title">Advertencias</h3>
+                        {result.warnings.length === 0 ? (
+                            <p className="ingesta-note is-empty">Sin advertencias</p>
+                        ) : (
+                            <ul className="ingesta-note-list">
+                                {result.warnings.map((warning) => (
+                                    <li key={warning} className="ingesta-note is-warning">{warning}</li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+
+                    <div className="ingesta-section">
+                        <h3 className="ingesta-section-title">Errores</h3>
+                        {result.errors.length === 0 ? (
+                            <p className="ingesta-note is-empty">Sin errores</p>
+                        ) : (
+                            <ul className="ingesta-note-list">
+                                {result.errors.map((err) => (
+                                    <li key={err} className="ingesta-note is-warning" style={{ color: "var(--color-error)", background: "var(--color-error-soft)" }}>
+                                        {err}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                </div>
+            )}
+        </section>
     );
 }

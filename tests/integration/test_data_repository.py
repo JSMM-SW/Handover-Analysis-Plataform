@@ -50,6 +50,7 @@ def _valid_record():
         "rsrp_dbm": -94,
         "archivo_origen": "Datos_Tesis.xlsx",
         "hoja_origen": "Datos 1",
+        "origen_formato": "xlsx",
     }
 
 
@@ -129,3 +130,43 @@ def test_finish_execution_with_errors_marks_failed(repository, db_session):
         {"eid": str(execution_id)},
     ).scalar()
     assert status == "failed"
+
+
+def test_run_ingestion_persists_filename_verbatim_even_if_uuid_like(
+    tmp_path, repository, db_session, sample_handover_xlsx_bytes
+):
+    """Regresión del incidente de reconciliación: `archivo_origen` en
+    handover_record y `filename` en etl_execution deben quedar exactamente
+    igual al `original_filename` recibido, incluso si ese nombre ya
+    contiene un UUID (el caso adversarial real que causó el incidente).
+    Corre dentro de la transacción con rollback de `db_session`: no deja
+    datos de prueba en la base compartida.
+    """
+    from app.shared.config import Settings
+    from app.modules.ingesta.schemas import ProcessRequest
+    from app.modules.ingesta.services import run_ingestion
+
+    risky_filename = "5db4d5d9-6ac0-4044-bda2-c6770c50a4c1_Datos_Tesis.xlsx"
+    stored_filename = "unrelated-stored-name.xlsx"
+
+    settings = Settings(data_input_dir=tmp_path / "input")
+    settings.resolved_data_input_dir().joinpath(stored_filename).write_bytes(
+        sample_handover_xlsx_bytes
+    )
+
+    payload = ProcessRequest(stored_filename=stored_filename, original_filename=risky_filename)
+    result = run_ingestion(payload, settings, repository)
+
+    assert result.filename == risky_filename
+
+    persisted_filename = db_session.execute(
+        text("SELECT filename FROM etl_execution WHERE execution_id = :eid"),
+        {"eid": result.execution_id},
+    ).scalar()
+    assert persisted_filename == risky_filename
+
+    persisted_archivo_origen = db_session.execute(
+        text("SELECT DISTINCT archivo_origen FROM handover_record WHERE execution_id = :eid"),
+        {"eid": result.execution_id},
+    ).scalars().all()
+    assert persisted_archivo_origen == [risky_filename]

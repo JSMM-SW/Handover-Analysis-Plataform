@@ -32,6 +32,17 @@ class UploadResponse(BaseModel):
     status: Literal["uploaded"]
 
 
+class UploadBatchItem(BaseModel):
+    """Resultado de un archivo dentro de una carga múltiple (POST /upload
+    acepta una lista de archivos; cada uno se sube de forma independiente,
+    así que uno inválido no debe tumbar a los demás)."""
+
+    original_filename: str
+    ok: bool
+    upload: UploadResponse | None = None
+    error: str | None = None
+
+
 class ProcessRequest(BaseModel):
     stored_filename: str
     original_filename: str
@@ -42,6 +53,7 @@ class ProcessResult(BaseModel):
     reflejando la fila persistida en `etl_execution`."""
 
     execution_id: str
+    sesion_label: int | None = None
     filename: str
     records_read: int
     records_valid: int
@@ -56,6 +68,7 @@ class StatusResponse(BaseModel):
     """Lectura del estado persistido de una ejecución (GET /ingestion/status/{id})."""
 
     execution_id: str
+    sesion_label: int | None = None
     filename: str
     status: str
     processing_date: datetime
