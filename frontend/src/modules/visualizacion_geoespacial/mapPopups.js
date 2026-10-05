@@ -15,6 +15,13 @@ export function handoverTooltip(point, metric = null) {
   const title = document.createElement('strong');
   title.textContent = `Handover ${point.celda_origen} → ${point.cell_id}`;
   content.append(title);
+  if (metric === 'handovers') {
+    appendFields(content, [
+      ['Fecha', formatDate(point.timestamp_medicion)],
+      ['Hora', formatHour(point.timestamp_medicion)],
+    ]);
+    return content;
+  }
   appendFields(content, [
     ['Fecha', formatDate(point.timestamp_medicion)],
     ['Hora', formatHour(point.timestamp_medicion)],

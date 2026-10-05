@@ -38,13 +38,17 @@
 .geo-legend.geo-heat-legend i { width: 90px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, #3066d6, #15bba5, #ffd45c, #e5504b); }
 .geo-handover-tooltip { text-align: left; min-width: 145px; line-height: 1.55; font-size: 12px; }
 .geo-handover-tooltip strong { display: block; margin-bottom: 5px; color: #166c62; }
+.geo-map .leaflet-heatmap-layer { pointer-events: none; }
 @media (max-width: 1100px) { .geo-workspace { grid-template-columns: 235px minmax(0, 1fr); gap: 16px; } .geo-page { padding: 24px 18px; } }
 @media (max-width: 900px) { .geo-workspace { grid-template-columns: minmax(0, 1fr); } .geo-tabs { flex-wrap: wrap; } }
 .geo-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 20px 0; }
-.geo-stats.geo-stats-heat { grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); }
+.geo-stats.geo-stats-heat { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .geo-stats > div { background: white; border: 1px solid #e0e7ed; border-radius: 10px; padding: 18px 22px; }
 .geo-stats strong { display: block; font-size: 26px; line-height: 1.4; }
 .geo-stats span { color: #708295; font-size: 12px; }
+.geo-stats.geo-stats-heat > div { min-width: 0; padding: 10px 4px; text-align: center; }
+.geo-stats.geo-stats-heat strong { font-size: clamp(11px, 1.3vw, 18px); }
+.geo-stats.geo-stats-heat span { display: block; font-size: clamp(9px, 0.8vw, 11px); overflow-wrap: anywhere; }
 .geo-toolbar { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin: 16px 0; font-size: 13px; }
 .geo-toolbar label { flex-direction: row; align-items: center; font-weight: 400; }
 .geo-heat-options { display: flex; flex-wrap: wrap; gap: 18px; }

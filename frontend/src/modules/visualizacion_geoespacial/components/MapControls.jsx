@@ -1,6 +1,6 @@
 const TABS = [['rutas', 'Mapa de rutas y handovers'], ['calor', 'Mapa de calor']];
 const ROUTE_LAYERS = [['handovers', 'Handovers'], ['rutas', 'Trayectoria'], ['radiosBase', 'Radios Base']];
-const HEAT_LAYERS = [['handovers', 'Handovers'], ['rssi', 'RSSI'], ['rsrq', 'RSRQ']];
+const HEAT_LAYERS = [['handovers', 'Handovers'], ['rsrp', 'RSRP'], ['rsrq', 'RSRQ'], ['rssnr', 'RSSNR'], ['rssi', 'RSSI']];
 
 export function MapTabs({ tab, onChange }) {
   function handleKeyDown(event, index) {

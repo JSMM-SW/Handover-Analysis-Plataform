@@ -90,11 +90,31 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).not.toContainText('RSSNR:');
   await expect(signalBubble).not.toContainText('RSRP:');
   await expect(page.locator('.geo-signal-legend p')).toHaveCount(0);
+  for (const [metric, legend, value] of [
+    ['RSRP', 'RSRP ≤ -110 dBm', 'RSRP: -100 dBm'],
+    ['RSSNR', 'RSSNR ≤ 0', 'RSSNR: 12'],
+  ]) {
+    await page.getByRole('radio', { name: metric, exact: true }).check();
+    await expect(page.locator('.geo-signal-heat-layer')).toBeVisible();
+    await expect(page.locator('.geo-signal-legend')).toContainText(legend);
+    await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
+    await expect(signalBubble).toHaveCount(1);
+    await expect(signalBubble).toContainText(value);
+    await expect(signalBubble).toContainText('Fecha:');
+    await expect(signalBubble).toContainText('Hora:');
+    for (const other of ['RSSI', 'RSRQ', 'RSRP', 'RSSNR'].filter((name) => name !== metric)) {
+      await expect(signalBubble).not.toContainText(`${other}:`);
+    }
+  }
   await page.getByRole('radio', { name: 'Handovers', exact: true }).check();
   // Leaflet keeps closed tooltips in the DOM during its fade-out animation.
   await expect(signalBubble).toHaveCount(0);
   await expect(page.locator('.geo-signal-heat-layer')).toHaveCount(0);
   await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
+  await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
+  await expect(signalBubble).toHaveCount(1);
+  await expect(signalBubble).toBeVisible();
+  await expect(signalBubble).toHaveText('Handover 5 → 10Fecha: 5 may 2026Hora: 08:00:01');
   await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
   await expect(page.locator('.leaflet-heatmap-layer')).toHaveCount(0);
   // Select the point located at the map's geographic midpoint.
@@ -118,7 +138,10 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(page.getByLabel('Hoja de medici\u00f3n')).toHaveCount(0);
   await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
-  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
+  await expect(page.locator('.geo-stats > div')).toHaveCount(5);
+  for (const [label, value] of [['Handovers', '1'], ['RSRP promedio', '-100 dBm'], ['RSRQ promedio', '-12 dB'], ['RSSNR promedio', '12'], ['RSSI promedio', '-75 dBm']]) {
+    await expect(page.locator('.geo-stats').getByText(label, { exact: true }).locator('..').locator('strong')).toHaveText(value);
+  }
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).press('ArrowLeft');
   await expect(page.getByRole('tab', { name: 'Mapa de rutas y handovers' })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('button', { name: 'Filtrar por zona visible' }).click();

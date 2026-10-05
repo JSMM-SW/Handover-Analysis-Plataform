@@ -43,9 +43,11 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
     }
     if (layers.signalMetric) {
       new SignalHeatLayer(events, layers.signalMetric).addTo(group);
+    }
+    if (layers.signalMetric || layers.calor) {
       for (const event of events) L.circleMarker([event.latitud, event.longitud], {
         radius: 8, stroke: false, fillOpacity: 0,
-      }).bindTooltip(handoverTooltip(event, layers.signalMetric)).addTo(group);
+      }).bindTooltip(handoverTooltip(event, layers.signalMetric || 'handovers')).addTo(group);
     }
     if (layers.radiosBase) {
       // Identical uploads may yield coincident candidates. Share a marker but
