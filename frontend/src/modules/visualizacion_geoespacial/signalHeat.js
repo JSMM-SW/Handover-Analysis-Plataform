@@ -1,7 +1,7 @@
 // Display ranges, not calibrated coverage or handover success thresholds.
 export const SIGNAL_METRICS = {
   rsrp: { label: 'RSRP', unit: 'dBm', high: -90, low: -110 },
-  rssnr: { label: 'RSSNR', unit: '', high: 20, low: 0 },
+  rssnr: { label: 'RSSNR', unit: 'dB', high: 20, low: 0 },
   rssi: { label: 'RSSI', unit: 'dBm', high: -80, low: -100 },
   rsrq: { label: 'RSRQ', unit: 'dB', high: -10, low: -15 },
 };

@@ -92,7 +92,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(page.locator('.geo-signal-legend p')).toHaveCount(0);
   for (const [metric, legend, value] of [
     ['RSRP', 'RSRP ≤ -110 dBm', 'RSRP: -100 dBm'],
-    ['RSSNR', 'RSSNR ≤ 0', 'RSSNR: 12'],
+    ['RSSNR', 'RSSNR ≤ 0 dB', 'RSSNR: 12 dB'],
   ]) {
     await page.getByRole('radio', { name: metric, exact: true }).check();
     await expect(page.locator('.geo-signal-heat-layer')).toBeVisible();
@@ -139,7 +139,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
   await expect(page.locator('.geo-stats > div')).toHaveCount(5);
-  for (const [label, value] of [['Handovers', '1'], ['RSRP promedio', '-100 dBm'], ['RSRQ promedio', '-12 dB'], ['RSSNR promedio', '12'], ['RSSI promedio', '-75 dBm']]) {
+  for (const [label, value] of [['Handovers', '1'], ['RSRP promedio', '-100 dBm'], ['RSRQ promedio', '-12 dB'], ['RSSNR promedio', '12 dB'], ['RSSI promedio', '-75 dBm']]) {
     await expect(page.locator('.geo-stats').getByText(label, { exact: true }).locator('..').locator('strong')).toHaveText(value);
   }
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).press('ArrowLeft');

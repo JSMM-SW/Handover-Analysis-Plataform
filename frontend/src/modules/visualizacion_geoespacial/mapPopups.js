@@ -28,7 +28,7 @@ export function handoverTooltip(point, metric = null) {
     ['RSSI', point.rssi == null ? 'Sin dato' : `${point.rssi} dBm`],
     ['RSRP', point.rsrp == null ? 'Sin dato' : `${point.rsrp} dBm`],
     ['RSRQ', point.rsrq == null ? 'Sin dato' : `${point.rsrq} dB`],
-    ['RSSNR', point.rssnr == null ? 'Sin dato' : String(point.rssnr)],
+    ['RSSNR', point.rssnr == null ? 'Sin dato' : `${point.rssnr} dB`],
   ].filter(([label]) => !metric || !['RSSI', 'RSRP', 'RSRQ', 'RSSNR'].includes(label) || label === metric.toUpperCase()));
   return content;
 }

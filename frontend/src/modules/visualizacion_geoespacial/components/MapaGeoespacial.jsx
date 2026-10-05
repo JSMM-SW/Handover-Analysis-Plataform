@@ -34,7 +34,9 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
       L.polyline(segment.map((id) => { const p = byId.get(id); return [p.latitud, p.longitud]; }), { color: '#3b69b1', weight: 3, opacity: 0.65 }).addTo(group);
     }
     if (layers.calor && events.length) L.heatLayer(events.map((p) => [p.latitud, p.longitud, 1]), {
-      radius: 22, blur: 16, max: 1, maxZoom: 17,
+      // Keep isolated events visible at wide zooms while reserving stronger
+      // colors for overlapping events. These are display settings, not counts.
+      radius: 22, blur: 16, minOpacity: 0.4, max: 3, maxZoom: 12,
       gradient: { 0.2: '#3066d6', 0.5: '#15bba5', 0.75: '#ffd45c', 1: '#e5504b' },
     }).addTo(group);
     if (layers.handovers) for (const p of events) {

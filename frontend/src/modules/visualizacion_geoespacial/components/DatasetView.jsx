@@ -14,7 +14,7 @@ const DEFAULT_LAYERS = Object.freeze({ handovers: true, rutas: true, radiosBase:
 const HEAT_STATS = [
   { key: 'rsrp', label: 'RSRP promedio', unit: 'dBm' },
   { key: 'rsrq', label: 'RSRQ promedio', unit: 'dB' },
-  { key: 'rssnr', label: 'RSSNR promedio', unit: '' },
+  { key: 'rssnr', label: 'RSSNR promedio', unit: 'dB' },
   { key: 'rssi', label: 'RSSI promedio', unit: 'dBm' },
 ];
 
