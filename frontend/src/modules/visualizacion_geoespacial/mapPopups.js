@@ -1,4 +1,5 @@
 import { formatDate, formatHour, technologyName } from './formatters';
+import { sessionExportLabel } from '../../shared/sessionNames';
 
 function appendFields(container, fields) {
   for (const [label, value] of fields) {
@@ -35,7 +36,7 @@ export function radioBasePopup(estimates, executions) {
     section.append(heading);
     const session = executions?.find((row) => row.execution_id === station.execution_id);
     appendFields(section, [
-      ['Sesión', session?.sesion_label ?? station.execution_id],
+      ['Sesión', sessionExportLabel(session ?? { execution_id: station.execution_id })],
       ['Nodo', station.node_id], ['Celda', station.cell_id],
       ['Tecnología', technologyName(station.tecnologia)],
       ['Coordenadas estimadas', `${station.latitud}, ${station.longitud}`],

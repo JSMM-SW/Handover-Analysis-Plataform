@@ -1,5 +1,6 @@
 // frontend/src/modules/ingesta/IngestaPage.jsx
 import { useRef, useState } from 'react';
+import { sessionName } from '../../shared/sessionNames';
 import './IngestaPage.css';
 
 const API_BASE = "http://localhost:8000/api/v1";
@@ -353,7 +354,7 @@ function FileResultCard({ item }) {
                         )}
                     </div>
                     <p className="ingesta-result-meta">
-                        {result.sesion_label != null ? `Sesión #${result.sesion_label}` : result.execution_id}
+                        {sessionName(result)}
                     </p>
 
                     <div className="ingesta-stat-grid">

@@ -18,7 +18,7 @@ export const formatTime = (value) => dateTime.format(new Date(value));
 export const formatRange = (value) => rangeTime.format(new Date(value));
 export const formatDate = (value) => date.format(new Date(value));
 export const formatHour = (value) => hour.format(new Date(value));
-export const sessionName = (row) => `Sesión ${row.sesion_label ?? row.execution_id}`;
+export { sessionName } from '../../shared/sessionNames';
 
 export function technologyName(value) {
   return { 0: 'Sin señal', 1: 'LTE / 4G', 2: '3G / UMTS', 3: '2G / GSM' }[value] ?? 'Sin dato';

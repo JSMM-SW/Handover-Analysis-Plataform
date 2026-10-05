@@ -5,7 +5,7 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('**/api/v1/geoespacial/**', async (route) => {
     const url = new URL(route.request().url());
-    if (url.pathname.endsWith('/ejecuciones')) return route.fulfill({ json: [{ execution_id: 'csv-session', sesion_label: 14, filename: 'mediciones.csv', processing_date: '2026-05-05T13:00:00Z', fecha_inicio: '2026-05-05T13:00:00Z', fecha_fin: '2026-05-05T13:40:58Z' }] });
+    if (url.pathname.endsWith('/ejecuciones')) return route.fulfill({ json: [{ execution_id: 'csv-session', sesion_label: 14, filename: 'Session_55_312312_23132.csv', processing_date: '2026-05-05T13:00:00Z', fecha_inicio: '2026-05-05T13:00:00Z', fecha_fin: '2026-05-05T13:40:58Z' }] });
     if (url.pathname.endsWith('/hojas')) return route.fulfill({ json: [null] });
     expect(url.searchParams.has('hoja')).toBe(false);
     const point = { ...points[0], timestamp_medicion: '2026-05-05T13:40:58Z', hoja_origen: null, rsrp_dbm: null, rssi: null, tecnologia: 2 };
@@ -13,8 +13,8 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   });
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
-  await expect(page.getByRole('checkbox', { name: /Sesión 14/ })).toBeVisible();
-  await expect(page.getByText('mediciones.csv')).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: /Sesión 55/ })).toBeVisible();
+  await expect(page.getByText('Session_55_312312_23132.csv')).toHaveCount(0);
   await page.locator('.geo-session-option input').first().check();
   await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('1');

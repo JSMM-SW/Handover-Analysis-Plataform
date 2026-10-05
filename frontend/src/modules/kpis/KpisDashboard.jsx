@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { sessionName } from '../../shared/sessionNames';
 import {
     fetchKpiSummary,
     fetchHourlyDistribution,
@@ -173,7 +174,7 @@ export default function KpisDashboard() {
                             <option value="">Todas</option>
                             {sesiones.map((sesion) => (
                                                                 <option key={sesion.sesion_label} value={sesion.sesion_label}>
-                                    Sesión #{sesion.sesion_label} ({sesion.records_valid} registros)
+                                    {sessionName(sesion)} ({sesion.records_valid} registros)
                                 </option>
 
                             ))}

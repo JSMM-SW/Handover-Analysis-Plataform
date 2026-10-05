@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { sessionName } from '../../../shared/sessionNames';
 
 import { Cargando, ErrorConsulta, SinResultados } from './EstadoConsulta.jsx';
 import { IconoFlechaDerecha, IconoFlechaIzquierda } from './Iconos.jsx';
@@ -276,7 +277,7 @@ export default function HandoverTable() {
                 {formatearFechaHora(evento.timestamp_evento)}
                 {/* Con varias sesiones, cada evento dice de cuál viene. */}
                 {variasSesiones && evento.sesion_nombre && (
-                  <span className="vt-tabla__secundario">{evento.sesion_nombre}</span>
+                  <span className="vt-tabla__secundario">{sessionName(evento)}</span>
                 )}
               </td>
               <td>

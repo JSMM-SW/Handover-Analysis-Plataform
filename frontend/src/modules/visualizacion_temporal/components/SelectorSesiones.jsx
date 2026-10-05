@@ -9,6 +9,7 @@
  */
 
 import { IconoCerrar } from './Iconos.jsx';
+import { sessionName } from '../../../shared/sessionNames';
 import { useDesplegable } from '../hooks/useInterfaz.js';
 
 /** Fecha legible del inicio de la sesión. */
@@ -24,7 +25,7 @@ function fechaSesion(sesion) {
 
 /** Nombre legible de una sesión: los nombres se repiten, así que se acompaña de la fecha. */
 function etiquetaSesion(sesion) {
-  const nombre = sesion.sesion_nombre || sesion.sesion_id.slice(0, 8);
+  const nombre = sessionName(sesion);
   return `${nombre} · ${fechaSesion(sesion)} · ${sesion.n_mediciones.toLocaleString('es-EC')} mediciones`;
 }
 
@@ -107,7 +108,7 @@ export default function SelectorSesiones({
                     />
                     <span className="vt-multiselect__texto">
                       <span className="vt-multiselect__nombre">
-                        {sesion.sesion_nombre || sesion.sesion_id.slice(0, 8)}
+                        {sessionName(sesion)}
                       </span>
                       <span className="vt-multiselect__meta">
                         {fechaSesion(sesion)} · {sesion.n_mediciones.toLocaleString('es-EC')}{' '}

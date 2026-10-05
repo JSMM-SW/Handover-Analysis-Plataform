@@ -6,6 +6,7 @@ import RadioBaseSummary from './RadioBaseSummary';
 import SignalLegend from './SignalLegend';
 import HandoverDetail from './HandoverDetail';
 import { MapTabs, MapToolbar } from './MapControls';
+import { sessionExportLabel } from '../../../shared/sessionNames';
 
 const EMPTY_FILTERS = Object.freeze({ desde: '', hasta: '', tecnologia: '', bbox: '' });
 const LAYER_STORAGE_KEY = 'geo-event-layers';
@@ -72,7 +73,7 @@ export default function DatasetView({ executionIds, executions, selector }) {
       await downloadMap(exportArea.current, {
         tab,
         heatMetric,
-        sessionLabels: executionIds.map((id) => executions.find((row) => row.execution_id === id)?.sesion_label ?? id),
+        sessionLabels: executionIds.map((id) => sessionExportLabel(executions.find((row) => row.execution_id === id) ?? { execution_id: id })),
       });
     } catch (error) {
       setExportError(error.name === 'SecurityError'
