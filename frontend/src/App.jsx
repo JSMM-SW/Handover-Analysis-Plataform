@@ -30,7 +30,7 @@ export default function App() {
     <BrowserRouter>
       <div className="app-layout">
         <aside className="app-sidebar">
-          <div className="app-brand">H<span> / </span>ANALYSIS</div>
+          <div className="app-brand">HO<span> / </span>ANALYSIS</div>
           <p>Plataforma de handovers</p>
           <nav aria-label="Menú principal">
             <NavLink to="/ingesta">Procesamiento de datos</NavLink>

@@ -49,7 +49,7 @@ export default function GeoespacialPage() {
     <section className="geo-page">
       <header className="geo-heading">
         <div>
-          <span className="geo-eyebrow">ANÁLISIS GEOESPACIAL</span>
+          <span className="geo-eyebrow">VISUALIZACIÓN GEOESPACIAL</span>
           <h1>Explora tus mediciones</h1>
           <p>Ubicación, trayectoria y señal de los datos procesados.</p>
         </div>
