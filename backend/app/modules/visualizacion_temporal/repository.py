@@ -118,7 +118,7 @@ def construir_sql_mediciones(
 
     Mapeo de cada campo del contrato (columna nueva ← columna heredada):
     `tech ← tecnologia (1/2/3)`, `cid ← cell_id`, `lac_tac ← lac_tac_raw ← tac`,
-    `arfcn ← earfcn`, `rsrq_db ← rsrq`, `rssnr_db ← rssnr`, y `rsrp/rscp/rssi ← rssi` según `tech`.
+    `arfcn ← earfcn`, `rsrq_db ← rsrq`, `rssnr_db ← rssnr`, y `rssi_dbm ← rssi` (alias del contrato, sin reinterpretar la medida).
     """
     ramas: list[str] = []
 
@@ -180,7 +180,7 @@ def _rama_real(columnas: set[str], columnas_ejecucion: set[str]) -> str:
         f"{col('archivo_origen', 'NULL::text')}, {col('hoja_origen', 'NULL::text')}), '')"
     )
 
-    # Columna genérica `rssi` de una iteración anterior del ETL: se enruta según la tecnología.
+    # RSSI original para todas las tecnologias. RSRP procede de rssi_strongest segun la verificacion del usuario para NetMonitor.
     rssi_bruto = col("rssi")
 
     proyeccion = {
@@ -197,11 +197,11 @@ def _rama_real(columnas: set[str], columnas_ejecucion: set[str]) -> str:
         "lac_tac": f"{primera(('lac_tac_raw', 'lac_tac', 'tac'))}::integer",
         "arfcn": f"{primera(('arfcn', 'earfcn'))}::integer",
         "band": f"{col('band')}::integer",
-        "rsrp_dbm": f"COALESCE({col('rsrp_dbm')}, CASE WHEN t.tech = 'LTE' THEN {rssi_bruto} END)::smallint",
+        "rsrp_dbm": f"{col('rsrp')}::smallint",
         "rsrq_db": f"{primera(('rsrq_db', 'rsrq'))}::smallint",
         "rssnr_db": f"{primera(('rssnr_db', 'rssnr'))}::smallint",
-        "rscp_dbm": f"COALESCE({col('rscp_dbm')}, CASE WHEN t.tech = 'WCDMA' THEN {rssi_bruto} END)::smallint",
-        "rssi_dbm": f"COALESCE({col('rssi_dbm')}, CASE WHEN t.tech = 'GSM' THEN {rssi_bruto} END)::smallint",
+        "rscp_dbm": "NULL::smallint",
+        "rssi_dbm": f"{rssi_bruto}::smallint",
         "data_state": f"{col('data_state')}::text",
         "call_state": f"{col('call_state')}::text",
     }

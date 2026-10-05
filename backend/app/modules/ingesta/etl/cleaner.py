@@ -5,36 +5,10 @@ pasaron las validaciones estructurales duras del Validator (etl/validator.py).
 from app.modules.ingesta.etl.constants import (
     ACCURACY_SIN_DATO,
     CAMPOS_CENTINELA_CSV_NULEABLES,
-    LATITUD_MAX,
-    LATITUD_MIN,
     LATITUD_SIN_FIX_CSV,
-    LONGITUD_MAX,
-    LONGITUD_MIN,
     LONGITUD_SIN_FIX_CSV,
-    MOTIVO_COORDENADAS_FUERA_DE_RANGO,
-    MOTIVO_RSRP_FUERA_DE_RANGO,
-    RSRP_MAX_VALID,
-    RSRP_MIN_VALID,
     SENTINEL_INT32_MAX,
 )
-
-
-def validate_ranges(data: dict) -> str | None:
-    """Verifica que RSRP y coordenadas estén dentro de rangos físicamente
-    plausibles (origen xlsx). Devuelve el motivo de rechazo, o None si el
-    registro pasa.
-    """
-    rsrp = data["RSRP"]
-    if not (RSRP_MIN_VALID <= rsrp <= RSRP_MAX_VALID):
-        return MOTIVO_RSRP_FUERA_DE_RANGO
-
-    latitud, longitud = data["Latitud"], data["Longitud"]
-    if not (LATITUD_MIN <= latitud <= LATITUD_MAX) or not (
-        LONGITUD_MIN <= longitud <= LONGITUD_MAX
-    ):
-        return MOTIVO_COORDENADAS_FUERA_DE_RANGO
-
-    return None
 
 
 def apply_sentinels_csv(data: dict) -> tuple[dict, list[str]]:
@@ -57,7 +31,7 @@ def apply_sentinels_csv(data: dict) -> tuple[dict, list[str]]:
     cleaned = dict(data)
     nulled_fields: list[str] = []
     for field in CAMPOS_CENTINELA_CSV_NULEABLES:
-        if cleaned[field] == SENTINEL_INT32_MAX:
+        if cleaned.get(field) == SENTINEL_INT32_MAX:
             cleaned[field] = None
             nulled_fields.append(field)
     if cleaned["accuracy"] == ACCURACY_SIN_DATO:

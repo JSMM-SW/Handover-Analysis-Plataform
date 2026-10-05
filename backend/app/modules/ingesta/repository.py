@@ -60,10 +60,9 @@ class HandoverRepository:
         """Inserta en lote los registros que ya pasaron Validate/Clean/Normalize.
 
         Cada dict debe traer las claves de HandoverRecord (timestamp_medicion,
-        cell_id, tac, earfcn, tecnologia, latitud, longitud, rsrp_dbm,
+        cell_id, tac, earfcn, tecnologia, latitud, longitud, rsrp,
         node_id, psc_pci, rssi, rsrq, rssnr, accuracy, archivo_origen,
-        hoja_origen, origen_formato). Las columnas exclusivas de un origen
-        deben venir en None para el otro (ej. rsrp_dbm=None en origen csv).
+        hoja_origen, origen_formato). Las medidas ausentes se guardan como None.
         """
         if not records:
             return

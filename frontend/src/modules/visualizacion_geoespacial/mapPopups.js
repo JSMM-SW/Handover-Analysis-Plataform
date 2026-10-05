@@ -18,9 +18,10 @@ export function handoverTooltip(point, metric = null) {
     ['Fecha', formatDate(point.timestamp_medicion)],
     ['Hora', formatHour(point.timestamp_medicion)],
     ['RSSI', point.rssi == null ? 'Sin dato' : `${point.rssi} dBm`],
+    ['RSRP', point.rsrp == null ? 'Sin dato' : `${point.rsrp} dBm`],
     ['RSRQ', point.rsrq == null ? 'Sin dato' : `${point.rsrq} dB`],
     ['RSSNR', point.rssnr == null ? 'Sin dato' : String(point.rssnr)],
-  ].filter(([label]) => !metric || !['RSSI', 'RSRQ', 'RSSNR'].includes(label) || label === metric.toUpperCase()));
+  ].filter(([label]) => !metric || !['RSSI', 'RSRP', 'RSRQ', 'RSSNR'].includes(label) || label === metric.toUpperCase()));
   return content;
 }
 

@@ -91,14 +91,15 @@ def calcular_metricas_globales_dia(fecha: date, repositorio: KpisRepository) -> 
 
     total = metricas["total"]
     criticos = metricas["criticos"]
-    tasa_riesgo = (criticos / total * 100) if total > 0 else 0.0
+    total_rsrp = metricas.get("total_rsrp", total)
+    tasa_riesgo = (criticos / total_rsrp * 100) if criticos is not None and total_rsrp > 0 else None
 
     return SignalMetricsResponse(
         fecha=fecha,
         total_mediciones=total,
-        promedio_rsrp=round(metricas["promedio"], 2),
+        promedio_rsrp=round(metricas["promedio"], 2) if metricas["promedio"] is not None else None,
         eventos_criticos=criticos,
-        tasa_riesgo=round(tasa_riesgo, 2),
+        tasa_riesgo=round(tasa_riesgo, 2) if tasa_riesgo is not None else None,
     )
 
 def listar_sesiones(repositorio: KpisRepository) -> list[SesionResponse]:

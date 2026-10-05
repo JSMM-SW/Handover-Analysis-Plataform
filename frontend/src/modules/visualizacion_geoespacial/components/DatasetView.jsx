@@ -102,6 +102,7 @@ export default function DatasetView({ executionIds, executions, selector }) {
               <option value="">Todas</option>
               <option value="1">LTE / 4G</option>
               <option value="2">3G / UMTS</option>
+              <option value="3">2G / GSM</option>
               <option value="0">Sin señal</option>
             </select>
           </label>

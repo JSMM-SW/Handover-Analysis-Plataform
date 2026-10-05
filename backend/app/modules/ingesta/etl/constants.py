@@ -1,52 +1,7 @@
-"""Constantes del dominio de handover, confirmadas contra datos reales de dos
-orígenes distintos. No modificar sin volver a analizar datos reales o sin
-confirmación explícita del usuario.
+"""CSV ingestion constants; signal names match the original export."""
 
-Origen 'xlsx' — Datos_Tesis.xlsx, 3 hojas, 495 registros.
-Origen 'csv'  — Network Cell Info, dataset_unificado.csv, 11,954 registros.
-"""
-
-ORIGEN_XLSX = "xlsx"
 ORIGEN_CSV = "csv"
-
-# --- Origen xlsx --------------------------------------------------------
-
-REQUIRED_COLUMNS_XLSX = [
-    "Fecha",
-    "Hora",
-    "Cell ID/ECI",
-    "TAC/LAC",
-    "EARFCN",
-    "Tecnología",
-    "Latitud",
-    "Longitud",
-    "RSRP",
-]
-
-# Mismas columnas se usan como llave de deduplicación (fila cruda completa).
-DEDUP_KEY_XLSX = REQUIRED_COLUMNS_XLSX
-
-# Columnas presentes en el Excel real que se descartan explícitamente
-# (no se extraen, no se guardan en ningún lado): PCI/PSC, Column10, Column12,
-# "Dirección - distancia GPS".
-
-RSRP_MIN_VALID = -140
-RSRP_MAX_VALID = -1
-RSRP_STRONG_SIGNAL_THRESHOLD = -44  # por encima de esto: warning, no rechazo
-
-LATITUD_MIN = -5
-LATITUD_MAX = 2
-LONGITUD_MIN = -92
-LONGITUD_MAX = -75
-
-MOTIVO_CELL_ID_CERO = "cell_id = 0 (desconexión/error de medición)"
-MOTIVO_RSRP_CENTINELA = "rsrp = 99 (centinela de error del equipo de medición)"
-MOTIVO_GPS_SIN_FIX = "gps sin fix"
-MOTIVO_RSRP_FUERA_DE_RANGO = "rsrp fuera de rango físico"
-MOTIVO_COORDENADAS_FUERA_DE_RANGO = "coordenadas fuera del rango esperado para Ecuador"
 MOTIVO_DUPLICADO = "registro duplicado"
-
-# --- Origen csv (Network Cell Info) -------------------------------------
 
 REQUIRED_COLUMNS_CSV = [
     "sys_time",
@@ -72,16 +27,13 @@ REQUIRED_COLUMNS_CSV = [
     "call_state",
 ]
 
-# Equivalente csv de DEDUP_KEY_XLSX: mismas 7 columnas de negocio que ya se
-# usan para xlsx (timestamp/celda/tac/earfcn/tecnología/coordenadas). El csv
-# no tiene un campo equivalente a RSRP (usa rssi/rsrq/rssnr en su lugar), por
-# eso la llave tiene 7 columnas en vez de 9.
+# Identidad usada para detectar observaciones duplicadas.
 DEDUP_KEY_CSV = ["sys_time", "cid", "lac_tac", "arfcn", "net_type", "lat", "long"]
 
 # Campos donde, si aparece el centinela, el campo se guarda NULL con un
 # warning agregado (a diferencia de `cid`, que si trae el centinela rechaza
 # todo el registro — ver MOTIVO_CID_CENTINELA).
-CAMPOS_CENTINELA_CSV_NULEABLES = ["node_id", "psc_pci", "rssi", "rsrq", "rssnr", "lac_tac", "arfcn"]
+CAMPOS_CENTINELA_CSV_NULEABLES = ["node_id", "psc_pci", "rssi", "rssi_strongest", "rsrq", "rssnr", "lac_tac", "arfcn"]
 
 SENTINEL_INT32_MAX = 2147483647
 
@@ -106,7 +58,7 @@ NET_TYPE_2G = {"EDGE", "GPRS"}
 
 MOTIVO_CID_CENTINELA = "cid = 2147483647 (sin dato, equipo de medición)"
 
-# Ya NO es motivo de rechazo (a diferencia de MOTIVO_GPS_SIN_FIX en xlsx):
+# GPS sin fix se conserva con coordenadas NULL:
 # confirmado con Session_43_20260623_165825.csv que rechazar por esto tira el
 # 92% del archivo (solo 8.0% de las filas trae fix de GPS) y contradice R3
 # del módulo de visualización temporal, que no usa coordenadas. Desde esta
@@ -114,7 +66,7 @@ MOTIVO_CID_CENTINELA = "cid = 2147483647 (sin dato, equipo de medición)"
 # que `validator.validate_record_csv` rechace el registro; el warning
 # agregado se construye en services.py.
 
-TIMEZONE_ORIGEN = "America/Guayaquil"  # UTC-5, sin DST (xlsx y csv)
+TIMEZONE_ORIGEN = "America/Guayaquil"  # UTC-5, sin DST (CSV)
 
 # --- Velocidad calculada (distancia/tiempo entre registros consecutivos) --
 

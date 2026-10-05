@@ -15,13 +15,13 @@ import { create } from 'zustand';
 
 import { PARAMETROS_RF } from '../types/index.js';
 
-/** Capas visibles del timeline. Arrancan solo con RSRP: es el parámetro mejor cubierto. */
+/** Capas visibles del timeline. Arrancan solo con RSSI: es el parámetro mejor cubierto. */
 const CAPAS_INICIALES = {
-  rsrp_dbm: true,
+  rsrp_dbm: false,
   rsrq_db: false,
   rssnr_db: false,
   rscp_dbm: false,
-  rssi_dbm: false,
+  rssi_dbm: true,
   marcadoresHO: true,
 };
 

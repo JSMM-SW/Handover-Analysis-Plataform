@@ -11,10 +11,10 @@ class SignalMetricsResponse(BaseModel):
     puntual (no es específico de handovers)."""
 
     fecha: date
-    total_mediciones: int = Field(description="Total de mediciones de RSRP válidas procesadas")
-    promedio_rsrp: float = Field(description="Nivel promedio de señal RSRP en dBm")
-    eventos_criticos: int = Field(description="Mediciones con señal severamente degradada (<-110 dBm)")
-    tasa_riesgo: float = Field(description="Porcentaje de mediciones en estado crítico")
+    total_mediciones: int = Field(description="Total de mediciones procesadas")
+    promedio_rsrp: float | None = Field(description="RSRP promedio desde rsrp; null cuando no hay medidas")
+    eventos_criticos: int | None = Field(description="Mediciones con señal severamente degradada (<-110 dBm)")
+    tasa_riesgo: float | None = Field(description="Porcentaje de mediciones en estado crítico")
 
 
 class SesionResponse(BaseModel):

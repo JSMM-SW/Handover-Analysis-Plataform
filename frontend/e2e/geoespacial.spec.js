@@ -32,7 +32,7 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
 const points = [0, 1, 2].map((index) => ({
   id_registro: `point-${index}`, timestamp_medicion: `2026-05-05T13:00:0${index}Z`,
   latitud: -0.2 + index * 0.001, longitud: -78.5 + index * 0.001,
-  cell_id: index === 2 ? 20 : 10, tecnologia: 1, rsrp_dbm: -85 - index * 15, rssi: -75, rsrq: -8 - index * 4, rssnr: 12, hoja_origen: 'Datos 1',
+  cell_id: index === 2 ? 20 : 10, tecnologia: 1, rsrp: -85 - index * 15, rssi: -75, rsrq: -8 - index * 4, rssnr: 12, hoja_origen: 'Datos 1',
 }));
 
 async function setup(page) {
@@ -52,7 +52,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await setup(page);
   await page.goto('/ingesta');
   await expect(page.getByRole('heading', { name: 'Carga de datos de handover' })).toBeVisible();
-  await page.getByRole('link', { name: 'Geoespacial', exact: true }).click();
+  await page.getByRole('link', { name: 'Visualización geoespacial', exact: true }).click();
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
   await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
@@ -80,6 +80,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).toContainText('Hora:');
   await expect(signalBubble).not.toContainText('RSRQ:');
   await expect(signalBubble).not.toContainText('RSSNR:');
+  await expect(signalBubble).not.toContainText('RSRP:');
   await page.getByRole('radio', { name: 'RSRQ', exact: true }).check();
   await expect(page.locator('.geo-signal-legend')).toContainText('RSRQ ≤ -15 dB');
   await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
@@ -87,6 +88,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).toContainText('RSRQ:');
   await expect(signalBubble).not.toContainText('RSSI:');
   await expect(signalBubble).not.toContainText('RSSNR:');
+  await expect(signalBubble).not.toContainText('RSRP:');
   await expect(page.locator('.geo-signal-legend p')).toHaveCount(0);
   await page.getByRole('radio', { name: 'Handovers', exact: true }).check();
   // Leaflet keeps closed tooltips in the DOM during its fade-out animation.
@@ -105,11 +107,13 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(bubble).toContainText('Fecha:');
   await expect(bubble).toContainText('Hora: 08:00:01');
   await expect(bubble).toContainText('RSSI: -75 dBm');
+  await expect(bubble).toContainText('RSRP: -100 dBm');
   await expect(bubble).toContainText('RSRQ: -12 dB');
   await expect(bubble).toContainText('RSSNR: 12');
   await map.click({ position: { x: box.width / 2, y: box.height / 2 } });
   await expect(page.getByRole('heading', { name: 'Detalle de handover' })).toBeVisible();
   await expect(page.getByText('RSSI', { exact: true }).locator('..').locator('dd')).toHaveText('-75 dBm');
+  await expect(page.locator('.geo-detail').getByText('RSRP', { exact: true }).locator('..').locator('dd')).toHaveText('-100 dBm');
   await expect(page.locator('input[name="cell_id"]')).toHaveCount(0);
   await expect(page.getByLabel('Hoja de medici\u00f3n')).toHaveCount(0);
   await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true })).toBeVisible();
@@ -150,7 +154,7 @@ test('explicit Ecuador offset and layer preferences survive reload', async ({ pa
   await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Trayectoria' })).not.toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('link', { name: 'Ingesta', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Procesamiento de datos', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 

@@ -72,7 +72,7 @@ function makeId(file, index) {
 
 function isSupportedFile(file) {
     const name = file.name.toLowerCase();
-    return name.endsWith(".xlsx") || name.endsWith(".csv");
+    return name.endsWith(".csv");
 }
 
 function newItem(file, index) {
@@ -212,14 +212,14 @@ export default function IngestaPage() {
                     <span className="ingesta-eyebrow">Módulo de ingesta</span>
                     <h1 className="ingesta-title">Carga de datos de handover</h1>
                     <p className="ingesta-subtitle">
-                        Sube uno o varios archivos (Excel o CSV) con mediciones de handover para
+                        Sube uno o varios archivos CSV con mediciones de handover para
                         validarlos, limpiarlos y estructurarlos como dataset listo para análisis.
                     </p>
                 </header>
 
                 <section className="ingesta-card">
                     <h2 className="ingesta-card-title">Archivos</h2>
-                    <p className="ingesta-card-hint">Formatos soportados: .xlsx, .csv — puedes seleccionar varios a la vez</p>
+                    <p className="ingesta-card-hint">Formatos soportados: .csv — puedes seleccionar varios a la vez</p>
 
                     <label
                         className={`ingesta-dropzone ${isDragging ? "is-dragging" : ""} ${items.length > 0 ? "has-file" : ""}`}
@@ -230,7 +230,7 @@ export default function IngestaPage() {
                         <input
                             ref={inputRef}
                             type="file"
-                            accept=".xlsx,.csv"
+                            accept=".csv"
                             multiple
                             onChange={handleFileInput}
                             disabled={isProcessingAny}
@@ -246,7 +246,7 @@ export default function IngestaPage() {
                         ) : (
                             <>
                                 <span className="ingesta-dropzone-text">Arrastra tus archivos aquí, o haz clic para seleccionarlos</span>
-                                <span className="ingesta-dropzone-hint">Datos_Tesis.xlsx, Session_5.csv, etc.</span>
+                                <span className="ingesta-dropzone-hint">Session_5.csv, Session_14.csv, etc.</span>
                             </>
                         )}
                     </label>

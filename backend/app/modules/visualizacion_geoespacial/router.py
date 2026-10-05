@@ -39,7 +39,7 @@ def measurements(
     hoja: str | None = Query(default=None, min_length=1),
     desde: datetime | None = None,
     hasta: datetime | None = None,
-    tecnologia: int | None = Query(default=None, ge=0, le=2),
+    tecnologia: int | None = Query(default=None, ge=0, le=3),
     cell_id: int | None = Query(default=None, gt=0),
     bbox: str | None = Query(default=None, description="oeste,sur,este,norte en grados"),
     repository=Depends(get_repository),

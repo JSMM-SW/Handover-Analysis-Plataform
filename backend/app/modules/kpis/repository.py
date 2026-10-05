@@ -30,7 +30,7 @@ class KpisRepository:
 
     def obtener_metricas_diarias_senal(self, fecha: date) -> dict:
         """Calidad de señal general de un día puntual: total de mediciones,
-        promedio de RSRP y número de mediciones críticas (RSRP < -110 dBm).
+        RSRP procede de rsrp del export de NetMonitor.
 
         Usado por GET /kpis/daily. No filtra por tecnología: es una vista
         general de calidad de señal, no de handovers.
@@ -41,16 +41,12 @@ class KpisRepository:
 
         total = consulta_base.count()
 
-        promedio = (
-            self._db.query(func.avg(HandoverRecord.rsrp_dbm))
-            .filter(func.date(HandoverRecord.timestamp_medicion) == fecha)
-            .scalar()
-            or 0.0
-        )
-
-        criticos = consulta_base.filter(HandoverRecord.rsrp_dbm < -110).count()
-
-        return {"total": total, "promedio": float(promedio), "criticos": criticos}
+        measured = consulta_base.filter(HandoverRecord.rsrp.is_not(None))
+        total_rsrp = measured.count()
+        promedio = measured.with_entities(func.avg(HandoverRecord.rsrp)).scalar()
+        criticos = measured.filter(HandoverRecord.rsrp < -110).count() if total_rsrp else None
+        return {"total": total, "total_rsrp": total_rsrp,
+                "promedio": float(promedio) if promedio is not None else None, "criticos": criticos}
 
     def listar_sesiones(self) -> list[EtlExecution]:
         """Lista las sesiones (ejecuciones) completadas, para poblar el
@@ -146,7 +142,7 @@ class KpisRepository:
         consulta = self._db.query(
             HandoverRecord.cell_id,
             HandoverRecord.timestamp_medicion,
-            HandoverRecord.rsrp_dbm,
+            HandoverRecord.rsrp.label("rsrp_dbm"),
             HandoverRecord.rssi,
             HandoverRecord.rsrq,
             HandoverRecord.rssnr,

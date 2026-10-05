@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: python -m pip install -r requirements.txt
-      - run: python -m pytest tests/unit tests/integration/test_geoespacial_endpoints.py tests/integration/test_module_registration.py -q
+      - run: python -m pytest tests/unit tests/integration/test_geoespacial_endpoints.py tests/integration/test_module_registration.py tests/integration/test_upload_endpoint.py -q
 
   frontend:
     runs-on: ubuntu-latest

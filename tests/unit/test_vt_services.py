@@ -143,7 +143,7 @@ def test_la_cobertura_de_sinr_es_parcial_en_el_dataset_sintetico(repositorio):
 
     assert sinr.disponible is True
     assert 0 < sinr.n_validos < sinr.n_mediciones
-    assert sinr.etiqueta == "SINR/RSSNR (dB)"
+    assert sinr.etiqueta == "RSSNR (dB)"
 
 
 def test_la_cobertura_de_la_vista_tiene_prioridad_sobre_el_calculo_local():

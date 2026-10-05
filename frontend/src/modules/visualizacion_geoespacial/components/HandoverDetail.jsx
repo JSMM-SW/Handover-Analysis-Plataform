@@ -8,6 +8,7 @@ export default function HandoverDetail({ event, onClose }) {
     'Nodo origen': event.nodo_origen,
     'Nodo destino': event.node_id,
     Tecnología: technologyName(event.tecnologia),
+    RSRP: event.rsrp == null ? 'Sin dato' : `${event.rsrp} dBm`,
     RSSI: event.rssi == null ? 'Sin dato' : `${event.rssi} dBm`,
     Velocidad: event.velocidad_kmh == null
       ? 'Sin dato'

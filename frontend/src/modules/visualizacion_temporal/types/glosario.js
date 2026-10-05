@@ -52,11 +52,11 @@ export const GLOSARIO = {
     grupo: 'senal',
   },
   rssnr_db: {
-    titulo: 'SINR / RSSNR — señal frente a ruido',
+    titulo: 'RSSNR — señal frente a ruido',
     breve:
       'Cuántas veces más fuerte es la señal útil que el ruido. Valores altos son mejores.',
     detalle:
-      'El teléfono con el que se tomaron los datos de referencia no entrega este valor, por eso suele aparecer como «sin datos».',
+      'Se conserva RSSNR cuando la aplicación lo entrega; los valores no disponibles aparecen como «sin datos».',
     grupo: 'senal',
   },
   rscp_dbm: {
@@ -67,7 +67,7 @@ export const GLOSARIO = {
   rssi_dbm: {
     titulo: 'RSSI — potencia total recibida',
     breve:
-      'Toda la energía de radio que capta el teléfono, incluida la de otras antenas y el ruido. Se usa sobre todo en 2G (GSM).',
+      'Toda la energía de radio que capta el teléfono, incluida la de otras antenas y el ruido. Se conserva el campo RSSI del CSV en todas las tecnologías.',
     grupo: 'senal',
   },
   tecnologia: {

@@ -47,20 +47,20 @@ def _valid_record():
         "tecnologia": 1,
         "latitud": -0.180653,
         "longitud": -78.467838,
-        "rsrp_dbm": -94,
-        "archivo_origen": "Datos_Tesis.xlsx",
+        "rssi": -94,
+        "archivo_origen": "Session.csv",
         "hoja_origen": "Datos 1",
-        "origen_formato": "xlsx",
+        "origen_formato": "csv",
     }
 
 
 def test_create_execution_returns_uuid(repository):
-    execution_id = repository.create_execution(filename="Datos_Tesis.xlsx")
+    execution_id = repository.create_execution(filename="Session.csv")
     assert isinstance(execution_id, uuid.UUID)
 
 
 def test_save_valid_records_inserts_rows(repository, db_session):
-    execution_id = repository.create_execution(filename="Datos_Tesis.xlsx")
+    execution_id = repository.create_execution(filename="Session.csv")
     records = [_valid_record() for _ in range(3)]
 
     repository.save_valid_records(execution_id, records)
@@ -73,7 +73,7 @@ def test_save_valid_records_inserts_rows(repository, db_session):
 
 
 def test_save_rejected_records_inserts_rows(repository, db_session):
-    execution_id = repository.create_execution(filename="Datos_Tesis.xlsx")
+    execution_id = repository.create_execution(filename="Session.csv")
     rejected = [
         {
             "hoja_origen": "Datos 3",
@@ -93,7 +93,7 @@ def test_save_rejected_records_inserts_rows(repository, db_session):
 
 
 def test_finish_execution_updates_status_completed(repository, db_session):
-    execution_id = repository.create_execution(filename="Datos_Tesis.xlsx")
+    execution_id = repository.create_execution(filename="Session.csv")
 
     repository.finish_execution(
         execution_id,
@@ -113,7 +113,7 @@ def test_finish_execution_updates_status_completed(repository, db_session):
 
 
 def test_finish_execution_with_errors_marks_failed(repository, db_session):
-    execution_id = repository.create_execution(filename="Datos_Tesis.xlsx")
+    execution_id = repository.create_execution(filename="Session.csv")
 
     repository.finish_execution(
         execution_id,
@@ -121,7 +121,7 @@ def test_finish_execution_with_errors_marks_failed(repository, db_session):
         records_valid=0,
         records_rejected=0,
         warnings=[],
-        errors=["Archivo corrupto: no se pudo abrir con openpyxl"],
+        errors=["CSV con estructura incompatible"],
         processing_time_seconds=0.12,
     )
 
@@ -133,7 +133,7 @@ def test_finish_execution_with_errors_marks_failed(repository, db_session):
 
 
 def test_run_ingestion_persists_filename_verbatim_even_if_uuid_like(
-    tmp_path, repository, db_session, sample_handover_xlsx_bytes
+    tmp_path, repository, db_session, sample_handover_csv_bytes
 ):
     """Regresión del incidente de reconciliación: `archivo_origen` en
     handover_record y `filename` en etl_execution deben quedar exactamente
@@ -146,12 +146,12 @@ def test_run_ingestion_persists_filename_verbatim_even_if_uuid_like(
     from app.modules.ingesta.schemas import ProcessRequest
     from app.modules.ingesta.services import run_ingestion
 
-    risky_filename = "5db4d5d9-6ac0-4044-bda2-c6770c50a4c1_Datos_Tesis.xlsx"
-    stored_filename = "unrelated-stored-name.xlsx"
+    risky_filename = "5db4d5d9-6ac0-4044-bda2-c6770c50a4c1_Session.csv"
+    stored_filename = "unrelated-stored-name.csv"
 
     settings = Settings(data_input_dir=tmp_path / "input")
     settings.resolved_data_input_dir().joinpath(stored_filename).write_bytes(
-        sample_handover_xlsx_bytes
+        sample_handover_csv_bytes
     )
 
     payload = ProcessRequest(stored_filename=stored_filename, original_filename=risky_filename)

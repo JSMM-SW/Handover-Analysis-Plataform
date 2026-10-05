@@ -20,6 +20,25 @@ def test_filters_do_not_bridge_excluded_measurements():
     assert result.tramos == [[rows[0].id_registro, rows[1].id_registro], [rows[3].id_registro, rows[4].id_registro]]
 
 
+@pytest.mark.parametrize('coordinates', [(None, None), (None, -78.5), (-0.2, None)])
+def test_missing_gps_breaks_route_without_discarding_radio_context(coordinates):
+    rows = [point(0, node_id=100), point(1, node_id=100),
+            point(2, node_id=200, cell_id=20, latitud=coordinates[0], longitud=coordinates[1]),
+            point(3, node_id=200, cell_id=20), point(4, node_id=300, cell_id=30)]
+    result = prepare_map(rows)
+    assert result.total == 4
+    assert result.tramos == [[rows[0].id_registro, rows[1].id_registro],
+                             [rows[3].id_registro, rows[4].id_registro]]
+    assert [event.id_registro for event in result.handovers] == [rows[4].id_registro]
+
+
+def test_session_without_gps_returns_empty_map():
+    result = prepare_map([point(0, latitud=None, longitud=None)])
+    assert result.total == result.total_handovers == 0
+    assert result.tramos == []
+    assert result.radios_base == []
+
+
 def test_breaks_at_time_gaps_and_sheet_boundaries():
     rows = [point(0), point(1), point(90), point(91), point(92, hoja_origen="Datos 2")]
     result = prepare_map(rows)

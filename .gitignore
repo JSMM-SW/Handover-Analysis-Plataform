@@ -9,6 +9,7 @@ venv/
 .env
 
 # Datos de entrada/salida (no versionar archivos reales de medición)
+backups/
 data/input/*
 data/processed/*
 data/rejected/*

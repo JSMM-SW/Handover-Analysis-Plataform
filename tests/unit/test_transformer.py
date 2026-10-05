@@ -12,15 +12,15 @@ def test_structure_record_adds_origin_fields():
         "tecnologia": 1,
         "latitud": -0.290748,
         "longitud": -78.550426,
-        "rsrp_dbm": -94,
+        "rssi": -94,
     }
 
     result = structure_record(
-        normalized, hoja_origen="Datos 1", archivo_origen="Datos_Tesis.xlsx", origen_formato="xlsx"
+        normalized, hoja_origen=None, archivo_origen="Session.csv", origen_formato="csv"
     )
 
-    assert result["hoja_origen"] == "Datos 1"
-    assert result["archivo_origen"] == "Datos_Tesis.xlsx"
-    assert result["origen_formato"] == "xlsx"
+    assert result["hoja_origen"] == None
+    assert result["archivo_origen"] == "Session.csv"
+    assert result["origen_formato"] == "csv"
     assert result["cell_id"] == 25949452
     assert result["timestamp_medicion"] == normalized["timestamp_medicion"]

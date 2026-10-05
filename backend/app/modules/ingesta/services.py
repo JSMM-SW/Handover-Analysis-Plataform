@@ -10,35 +10,24 @@ from pathlib import Path
 from app.shared.config import Settings
 from app.shared.exceptions import ExtractionError, FileValidationError, SchemaValidationError
 from app.shared.file_utils import sanitize_filename
-from app.modules.ingesta.etl.cleaner import apply_sentinels_csv, deduplicate, validate_ranges
+from app.modules.ingesta.etl.cleaner import apply_sentinels_csv, deduplicate
 from app.modules.ingesta.etl.constants import (
     DEDUP_KEY_CSV,
-    DEDUP_KEY_XLSX,
     MOTIVO_DUPLICADO,
-    MOTIVO_GPS_SIN_FIX,
     ORIGEN_CSV,
-    ORIGEN_XLSX,
-    RSRP_STRONG_SIGNAL_THRESHOLD,
 )
 from app.modules.ingesta.etl.extractor import (
     detect_format,
-    extract_basic_info,
     extract_csv_preview,
     extract_records_csv,
-    extract_records_xlsx,
     validate_required_columns_csv,
-    validate_required_columns_xlsx,
 )
 from app.modules.ingesta.etl.normalizer import (
-    RSSI_DESTINO_POR_TECH,
-    normalize_record,
     normalize_record_csv,
-    normalize_timestamp,
 )
 from app.modules.ingesta.etl.transformer import structure_record
 from app.modules.ingesta.etl.validator import (
     validate_record_csv,
-    validate_record_xlsx,
     validate_uploaded_file,
 )
 from app.modules.ingesta.etl.velocity import compute_velocities
@@ -65,68 +54,6 @@ def _build_rejected(record: dict, motivo: str, datos_crudos: dict | None = None)
     }
 
 
-def _run_pipeline_xlsx(path: Path, archivo_origen: str, execution_id: str) -> PipelineResult:
-    sheets = extract_basic_info(path, execution_id)
-    validate_required_columns_xlsx(sheets, execution_id)
-
-    raw_records = extract_records_xlsx(path, execution_id)
-
-    rejected: list[dict] = []
-    candidates: list[dict] = []
-
-    for record in raw_records:
-        motivo = validate_record_xlsx(record["data"]) or validate_ranges(record["data"])
-        if motivo:
-            rejected.append(_build_rejected(record, motivo))
-        else:
-            candidates.append(record)
-
-    unique, duplicates = deduplicate(candidates, DEDUP_KEY_XLSX)
-    rejected.extend(_build_rejected(record, MOTIVO_DUPLICADO) for record in duplicates)
-
-    valid_records: list[dict] = []
-    strong_signal_count = 0
-    for record in unique:
-        normalized = normalize_record(record["data"])
-        if normalized["rsrp_dbm"] > RSRP_STRONG_SIGNAL_THRESHOLD:
-            strong_signal_count += 1
-        valid_records.append(
-            structure_record(normalized, record["hoja_origen"], archivo_origen, ORIGEN_XLSX)
-        )
-
-    warnings: list[str] = []
-    if strong_signal_count:
-        warnings.append(
-            f"{strong_signal_count} registro(s) con RSRP > {RSRP_STRONG_SIGNAL_THRESHOLD} dBm "
-            "(señal inusualmente fuerte, conservados)"
-        )
-
-    gps_reject_anchors = [
-        (
-            normalize_timestamp(r["datos_crudos"]["Fecha"], r["datos_crudos"]["Hora"]),
-            r["hoja_origen"],
-        )
-        for r in rejected
-        if r["motivo_rechazo"] == MOTIVO_GPS_SIN_FIX
-    ]
-    warnings.extend(compute_velocities(valid_records, gps_reject_anchors))
-
-    logger.info(
-        "[%s] Pipeline xlsx: %d leídos, %d válidos, %d rechazados",
-        execution_id,
-        len(raw_records),
-        len(valid_records),
-        len(rejected),
-    )
-
-    return PipelineResult(
-        records_read=len(raw_records),
-        valid_records=valid_records,
-        rejected_records=rejected,
-        warnings=warnings,
-    )
-
-
 def _run_pipeline_csv(path: Path, archivo_origen: str, execution_id: str) -> PipelineResult:
     sheets = extract_csv_preview(path, execution_id)
     validate_required_columns_csv(sheets, execution_id)
@@ -145,16 +72,7 @@ def _run_pipeline_csv(path: Path, archivo_origen: str, execution_id: str) -> Pip
 
         cleaned_data, nulled_fields = apply_sentinels_csv(record["data"])
         for field_name in nulled_fields:
-            # `rssi` se desambigua por tech (rsrp_dbm/rscp_dbm/rssi_dbm): el
-            # warning debe nombrar la columna destino real, no el campo
-            # crudo genérico, para que sea accionable. `gps` se cuenta aparte
-            # (mensaje propio más abajo) porque ya no es un "campo nuleado"
-            # simple: anula dos columnas (lat/long) y ya no es motivo de
-            # rechazo desde Session_43.
-            if field_name == "rssi":
-                label = RSSI_DESTINO_POR_TECH.get(record["data"]["tech"], "rssi")
-            else:
-                label = field_name
+            label = field_name
             nulled_field_counts[label] = nulled_field_counts.get(label, 0) + 1
 
         candidates.append(
@@ -224,9 +142,9 @@ def run_pipeline(path: Path, archivo_origen: str, execution_id: str) -> Pipeline
     del archivo. No conoce la base de datos ni el Repository: solo recibe una
     ruta de archivo y devuelve los registros listos para persistir.
     """
-    if detect_format(archivo_origen) == ORIGEN_CSV:
-        return _run_pipeline_csv(path, archivo_origen, execution_id)
-    return _run_pipeline_xlsx(path, archivo_origen, execution_id)
+    detect_format(archivo_origen)
+    detect_format(path.name)
+    return _run_pipeline_csv(path, archivo_origen, execution_id)
 
 
 def handle_upload(filename: str, content: bytes, settings: Settings) -> UploadResponse:
@@ -244,12 +162,8 @@ def handle_upload(filename: str, content: bytes, settings: Settings) -> UploadRe
     destination.write_bytes(content)
     logger.info("[%s] Archivo almacenado en '%s'", upload_id, destination)
 
-    if detect_format(filename) == ORIGEN_CSV:
-        sheets = extract_csv_preview(destination, upload_id)
-        validate_required_columns_csv(sheets, upload_id)
-    else:
-        sheets = extract_basic_info(destination, upload_id)
-        validate_required_columns_xlsx(sheets, upload_id)
+    sheets = extract_csv_preview(destination, upload_id)
+    validate_required_columns_csv(sheets, upload_id)
 
     return UploadResponse(
         upload_id=upload_id,
@@ -269,6 +183,8 @@ def run_ingestion(
     el resultado (registros válidos, rechazados y el resumen de ejecución).
     """
     started_at = time.perf_counter()
+    detect_format(payload.original_filename)
+    detect_format(payload.stored_filename)
     path = settings.resolved_data_input_dir() / payload.stored_filename
 
     if not path.exists():
@@ -350,12 +266,10 @@ _EXPORT_COLUMNS = [
     "tecnologia",
     "latitud",
     "longitud",
-    "rsrp_dbm",
-    "rscp_dbm",
-    "rssi_dbm",
     "node_id",
     "psc_pci",
     "rssi",
+    "rsrp",
     "rsrq",
     "rssnr",
     "accuracy",

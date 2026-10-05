@@ -108,21 +108,9 @@ def test_full_pipeline_against_real_session43(client, cleanup_execution):
             ),
             {"eid": result["execution_id"]},
         ).all()
-        # rsrp_dbm/rscp_dbm/rssi_dbm deben ser mutuamente excluyentes por fila
-        # (a lo sumo uno poblado, según tech) y ninguna fila válida debe tener
-        # los tres en NULL simultáneamente si tech es LTE/WCDMA/GSM.
-        overlap = conn.execute(
-            text(
-                "SELECT COUNT(*) FROM handover_record WHERE execution_id = :eid AND ("
-                "(rsrp_dbm IS NOT NULL AND rscp_dbm IS NOT NULL) OR "
-                "(rsrp_dbm IS NOT NULL AND rssi_dbm IS NOT NULL) OR "
-                "(rscp_dbm IS NOT NULL AND rssi_dbm IS NOT NULL))"
-            ),
-            {"eid": result["execution_id"]},
-        ).scalar()
         sample = conn.execute(
             text(
-                "SELECT tech, net_type, tecnologia, rsrp_dbm, rscp_dbm, rssi_dbm, "
+                "SELECT tech, net_type, tecnologia, rssi, rsrq, rsrp, "
                 "cid, node_id, lac_tac_raw, report_index "
                 "FROM handover_record WHERE execution_id = :eid "
                 "ORDER BY report_index LIMIT 5"
@@ -132,12 +120,11 @@ def test_full_pipeline_against_real_session43(client, cleanup_execution):
 
     assert valid_count == result["records_valid"]
     assert rejected_count == result["records_rejected"]
-    assert overlap == 0
 
     print("\n=== RESUMEN Session_43_20260623_165825.csv ===")
     print(f"leídos={result['records_read']} validos={result['records_valid']} rechazados={result['records_rejected']}")
     print("rechazos por motivo:", motivos)
     print("tecnologia (0=sin señal,1=LTE,2=3G,3=2G):", tecnologia_dist)
-    print("muestra de 5 filas (tech, net_type, tecnologia, rsrp_dbm, rscp_dbm, rssi_dbm, cid, node_id, lac_tac_raw, report_index):")
+    print("muestra de 5 filas (tech, net_type, tecnologia, rssi, rsrq, rsrp, cid, node_id, lac_tac_raw, report_index):")
     for row in sample:
         print(" ", row)

@@ -85,8 +85,7 @@ class HandoverRecord(Base):
         nullable=False,
     )
 
-    # Guardado en UTC. Origen: xlsx combina Fecha+Hora; csv parsea sys_time.
-    # Ambos en hora local America/Guayaquil (UTC-5), convertidos por el ETL.
+    # sys_time del CSV: hora local America/Guayaquil convertida a UTC.
     timestamp_medicion = Column(DateTime(timezone=True), nullable=False)
 
     cell_id = Column(Integer, nullable=False)
@@ -95,7 +94,7 @@ class HandoverRecord(Base):
     tac = Column(Integer, nullable=True)
     earfcn = Column(Integer, nullable=True)
 
-    tecnologia = Column(SmallInteger, nullable=False)  # 0=sin señal, 1=LTE/4G, 2=3G/UMTS
+    tecnologia = Column(SmallInteger, nullable=False)  # 0=sin senal, 1=4G, 2=3G, 3=2G
 
     # NULL solo posible en origen csv, cuando gps sin fix (centinela lat/long
     # = -1) ya no rechaza el registro completo (ver validator.py/cleaner.py,
@@ -104,25 +103,17 @@ class HandoverRecord(Base):
     latitud = Column(Numeric(10, 6), nullable=True)
     longitud = Column(Numeric(10, 6), nullable=True)
 
-    # NULL solo posible en origen csv (Network Cell Info no reporta RSRP).
-    rsrp_dbm = Column(SmallInteger, nullable=True)
 
-    # Columnas exclusivas del origen csv (Network Cell Info). NULL para xlsx,
-    # y NULL también cuando el equipo reporta el centinela 2147483647 (o -1
-    # para accuracy).
+    # Valores sin dato: NULL para centinelas 2147483647 (-1 en accuracy).
     node_id = Column(Integer, nullable=True)
     psc_pci = Column(Integer, nullable=True)
-    # DEPRECATED desde Session_43: ver comentario en schema.sql. No se llena
-    # para filas nuevas; se mantiene solo por las filas csv previas a esto.
+    # Original CSV signals; no conversion based on technology.
+    # NetMonitor export: rssi_strongest is RSRP, as verified by the user.
+    rsrp = Column(SmallInteger, nullable=True)
     rssi = Column(SmallInteger, nullable=True)
     rsrq = Column(SmallInteger, nullable=True)
     rssnr = Column(SmallInteger, nullable=True)
     accuracy = Column(SmallInteger, nullable=True)
-
-    # Desambiguación de `rssi` por tecnología (ver schema.sql). Cada fila csv
-    # puebla como máximo una de las tres según su `tech`.
-    rscp_dbm = Column(SmallInteger, nullable=True)
-    rssi_dbm = Column(SmallInteger, nullable=True)
 
     # Identificadores crudos de celda (csv), además de cell_id/tac (no se
     # retiran). Ver advertencia de identidad en el comentario de cell_id.
@@ -138,7 +129,7 @@ class HandoverRecord(Base):
 
     archivo_origen = Column(Text, nullable=False)
     hoja_origen = Column(Text, nullable=True)  # NULL en csv, que no tiene hojas
-    origen_formato = Column(Text, nullable=False)  # 'xlsx' o 'csv'
+    origen_formato = Column(Text, nullable=False)  # csv
 
     # Distancia Haversine / tiempo contra el registro anterior de la misma
     # sesión (misma hoja_origen). NULL si es el primero de su sesión, si el
@@ -158,12 +149,11 @@ class HandoverRecord(Base):
         CheckConstraint("tecnologia IN (0,1,2,3)", name="chk_tecnologia_valida"),
         CheckConstraint("latitud BETWEEN -5 AND 2", name="chk_latitud_rango"),
         CheckConstraint("longitud BETWEEN -92 AND -75", name="chk_longitud_rango"),
-        CheckConstraint("rsrp_dbm BETWEEN -140 AND -1", name="chk_rsrp_rango"),
         CheckConstraint(
             "NOT (latitud = 0 AND longitud = 0) AND NOT (latitud = -1 AND longitud = -1)",
             name="chk_gps_con_fix",
         ),
-        CheckConstraint("origen_formato IN ('xlsx','csv')", name="chk_origen_formato_valido"),
+        CheckConstraint("origen_formato = 'csv'", name="chk_origen_formato_valido"),
     )
 
 

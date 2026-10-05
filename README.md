@@ -1,12 +1,12 @@
 # Módulo de ingesta y procesamiento de datos de handover
 
-Componente ETL de la plataforma "Análisis y visualización de handovers en redes celulares" (Trabajo de Integración Curricular). Recibe archivos Excel con mediciones de handover, los valida, procesa y estructura como dataset para los módulos de visualización temporal, geoespacial y KPIs.
+Componente ETL de la plataforma "Análisis y visualización de handovers en redes celulares" (Trabajo de Integración Curricular). Recibe archivos CSV con mediciones de handover, los valida, procesa y estructura como dataset para los módulos de visualización temporal, geoespacial y KPIs.
 
 Desarrollo iterativo bajo Extreme Programming (XP). Ver [docs/historias-usuario.md](docs/historias-usuario.md) y [docs/decisiones/](docs/decisiones/) para las decisiones de arquitectura documentadas para la tesis.
 
 ## Estado actual (Iteración 1)
 
-MVP: carga de un archivo `.xlsx` desde el navegador, validación a nivel de archivo (extensión/tamaño/integridad) y extracción de información básica (hojas, filas, columnas, encabezados). Las reglas de limpieza y normalización aún no están implementadas: se definirán tras analizar un archivo real de handover.
+La ingesta admite solo CSV, valida y limpia mediciones, calcula velocidad y conserva las señales originales. Consulta [la migración de señales](docs/migracion_csv_senales.md) antes de actualizar una base existente.
 
 ## Instalación
 

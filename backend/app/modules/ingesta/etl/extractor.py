@@ -1,159 +1,23 @@
-"""Extracción de información básica de un archivo Excel.
-
-Alcance de esta iteración: identificar hojas y su forma (filas, columnas,
-encabezados), sin interpretar el significado de las columnas. Las reglas de
-qué hoja/columnas son relevantes para el dominio de handover se definirán
-tras analizar un archivo real (Objetivo 2 del plan de tesis).
-"""
-
+"""Read and validate cellular measurement CSV exports."""
 import logging
 from pathlib import Path
-
-import openpyxl
 import pandas as pd
-from openpyxl.utils.exceptions import InvalidFileException
-
 from app.shared.exceptions import ExtractionError, FileValidationError, SchemaValidationError
-from app.modules.ingesta.etl.constants import (
-    ORIGEN_CSV,
-    ORIGEN_XLSX,
-    REQUIRED_COLUMNS_CSV,
-    REQUIRED_COLUMNS_XLSX,
-)
+from app.modules.ingesta.etl.constants import ORIGEN_CSV, REQUIRED_COLUMNS_CSV
 from app.modules.ingesta.schemas import SheetInfo
 
 logger = logging.getLogger(__name__)
 
-
 def detect_format(filename: str) -> str:
-    """Determina el origen ('xlsx' o 'csv') a partir de la extensión.
-
-    Se asume que la extensión ya pasó `validate_uploaded_file` (que valida
-    contra las extensiones permitidas en Settings); esta función solo
-    traduce la extensión al identificador de origen usado en todo el pipeline.
-    """
-    extension = Path(filename).suffix.lower()
-    if extension == ".xlsx":
-        return ORIGEN_XLSX
-    if extension == ".csv":
-        return ORIGEN_CSV
-    raise FileValidationError(f"Extensión '{extension}' no soportada por el pipeline ETL.")
-
-_INVALID_EXCEL_MESSAGE = (
-    "El archivo no pudo ser leído como un Excel válido (formato incompatible o corrupto)."
-)
-
-
-def _open_workbook(path: Path, execution_id: str):
-    try:
-        return openpyxl.load_workbook(path, read_only=True, data_only=True)
-    except (InvalidFileException, OSError, KeyError) as exc:
-        logger.warning("[%s] No se pudo abrir el archivo como Excel: %s", execution_id, exc)
-        raise ExtractionError(_INVALID_EXCEL_MESSAGE) from exc
-    except Exception as exc:  # zipfile.BadZipFile y otros errores internos de openpyxl
-        logger.warning("[%s] Error inesperado al abrir el archivo: %s", execution_id, exc)
-        raise ExtractionError(_INVALID_EXCEL_MESSAGE) from exc
-
-
-def extract_basic_info(path: Path, execution_id: str) -> list[SheetInfo]:
-    workbook = _open_workbook(path, execution_id)
-
-    try:
-        if not workbook.sheetnames:
-            raise ExtractionError("El archivo no contiene hojas.")
-
-        sheets: list[SheetInfo] = []
-        for sheet_name in workbook.sheetnames:
-            worksheet = workbook[sheet_name]
-            header_row = next(
-                worksheet.iter_rows(min_row=1, max_row=1, values_only=True), ()
-            )
-            headers = ["" if value is None else str(value) for value in header_row]
-
-            sheets.append(
-                SheetInfo(
-                    name=sheet_name,
-                    num_rows=worksheet.max_row or 0,
-                    num_cols=worksheet.max_column or 0,
-                    headers=headers,
-                )
-            )
-        return sheets
-    finally:
-        workbook.close()
-
-
-def validate_required_columns_xlsx(sheets: list[SheetInfo], execution_id: str) -> None:
-    """Verifica que cada hoja tenga las columnas de negocio requeridas.
-
-    Es un chequeo estructural (bloquea todo el archivo si falla), distinto
-    de las validaciones por registro que hace el Validator sobre cada fila.
-    """
-    missing_by_sheet: dict[str, list[str]] = {}
-    for sheet in sheets:
-        missing = [col for col in REQUIRED_COLUMNS_XLSX if col not in sheet.headers]
-        if missing:
-            missing_by_sheet[sheet.name] = missing
-
-    if missing_by_sheet:
-        details = "; ".join(
-            f"'{sheet}' no tiene: {', '.join(cols)}"
-            for sheet, cols in missing_by_sheet.items()
-        )
-        logger.warning("[%s] Columnas requeridas ausentes: %s", execution_id, details)
-        raise SchemaValidationError(
-            f"El archivo no tiene la estructura esperada. {details}."
-        )
-
-
-def extract_records_xlsx(path: Path, execution_id: str) -> list[dict]:
-    """Lee todas las hojas del Excel y devuelve las filas de negocio crudas.
-
-    Cada elemento es {"hoja_origen": str, "fila_excel": int, "data": {...}},
-    donde "data" solo contiene REQUIRED_COLUMNS_XLSX con sus valores tal como
-    vienen del Excel (sin limpiar ni normalizar todavía).
-    """
-    workbook = _open_workbook(path, execution_id)
-
-    try:
-        records: list[dict] = []
-        for sheet_name in workbook.sheetnames:
-            worksheet = workbook[sheet_name]
-            header_row = next(
-                worksheet.iter_rows(min_row=1, max_row=1, values_only=True), ()
-            )
-            headers = ["" if value is None else str(value) for value in header_row]
-            column_index = {
-                col: headers.index(col) for col in REQUIRED_COLUMNS_XLSX if col in headers
-            }
-
-            for excel_row_number, row in enumerate(
-                worksheet.iter_rows(min_row=2, values_only=True), start=2
-            ):
-                if row is None or all(value is None for value in row):
-                    continue  # fila completamente vacía, no es un registro
-                data = {col: row[idx] for col, idx in column_index.items()}
-                records.append(
-                    {
-                        "hoja_origen": sheet_name,
-                        "fila_excel": excel_row_number,
-                        "data": data,
-                    }
-                )
-
-        logger.info("[%s] Extracción completa: %d registros crudos", execution_id, len(records))
-        return records
-    finally:
-        workbook.close()
+    if Path(filename).suffix.lower() != ".csv":
+        raise FileValidationError("Solo se permiten archivos CSV (.csv).")
+    return ORIGEN_CSV
 
 
 def extract_csv_preview(path: Path, execution_id: str) -> list[SheetInfo]:
-    """Lee solo los encabezados y cuenta filas de un CSV, devolviendo el mismo
-    tipo `SheetInfo` que usa el flujo xlsx (un CSV se representa como una
-    única "hoja" sintética), para no tener que cambiar `UploadResponse`.
-    """
+    """Return CSV headers and row count using the upload metadata contract."""
     try:
-        with open(path, encoding="utf-8", errors="strict") as fh:
+        with open(path, encoding="utf-8-sig", errors="strict") as fh:
             header_line = fh.readline()
             num_rows = sum(1 for _ in fh)
     except (OSError, UnicodeDecodeError) as exc:
@@ -173,7 +37,7 @@ def extract_csv_preview(path: Path, execution_id: str) -> list[SheetInfo]:
 
 
 def validate_required_columns_csv(sheets: list[SheetInfo], execution_id: str) -> None:
-    """Equivalente csv de `validate_required_columns_xlsx` (un solo "sheet" sintético)."""
+    """Check the required CSV headers before processing any records."""
     sheet = sheets[0]
     missing = [col for col in REQUIRED_COLUMNS_CSV if col not in sheet.headers]
     if missing:
@@ -185,14 +49,9 @@ def validate_required_columns_csv(sheets: list[SheetInfo], execution_id: str) ->
 
 
 def extract_records_csv(path: Path, execution_id: str) -> list[dict]:
-    """Lee un CSV completo (delimitador `;` o `,`, detectado automáticamente)
-    y devuelve las filas de negocio crudas en el mismo formato que
-    `extract_records_xlsx`: {"hoja_origen": None, "fila_excel": int, "data": {...}}.
-
-    `hoja_origen` es None porque un CSV no tiene el concepto de hojas.
-    """
+    """Read CSV observations; retain the source row number for rejected records."""
     try:
-        df = pd.read_csv(path, sep=None, engine="python")
+        df = pd.read_csv(path, sep=None, engine="python", encoding="utf-8-sig")
     except (OSError, UnicodeDecodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
         raise ExtractionError(
             "El archivo CSV no pudo ser leído (delimitador, codificación o formato incompatible)."
@@ -204,8 +63,10 @@ def extract_records_csv(path: Path, execution_id: str) -> list[dict]:
             f"El archivo CSV no tiene la estructura esperada. Faltan: {', '.join(missing)}."
         )
 
+    columns = REQUIRED_COLUMNS_CSV + (["rssi_strongest"] if "rssi_strongest" in df.columns else [])
+    df = df.astype(object).where(pd.notna(df), None)
     records: list[dict] = []
-    for row_index, row in df[REQUIRED_COLUMNS_CSV].iterrows():
+    for row_index, row in df[columns].iterrows():
         records.append(
             {
                 "hoja_origen": None,

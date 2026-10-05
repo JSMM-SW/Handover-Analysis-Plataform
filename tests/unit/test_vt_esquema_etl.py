@@ -64,7 +64,8 @@ def test_esquema_completo_prefiere_la_columna_nueva_y_cae_en_la_heredada():
     assert 'COALESCE(h."lac_tac_raw", h."tac")::integer AS lac_tac' in sql
     assert "COALESCE(h.\"tech\", CASE h.\"tecnologia\"" in sql
     assert 'h."report_index"::integer AS report_index' in sql
-    assert 'COALESCE(h."rscp_dbm", CASE WHEN t.tech = \'WCDMA\' THEN h."rssi" END)' in sql
+    assert "NULL::smallint AS rscp_dbm" in sql
+    assert 'h."rssi"::smallint AS rssi_dbm' in sql
 
 
 def test_la_etiqueta_de_sesion_sale_de_etl_execution_si_no_esta_en_handover_record():

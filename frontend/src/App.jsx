@@ -33,10 +33,10 @@ export default function App() {
           <div className="app-brand">H<span> / </span>ANALYSIS</div>
           <p>Plataforma de handovers</p>
           <nav aria-label="Menú principal">
-            <NavLink to="/ingesta">Ingesta</NavLink>
-            <NavLink to="/kpis">KPIs</NavLink>
-            <NavLink to="/geoespacial">Geoespacial</NavLink>
+            <NavLink to="/ingesta">Procesamiento de datos</NavLink>
             <NavLink to="/visualizacion-temporal">Visualización temporal</NavLink>
+            <NavLink to="/geoespacial">Visualización geoespacial</NavLink>
+            <NavLink to="/kpis">Indicadores de desempeño</NavLink>
           </nav>
           <small>Mediciones de redes celulares</small>
         </aside>

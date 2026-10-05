@@ -234,7 +234,7 @@ describe('estadísticas pre/post', () => {
 
     await screen.findByText('LTE:7213766');
     const tabla = screen.getByRole('table');
-    const fila = within(tabla).getByText(/SINR\/RSSNR/).closest('tr');
+    const fila = within(tabla).getByText(/RSSNR/).closest('tr');
 
     expect(fila.className).toContain('vt-tabla__fila--atenuada');
     expect(fila).toHaveTextContent('sin datos');

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class SheetInfo(BaseModel):
-    """Información básica de una hoja del Excel, sin interpretar su contenido
+    """Metadatos del CSV en el contrato de carga, sin interpretar su contenido
     (eso corresponde a las etapas de negocio: Validate/Clean/Normalize)."""
 
     name: str

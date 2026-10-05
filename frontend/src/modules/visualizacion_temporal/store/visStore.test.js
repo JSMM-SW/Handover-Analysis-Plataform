@@ -108,8 +108,8 @@ describe('filtros', () => {
 });
 
 describe('capas de visualización', () => {
-  it('arranca solo con RSRP, que es el parámetro mejor cubierto', () => {
-    expect(estado().capas.rsrp_dbm).toBe(true);
+  it('arranca solo con RSSI, que es el parámetro mejor cubierto', () => {
+    expect(estado().capas.rssi_dbm).toBe(true);
     expect(estado().capas.rssnr_db).toBe(false);
   });
 
@@ -117,7 +117,7 @@ describe('capas de visualización', () => {
     estado().toggleCapa('rsrq_db');
 
     expect(estado().capas.rsrq_db).toBe(true);
-    expect(estado().capas.rsrp_dbm).toBe(true);
+    expect(estado().capas.rssi_dbm).toBe(true);
   });
 
   it('activa todas las capas de parámetros y conserva los marcadores', () => {

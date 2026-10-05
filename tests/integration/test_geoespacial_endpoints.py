@@ -51,7 +51,7 @@ def test_csv_without_sheet_or_rsrp(geo_client):
     response = client.get("/api/v1/geoespacial/mediciones", params={"execution_id": params["execution_id"], "tecnologia": 2})
     assert response.status_code == 200
     assert response.json()["total"] == 1
-    assert response.json()["mediciones"][0]["rsrp_dbm"] is None
+    assert "rsrp_dbm" not in response.json()["mediciones"][0]
     assert calls[0][1] is None
 
 
@@ -59,7 +59,7 @@ def test_csv_without_sheet_or_rsrp(geo_client):
     {"desde": "2026-05-05T08:00:00"},
     {"desde": "2026-05-06T00:00:00Z", "hasta": "2026-05-05T00:00:00Z"},
     {"bbox": "1,2,3"}, {"bbox": "nan,0,1,2"}, {"bbox": "10,0,5,2"},
-    {"tecnologia": 3}, {"cell_id": 0},
+    {"tecnologia": 4}, {"cell_id": 0},
 ])
 def test_invalid_filters_rejected_before_query(geo_client, filters):
     client, params, calls = geo_client

@@ -21,8 +21,7 @@ import { COLORES_RF } from '../utils/temaVisual.js';
  * Único diccionario de etiquetas de la interfaz. **Ningún componente escribe estos nombres a
  * mano**: así el texto de la UI no se desincroniza entre pantallas.
  *
- * `rssnr_db` se etiqueta "SINR/RSSNR" porque el documento de tesis usa SINR y la aplicación de
- * medición expone el campo como RSSNR: son la misma magnitud.
+ * `rssnr_db` conserva el nombre RSSNR del CSV.
  *
  * Los colores salen de `utils/temaVisual.js`.
  *
@@ -31,7 +30,7 @@ import { COLORES_RF } from '../utils/temaVisual.js';
 export const ETIQUETAS_RF = {
   rsrp_dbm: { etiqueta: 'RSRP (dBm)', corta: 'RSRP', unidad: 'dBm', color: COLORES_RF.rsrp_dbm },
   rsrq_db: { etiqueta: 'RSRQ (dB)', corta: 'RSRQ', unidad: 'dB', color: COLORES_RF.rsrq_db },
-  rssnr_db: { etiqueta: 'SINR/RSSNR (dB)', corta: 'SINR', unidad: 'dB', color: COLORES_RF.rssnr_db },
+  rssnr_db: { etiqueta: 'RSSNR (dB)', corta: 'RSSNR', unidad: 'dB', color: COLORES_RF.rssnr_db },
   rscp_dbm: { etiqueta: 'RSCP (dBm)', corta: 'RSCP', unidad: 'dBm', color: COLORES_RF.rscp_dbm },
   rssi_dbm: { etiqueta: 'RSSI (dBm)', corta: 'RSSI', unidad: 'dBm', color: COLORES_RF.rssi_dbm },
 };

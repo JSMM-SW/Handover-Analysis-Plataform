@@ -1,18 +1,9 @@
-"""Validaciones de nivel archivo, previas a interpretar su contenido.
-
-Nota de alcance: las validaciones de negocio (hojas esperadas, columnas
-obligatorias, tipos de dato) se agregarán en una iteración posterior, una
-vez analizado un archivo real de handover. Este módulo solo valida lo que
-es válido para *cualquier* Excel: extensión, tamaño y que no esté vacío.
-"""
+"""CSV file limits and per-record validation."""
 
 from app.shared.config import Settings
 from app.shared.exceptions import FileValidationError
 from app.modules.ingesta.etl.constants import (
-    MOTIVO_CELL_ID_CERO,
     MOTIVO_CID_CENTINELA,
-    MOTIVO_GPS_SIN_FIX,
-    MOTIVO_RSRP_CENTINELA,
     NET_TYPE_2G,
     NET_TYPE_3G,
     NET_TYPE_LTE,
@@ -26,8 +17,8 @@ def validate_uploaded_file(filename: str, content: bytes, settings: Settings) ->
         raise FileValidationError("El archivo no tiene nombre.")
 
     extension = get_extension(filename)
-    if extension not in settings.allowed_extensions_set:
-        allowed = ", ".join(sorted(settings.allowed_extensions_set))
+    if extension != ".csv" or extension not in settings.allowed_extensions_set:
+        allowed = ".csv"
         raise FileValidationError(
             f"Extensión '{extension or '(sin extensión)'}' no soportada. "
             f"Extensiones permitidas: {allowed}."
@@ -43,26 +34,8 @@ def validate_uploaded_file(filename: str, content: bytes, settings: Settings) ->
         )
 
 
-def validate_record_xlsx(data: dict) -> str | None:
-    """Valida un registro ya extraído contra las reglas de invalidez dura
-    confirmadas con datos reales. Devuelve el motivo de rechazo, o None si
-    el registro es válido.
-
-    Orden de precedencia (primera condición que aplica gana): un registro
-    con Cell ID/ECI = 0 en los datos reales siempre trae también RSRP = 99,
-    así que se reporta el motivo más específico primero.
-    """
-    if data["Cell ID/ECI"] == 0:
-        return MOTIVO_CELL_ID_CERO
-    if data["RSRP"] == 99:
-        return MOTIVO_RSRP_CENTINELA
-    if data["Latitud"] == 0 and data["Longitud"] == 0:
-        return MOTIVO_GPS_SIN_FIX
-    return None
-
-
 def validate_record_csv(data: dict) -> str | None:
-    """Equivalente csv de `validate_record_xlsx`. Devuelve el motivo de
+    """Devuelve el motivo de
     rechazo, o None si el registro es válido.
 
     Se valida solo por `cid` e identidad de tecnología — NO por GPS: gps sin

@@ -25,9 +25,13 @@ def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None):
     events = []
     ambiguous = False
     for row in records:
-        lat, lon = float(row.latitud), float(row.longitud)
+        # Ingestion preserves radio observations without a GPS fix. Keep them
+        # as handover context, but never plot them or bridge a route across them.
+        lat = float(row.latitud) if row.latitud is not None else None
+        lon = float(row.longitud) if row.longitud is not None else None
         selected = (
-            -90 <= lat <= 90 and -180 <= lon <= 180
+            lat is not None and lon is not None
+            and -90 <= lat <= 90 and -180 <= lon <= 180
             and (lat, lon) != (0, 0)
             and (tecnologia is None or row.tecnologia == tecnologia)
             and (cell_id is None or row.cell_id == cell_id)

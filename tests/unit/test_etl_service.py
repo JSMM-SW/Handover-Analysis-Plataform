@@ -1,43 +1,10 @@
 from app.shared.exceptions import SchemaValidationError
 from app.modules.ingesta.etl.constants import (
-    MOTIVO_CELL_ID_CERO,
     MOTIVO_CID_CENTINELA,
     MOTIVO_DUPLICADO,
-    MOTIVO_GPS_SIN_FIX,
 )
 from app.modules.ingesta.services import run_pipeline
-
-
-def test_pipeline_end_to_end_with_known_bad_rows(tmp_path, sample_handover_xlsx_bytes):
-    path = tmp_path / "handover.xlsx"
-    path.write_bytes(sample_handover_xlsx_bytes)
-
-    result = run_pipeline(path, archivo_origen="handover.xlsx", execution_id="test-exec")
-
-    # La fixture tiene 4 filas: válida, sentinela (cell_id=0), gps sin fix,
-    # y un duplicado exacto de la válida.
-    assert result.records_read == 4
-    assert len(result.valid_records) == 1
-    assert len(result.rejected_records) == 3
-
-    motivos = {r["motivo_rechazo"] for r in result.rejected_records}
-    assert motivos == {MOTIVO_CELL_ID_CERO, MOTIVO_GPS_SIN_FIX, MOTIVO_DUPLICADO}
-
-    valid = result.valid_records[0]
-    assert valid["cell_id"] == 25949452
-    assert valid["hoja_origen"] == "Datos 1"
-    assert valid["archivo_origen"] == "handover.xlsx"
-
-
-def test_pipeline_rejects_file_with_missing_columns(tmp_path, sample_xlsx_bytes):
-    path = tmp_path / "generico.xlsx"
-    path.write_bytes(sample_xlsx_bytes)
-
-    try:
-        run_pipeline(path, archivo_origen="generico.xlsx", execution_id="test-exec")
-        assert False, "se esperaba SchemaValidationError"
-    except SchemaValidationError as exc:
-        assert "estructura esperada" in str(exc)
+import pytest
 
 
 def test_pipeline_csv_end_to_end_with_known_rows(tmp_path, sample_handover_csv_bytes):
@@ -59,9 +26,7 @@ def test_pipeline_csv_end_to_end_with_known_rows(tmp_path, sample_handover_csv_b
 
     valid_by_tecnologia = {r["tecnologia"]: r for r in result.valid_records}
     assert valid_by_tecnologia[1]["cell_id"] == 192  # LTE
-    assert valid_by_tecnologia[1]["rsrp_dbm"] == -90  # tech=LTE -> rssi va a rsrp_dbm
-    assert valid_by_tecnologia[1]["rscp_dbm"] is None
-    assert valid_by_tecnologia[1]["rssi"] is None  # deprecada, ya no se llena
+    assert valid_by_tecnologia[1]["rssi"] == -90  # tech=LTE -> rssi va a rsrp_dbm
     assert valid_by_tecnologia[1]["origen_formato"] == "csv"
     assert valid_by_tecnologia[1]["hoja_origen"] is None
     assert valid_by_tecnologia[1]["cid"] == 192
@@ -71,17 +36,30 @@ def test_pipeline_csv_end_to_end_with_known_rows(tmp_path, sample_handover_csv_b
 
     assert valid_by_tecnologia[2]["cell_id"] == 29296  # UMTS/WCDMA -> 3G
     assert valid_by_tecnologia[2]["rssnr"] is None  # centinela nuleado
-    assert valid_by_tecnologia[2]["rscp_dbm"] == -79  # tech=WCDMA -> rssi va a rscp_dbm
+    assert valid_by_tecnologia[2]["rssi"] == -79  # tech=WCDMA -> rssi va a rscp_dbm
 
     # GSM/GPRS con gps sin fix: se conserva (ya no se rechaza), latitud y
     # longitud quedan NULL, el resto del registro (cid/tech/rssi_dbm) intacto.
     assert valid_by_tecnologia[3]["cell_id"] == 209
     assert valid_by_tecnologia[3]["latitud"] is None
     assert valid_by_tecnologia[3]["longitud"] is None
-    assert valid_by_tecnologia[3]["rssi_dbm"] == -107  # tech=GSM -> rssi va a rssi_dbm
+    assert valid_by_tecnologia[3]["rssi"] == -107  # tech=GSM -> rssi va a rssi_dbm
     assert valid_by_tecnologia[3]["net_type"] == "GPRS"
     assert valid_by_tecnologia[3]["tech"] == "GSM"
     assert valid_by_tecnologia[3]["velocidad_kmh"] is None  # sin posición, no se puede calcular
 
     assert any("rssnr" in w for w in result.warnings)
     assert any("gps sin fix" in w for w in result.warnings)
+
+
+@pytest.mark.parametrize('strongest, expected', [(-77, -77), (2147483647, None)])
+def test_pipeline_preserves_four_signals_without_relabeling(tmp_path, sample_handover_csv_bytes, strongest, expected):
+    lines = sample_handover_csv_bytes.decode('utf-8').splitlines()
+    lines = [lines[0] + ';rssi_strongest'] + [line + f';{strongest}' for line in lines[1:]]
+    path = tmp_path / 'session.csv'
+    path.write_text('\n'.join(lines), encoding='utf-8')
+    result = run_pipeline(path, path.name, 'test')
+    for row in result.valid_records:
+        assert row['rsrp'] == expected
+        assert not {'rsrp_dbm', 'rscp_dbm', 'rssi_dbm'} & row.keys()
+    assert [r['rssi'] for r in result.valid_records] == [-90, -79, -107]

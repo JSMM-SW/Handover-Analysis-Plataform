@@ -25,7 +25,7 @@ class Measurement(BaseModel):
     longitud: float
     cell_id: int
     tecnologia: int
-    rsrp_dbm: int | None
+    rsrp: int | None = None
     hoja_origen: str | None
     node_id: int | None = None
     psc_pci: int | None = None

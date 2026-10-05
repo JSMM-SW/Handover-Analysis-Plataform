@@ -26,7 +26,7 @@ PARAMETROS_RF: tuple[str, ...] = ("rsrp_dbm", "rsrq_db", "rssnr_db", "rscp_dbm",
 ETIQUETAS_RF: dict[str, str] = {
     "rsrp_dbm": "RSRP (dBm)",
     "rsrq_db": "RSRQ (dB)",
-    "rssnr_db": "SINR/RSSNR (dB)",
+    "rssnr_db": "RSSNR (dB)",
     "rscp_dbm": "RSCP (dBm)",
     "rssi_dbm": "RSSI (dBm)",
 }

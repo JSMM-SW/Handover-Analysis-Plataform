@@ -17,14 +17,14 @@ from app.modules.ingesta.services import handle_upload
 from app.shared.config import Settings
 
 
-def test_handle_upload_preserves_arbitrary_filename_verbatim(tmp_path, sample_handover_xlsx_bytes):
+def test_handle_upload_preserves_arbitrary_filename_verbatim(tmp_path, sample_handover_csv_bytes):
     settings = Settings(data_input_dir=tmp_path / "input")
 
     # Nombre deliberadamente "de riesgo": ya contiene un UUID, como el
     # archivo que causó el incidente real.
-    risky_filename = "5db4d5d9-6ac0-4044-bda2-c6770c50a4c1_Datos_Tesis.xlsx"
+    risky_filename = "5db4d5d9-6ac0-4044-bda2-c6770c50a4c1_Datos_Tesis.csv"
 
-    response = handle_upload(risky_filename, sample_handover_xlsx_bytes, settings)
+    response = handle_upload(risky_filename, sample_handover_csv_bytes, settings)
 
     # original_filename debe ser EXACTAMENTE lo que se subió, sin que el
     # sistema le anteponga un uuid propio ni lo modifique de ninguna forma.
@@ -37,13 +37,13 @@ def test_handle_upload_preserves_arbitrary_filename_verbatim(tmp_path, sample_ha
     assert response.stored_filename.endswith(f"_{risky_filename}")
 
 
-def test_handle_upload_preserves_filename_with_space(tmp_path, sample_handover_xlsx_bytes):
+def test_handle_upload_preserves_filename_with_space(tmp_path, sample_handover_csv_bytes):
     """El otro caso real encontrado en el diagnóstico: nombres con espacios
-    (ej. 'Datos Tesis.xlsx' vs 'Datos_Tesis.xlsx') no son un bug — el
+    (ej. 'Datos Tesis.csv' vs 'Datos_Tesis.csv') no son un bug — el
     sistema los preserva tal cual, sin normalizar espacios ni guiones."""
     settings = Settings(data_input_dir=tmp_path / "input")
 
-    filename_with_space = "Datos Tesis.xlsx"
-    response = handle_upload(filename_with_space, sample_handover_xlsx_bytes, settings)
+    filename_with_space = "Datos Tesis.csv"
+    response = handle_upload(filename_with_space, sample_handover_csv_bytes, settings)
 
     assert response.original_filename == filename_with_space
