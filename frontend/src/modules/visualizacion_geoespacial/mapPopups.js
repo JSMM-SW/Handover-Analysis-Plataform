@@ -49,7 +49,7 @@ export function radioBasePopup(estimates, executions) {
     summary.textContent = 'Detalles de la estimación';
     details.append(summary);
     appendFields(details, [
-      [station.tecnologia === 1 ? 'PCI' : 'PSC', station.psc_pci?.length ? station.psc_pci.join(', ') : 'Sin dato'],
+      [station.tecnologia === 2 ? 'PSC' : 'PCI', station.psc_pci?.length ? station.psc_pci.join(', ') : 'Sin dato'],
       ['Canal de frecuencia (ARFCN)', station.earfcn],
       ['Muestras válidas sin repetir', station.mediciones_validas],
       ['Posiciones utilizadas', `${station.posiciones_utilizadas} de ${station.posiciones_disponibles}`],

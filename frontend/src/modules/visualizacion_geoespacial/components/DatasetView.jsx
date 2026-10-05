@@ -11,6 +11,19 @@ import { sessionExportLabel } from '../../../shared/sessionNames';
 const EMPTY_FILTERS = Object.freeze({ desde: '', hasta: '', tecnologia: '', bbox: '' });
 const LAYER_STORAGE_KEY = 'geo-event-layers';
 const DEFAULT_LAYERS = Object.freeze({ handovers: true, rutas: true, radiosBase: false });
+const HEAT_STATS = [
+  { key: 'rsrp', label: 'RSRP promedio', unit: 'dBm' },
+  { key: 'rsrq', label: 'RSRQ promedio', unit: 'dB' },
+  { key: 'rssnr', label: 'RSSNR promedio', unit: '' },
+  { key: 'rssi', label: 'RSSI promedio', unit: 'dBm' },
+];
+
+function averageParameter(points, key, unit) {
+  const values = (points ?? []).map((point) => point[key]).filter(Number.isFinite);
+  if (!values.length) return '—';
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return `${average.toLocaleString('es-EC', { maximumFractionDigits: 1 })}${unit ? ` ${unit}` : ''}`;
+}
 
 function loadLayers() {
   try {
@@ -110,19 +123,18 @@ export default function DatasetView({ executionIds, executions, selector }) {
           <button className="geo-primary" type="submit">Aplicar filtros</button>
           <button type="button" onClick={() => applyFilters(EMPTY_FILTERS)}>Limpiar</button>
         </form>
-        {query.bbox && (
-          <p className="geo-zone">
-            Zona geográfica aplicada <button onClick={() => applyFilters({ ...query, bbox: '' })}>Quitar zona</button>
-          </p>
-        )}
       </aside>
       <section className="geo-results">
         <MapTabs tab={tab} onChange={changeTab} />
         <div id="geo-map-panel" role="tabpanel" aria-labelledby={`geo-tab-${tab}`}>
-          <div className="geo-stats">
-            <div><strong>{data ? data.total.toLocaleString('es-EC') : '—'}</strong><span>Datos analizados</span></div>
+          <div className={`geo-stats${tab === 'calor' ? ' geo-stats-heat' : ''}`}>
+            {tab === 'rutas' && <div><strong>{data ? data.total.toLocaleString('es-EC') : '—'}</strong><span>Datos analizados</span></div>}
             <div><strong>{data ? data.total_handovers : '—'}</strong><span>Handovers</span></div>
-            <div><strong>{averageSignal}</strong><span>RSSI promedio</span></div>
+            {tab === 'calor' ? HEAT_STATS.map(({ key, label, unit }) => (
+              <div key={key} title="Promedio de los valores disponibles en los handovers filtrados">
+                <strong>{averageParameter(data?.handovers, key, unit)}</strong><span>{label}</span>
+              </div>
+            )) : <div><strong>{averageSignal}</strong><span>RSSI promedio</span></div>}
           </div>
           <MapToolbar
             tab={tab}

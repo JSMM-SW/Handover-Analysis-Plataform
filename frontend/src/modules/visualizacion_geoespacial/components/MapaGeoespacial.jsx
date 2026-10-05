@@ -58,6 +58,20 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
       }
       for (const stations of coincident.values()) {
         const first = stations[0];
+        const tooltip = document.createElement('div');
+        tooltip.className = 'geo-handover-tooltip';
+        const identifiers = new Map();
+        for (const station of stations) {
+          const type = station.tecnologia === 2 ? 'PSC' : 'PCI';
+          if (!identifiers.has(type)) identifiers.set(type, new Set());
+          for (const code of station.psc_pci ?? []) identifiers.get(type).add(code);
+        }
+        for (const [type, values] of identifiers) {
+          const codes = [...values].sort((a, b) => a - b);
+          const title = document.createElement('strong');
+          title.textContent = `${type}: ${codes.length ? codes.join(', ') : 'Sin dato'}`;
+          tooltip.append(title);
+        }
         const label = stations.length === 1 ? `Radio base estimada · Celda ${first.cell_id}` : `${stations.length} estimaciones de radios base coincidentes`;
         L.marker([first.latitud, first.longitud], {
           icon: L.divIcon({
@@ -65,8 +79,9 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
             html: `<svg aria-hidden="true" focusable="false" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="9" r="2" fill="currentColor" stroke="none"/><path d="M16 11 10 27h12L16 11Zm-3 9h6m-7 4 7-4M9 5a6 6 0 0 0 0 8m14-8a6 6 0 0 1 0 8M5 2a10 10 0 0 0 0 14M27 2a10 10 0 0 1 0 14"/></svg>${stations.length > 1 ? `<span class="geo-radio-base-count" aria-hidden="true">${stations.length}</span>` : ''}`,
             iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -13],
           }),
-          title: label, alt: label, zIndexOffset: 500,
-        }).bindPopup(radioBasePopup(stations, executions), { maxWidth: 340 }).addTo(group);
+          alt: label, zIndexOffset: 500,
+        }).bindTooltip(tooltip, { direction: 'top', offset: [0, -8] })
+          .bindPopup(radioBasePopup(stations, executions), { maxWidth: 340 }).addTo(group);
       }
     }
     return () => group.remove();
