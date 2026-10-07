@@ -82,29 +82,23 @@ def test_sin_etiqueta_de_sesion_no_hay_join():
     assert "NULL::text ~ '^[0-9]+$'" in sql
 
 
-def test_ambas_ramas_proyectan_las_mismas_columnas_en_el_mismo_orden():
-    """El UNION ALL exige la misma forma; se comprueba sobre los alias de la rama real."""
+def test_la_consulta_proyecta_el_contrato_en_orden_mas_la_identidad_de_celda():
     sql = construir_sql_mediciones(ESQUEMA_COMPLETO)
-    real, sintetica = sql.split("\nUNION ALL\n")
 
-    columnas = repository._COLUMNAS_FUENTE
-    assert real.startswith("SELECT " + ", ".join(f"r.{c}" for c in columnas[:-2]))
-    assert sintetica.startswith("SELECT " + ", ".join(f"p.{c}" for c in columnas[:-2]))
-    assert "AS celda_clave, 'real'::text AS origen" in real
-    assert "p.celda_clave, 'sintetico'::text AS origen" in sintetica
-
-
-def test_sin_handover_record_solo_quedan_los_datos_sinteticos():
-    sql = construir_sql_mediciones(set())
-
-    assert "handover_record" not in sql
+    columnas = repository._COLUMNAS_MEDICION
+    assert sql.startswith("SELECT " + ", ".join(f"r.{c}" for c in columnas))
+    assert "AS celda_clave\n" in sql
+    # La única fuente es handover_record: no hay datos sintéticos que unir.
     assert "UNION ALL" not in sql
-    assert "vt_medicion_prueba" in sql
+    assert "vt_medicion_prueba" not in sql
 
 
-def test_sin_ninguna_fuente_falla_con_un_mensaje_claro():
-    with pytest.raises(RuntimeError, match="No hay ninguna fuente de mediciones"):
-        construir_sql_mediciones(set(), incluir_prueba=False)
+@pytest.mark.parametrize(
+    "columnas", [set(), BASE - {"timestamp_medicion"}], ids=["sin_tabla", "sin_columna_minima"]
+)
+def test_sin_handover_record_utilizable_falla_con_un_mensaje_claro(columnas):
+    with pytest.raises(RuntimeError, match="No hay fuente de mediciones"):
+        construir_sql_mediciones(columnas)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -137,9 +131,7 @@ class SesionFalsa:
         texto = str(sql)
         if "information_schema" in texto:
             self.lecturas_esquema += 1
-            filas = [("handover_record", c) for c in self.columnas_etl]
-            filas.append(("vt_medicion_prueba", "id_medicion"))
-            return _Resultado(filas)
+            return _Resultado([("handover_record", c) for c in self.columnas_etl])
 
         self.consultas.append(texto)
         if self.fallos_pendientes:

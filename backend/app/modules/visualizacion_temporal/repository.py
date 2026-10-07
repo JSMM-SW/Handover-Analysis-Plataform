@@ -9,6 +9,8 @@ Reglas que cumple este archivo (`CLAUDE.md` reglas 2 y 4, `docs/02-arquitectura.
   cambia su esquema, el impacto queda contenido aquí (ver "Adaptación al esquema del ETL").
 - **Solo escribe en `eventos_handover`**, que es la única tabla propiedad del módulo. Las tablas
   del Módulo 1 se leen y nunca se modifican.
+- **No depende de vistas.** También `eventos_handover` se lee directamente: una vista es un objeto
+  más que puede desaparecer al migrar la base, y su falta tumbaba la tabla de eventos (BLQ-23).
 - No contiene reglas de negocio: no decide qué es un handover, solo trae filas y guarda filas.
 
 Adaptación al esquema del ETL (decisión D-1, BLQ-21)
@@ -47,9 +49,8 @@ logger = logging.getLogger(__name__)
 TABLA_MEDICIONES_ETL = "handover_record"
 TABLA_EJECUCIONES_ETL = "etl_execution"
 
-# Tablas y vistas propias del Módulo 2 (docs/sql/01 y 02).
-TABLA_MEDICIONES_PRUEBA = "vt_medicion_prueba"
-VISTA_EVENTOS = "v_vt_evento_detalle"
+# Tabla propia del Módulo 2 (docs/sql/01).
+TABLA_EVENTOS = "eventos_handover"
 
 #: Cada cuánto se vuelve a mirar el esquema del ETL. Una consulta a `information_schema` es
 #: barata, pero hacerla en cada petición añadiría un viaje de red a Supabase por endpoint.
@@ -85,9 +86,6 @@ _COLUMNAS_MEDICION = (
     "call_state",
 )
 
-#: Columnas de la fuente de mediciones: el contrato más la identidad de celda y el origen.
-_COLUMNAS_FUENTE = _COLUMNAS_MEDICION + ("celda_clave", "origen")
-
 
 # =========================================================================================
 # Adaptación al esquema del ETL
@@ -102,7 +100,6 @@ def _ref(columna: str) -> str:
 def construir_sql_mediciones(
     columnas_etl: frozenset[str] | set[str],
     columnas_ejecucion: frozenset[str] | set[str] = frozenset(),
-    incluir_prueba: bool = True,
 ) -> str:
     """Construye el `SELECT` de mediciones a partir de las columnas que existen hoy.
 
@@ -110,38 +107,22 @@ def construir_sql_mediciones(
     devuelve SQL. Los nombres que se concatenan salen siempre de las listas fijas de este
     archivo, nunca de la base, así que no hay riesgo de inyección.
 
-    El resultado une dos orígenes bajo el mismo contrato y la misma forma de columnas:
-
-    - `'real'`: `handover_record`, producida por el Módulo 1 (se omite si la tabla no existe o
-      le faltan las columnas mínimas).
-    - `'sintetico'`: `vt_medicion_prueba`, el recorrido de verdad conocida del Módulo 2.
+    La única fuente es `handover_record`, producida por el Módulo 1.
 
     Mapeo de cada campo del contrato (columna nueva ← columna heredada):
     `tech ← tecnologia (1/2/3)`, `cid ← cell_id`, `lac_tac ← lac_tac_raw ← tac`,
     `arfcn ← earfcn`, `rsrq_db ← rsrq`, `rssnr_db ← rssnr`, y `rssi_dbm ← rssi` (alias del contrato, sin reinterpretar la medida).
     """
-    ramas: list[str] = []
-
-    if _COLUMNAS_OBLIGATORIAS_ETL <= set(columnas_etl):
-        ramas.append(_rama_real(set(columnas_etl), set(columnas_ejecucion)))
-
-    if incluir_prueba:
-        ramas.append(
-            "SELECT "
-            + ", ".join(f"p.{c}" for c in _COLUMNAS_MEDICION)
-            + f", p.celda_clave, 'sintetico'::text AS origen FROM {TABLA_MEDICIONES_PRUEBA} p"
-        )
-
-    if not ramas:
+    if not _COLUMNAS_OBLIGATORIAS_ETL <= set(columnas_etl):
         raise RuntimeError(
-            f"No hay ninguna fuente de mediciones: falta la tabla {TABLA_MEDICIONES_ETL} "
-            f"(o sus columnas mínimas) y la tabla {TABLA_MEDICIONES_PRUEBA}."
+            f"No hay fuente de mediciones: falta la tabla {TABLA_MEDICIONES_ETL} o alguna de sus "
+            f"columnas mínimas ({', '.join(sorted(_COLUMNAS_OBLIGATORIAS_ETL))})."
         )
 
-    return "\nUNION ALL\n".join(ramas)
+    return _construir_sql_handover_record(set(columnas_etl), set(columnas_ejecucion))
 
 
-def _rama_real(columnas: set[str], columnas_ejecucion: set[str]) -> str:
+def _construir_sql_handover_record(columnas: set[str], columnas_ejecucion: set[str]) -> str:
     """`SELECT` de `handover_record` con el mapeo al contrato de docs/09."""
 
     def col(nombre: str, reserva: str = "NULL") -> str:
@@ -219,7 +200,7 @@ def _rama_real(columnas: set[str], columnas_ejecucion: set[str]) -> str:
     return (
         "SELECT "
         + ", ".join(f"r.{c}" for c in _COLUMNAS_MEDICION)
-        + f", {celda_clave} AS celda_clave, 'real'::text AS origen\n"
+        + f", {celda_clave} AS celda_clave\n"
         + "  FROM (\n        SELECT\n            "
         + interior
         + f"\n          FROM {TABLA_MEDICIONES_ETL} h\n"
@@ -267,24 +248,16 @@ class _CacheEsquema:
                    AND table_name = ANY(:tablas)
                 """
             ),
-            {"tablas": [TABLA_MEDICIONES_ETL, TABLA_EJECUCIONES_ETL, TABLA_MEDICIONES_PRUEBA]},
+            {"tablas": [TABLA_MEDICIONES_ETL, TABLA_EJECUCIONES_ETL]},
         ).all()
 
         por_tabla: dict[str, set[str]] = {}
         for tabla, columna in filas:
             por_tabla.setdefault(tabla, set()).add(columna)
 
-        columnas_etl = por_tabla.get(TABLA_MEDICIONES_ETL, set())
-        if not _COLUMNAS_OBLIGATORIAS_ETL <= columnas_etl:
-            logger.warning(
-                "%s no existe o le faltan columnas mínimas; solo se leerán datos sintéticos",
-                TABLA_MEDICIONES_ETL,
-            )
-
         return construir_sql_mediciones(
-            columnas_etl,
+            por_tabla.get(TABLA_MEDICIONES_ETL, set()),
             por_tabla.get(TABLA_EJECUCIONES_ETL, set()),
-            incluir_prueba=TABLA_MEDICIONES_PRUEBA in por_tabla,
         )
 
 
@@ -325,7 +298,7 @@ class VisualizacionTemporalRepository:
     # -------------------------------------------------------------------------------------
 
     def existe_sesion(self, sesion_id: str) -> bool:
-        """Comprueba si la sesión tiene alguna medición, sea real o sintética."""
+        """Comprueba si la sesión tiene alguna medición."""
         return (
             self._consultar_mediciones(
                 lambda fuente: f"SELECT 1 FROM {fuente} WHERE sesion_id = :sesion_id LIMIT 1",
@@ -338,6 +311,27 @@ class VisualizacionTemporalRepository:
     def _sesiones(filtros) -> list[str]:
         """Sesiones del filtro: la lista completa si la hay, o la única `sesion_id`."""
         return list(getattr(filtros, "sesion_ids", None) or [filtros.sesion_id])
+
+    @staticmethod
+    def _condiciones_de_hora(filtros, columna: str, parametros: dict) -> list[str]:
+        """Filtro de hora del día, aplicado a cada día del rango y no una sola vez.
+
+        La hora se compara **en la zona del usuario**. La columna es `timestamptz` y la sesión de
+        Supabase trabaja en UTC: un `columna::time` a secas daría la hora UTC, y la franja de
+        16:00 a 17:00 que el usuario escribe en Ecuador (UTC−5) buscaría en realidad de 11:00 a
+        12:00 locales y no encontraría nada.
+        """
+        condiciones = []
+        hora_local = f"({columna} AT TIME ZONE :zona_horaria)::time"
+        if getattr(filtros, "hora_inicio", None) is not None:
+            condiciones.append(f"{hora_local} >= :hora_inicio")
+            parametros["hora_inicio"] = filtros.hora_inicio
+        if getattr(filtros, "hora_fin", None) is not None:
+            condiciones.append(f"{hora_local} <= :hora_fin")
+            parametros["hora_fin"] = filtros.hora_fin
+        if condiciones:
+            parametros["zona_horaria"] = getattr(filtros, "zona_horaria", None) or "UTC"
+        return condiciones
 
     def _clausula_filtros(self, filtros) -> tuple[list[str], dict]:
         """Traduce el bloque de filtros común a condiciones SQL parametrizadas (HU-C2-006).
@@ -355,13 +349,7 @@ class VisualizacionTemporalRepository:
             condiciones.append("timestamp_medicion <= :hasta")
             parametros["hasta"] = filtros.hasta
 
-        # Filtro de hora del día: se aplica a cada día del rango, no una sola vez.
-        if getattr(filtros, "hora_inicio", None) is not None:
-            condiciones.append("timestamp_medicion::time >= :hora_inicio")
-            parametros["hora_inicio"] = filtros.hora_inicio
-        if getattr(filtros, "hora_fin", None) is not None:
-            condiciones.append("timestamp_medicion::time <= :hora_fin")
-            parametros["hora_fin"] = filtros.hora_fin
+        condiciones += self._condiciones_de_hora(filtros, "timestamp_medicion", parametros)
 
         tecnologias = getattr(filtros, "tecnologia", None) or []
         if tecnologias:
@@ -420,9 +408,8 @@ class VisualizacionTemporalRepository:
                    count(DISTINCT m.celda_clave)           AS n_celdas,
                    array_agg(DISTINCT m.tech)
                      FILTER (WHERE m.tech IS NOT NULL)     AS tecnologias,
-                   min(m.origen)                           AS origen,
                    COALESCE(
-                       (SELECT count(*) FROM eventos_handover e
+                       (SELECT count(*) FROM {TABLA_EVENTOS} e
                          WHERE e.sesion_id = m.sesion_id), 0
                    )                                       AS n_handovers
               FROM {fuente}
@@ -432,6 +419,57 @@ class VisualizacionTemporalRepository:
             {},
         )
         return [dict(fila) for fila in resultado.mappings()]
+
+    def contar_mediciones_por_minuto(self, sesion_ids: list[str], zona_horaria: str) -> list[dict]:
+        """Mediciones de cada minuto con datos, en la hora local de `zona_horaria`.
+
+        Es la materia prima del calendario: de aquí salen los días con datos y sus franjas
+        horarias. Se agrupa por minuto y no se devuelven las filas, así que la respuesta es
+        pequeña aunque la sesión tenga decenas de miles de mediciones.
+        """
+        resultado = self._consultar_mediciones(
+            lambda fuente: f"""
+            SELECT (m.timestamp_medicion AT TIME ZONE :zona_horaria)::date                    AS fecha,
+                   date_trunc('minute', m.timestamp_medicion AT TIME ZONE :zona_horaria)::time AS minuto,
+                   count(*)                                                                 AS n_mediciones
+              FROM {fuente}
+             WHERE m.sesion_id::text = ANY(:sesion_ids)
+             GROUP BY 1, 2
+             ORDER BY 1, 2
+            """,
+            {"sesion_ids": list(sesion_ids), "zona_horaria": zona_horaria},
+        )
+        return [dict(fila) for fila in resultado.mappings()]
+
+    def contar_handovers_por_dia(self, sesion_ids: list[str], zona_horaria: str) -> list[dict]:
+        """Handovers detectados en cada día local, para señalarlos en el calendario."""
+        resultado = self._db.execute(
+            text(
+                f"""
+                SELECT (timestamp_evento AT TIME ZONE :zona_horaria)::date AS fecha,
+                       count(*)                                           AS n_handovers
+                  FROM {TABLA_EVENTOS}
+                 WHERE sesion_id::text = ANY(:sesion_ids)
+                 GROUP BY 1
+                """
+            ),
+            {"sesion_ids": list(sesion_ids), "zona_horaria": zona_horaria},
+        )
+        return [dict(fila) for fila in resultado.mappings()]
+
+    def listar_tecnologias(self, sesion_ids: list[str]) -> list[str]:
+        """Tecnologías que aparecen en las mediciones de las sesiones, tal como las guarda el ETL."""
+        resultado = self._consultar_mediciones(
+            lambda fuente: f"""
+            SELECT DISTINCT m.tech
+              FROM {fuente}
+             WHERE m.sesion_id::text = ANY(:sesion_ids)
+               AND m.tech IS NOT NULL
+             ORDER BY m.tech
+            """,
+            {"sesion_ids": list(sesion_ids)},
+        )
+        return [fila[0] for fila in resultado]
 
     def listar_handovers(
         self,
@@ -450,12 +488,8 @@ class VisualizacionTemporalRepository:
         if getattr(filtros, "hasta", None) is not None:
             condiciones.append("timestamp_evento <= :hasta")
             parametros["hasta"] = filtros.hasta
-        if getattr(filtros, "hora_inicio", None) is not None:
-            condiciones.append("timestamp_evento::time >= :hora_inicio")
-            parametros["hora_inicio"] = filtros.hora_inicio
-        if getattr(filtros, "hora_fin", None) is not None:
-            condiciones.append("timestamp_evento::time <= :hora_fin")
-            parametros["hora_fin"] = filtros.hora_fin
+
+        condiciones += self._condiciones_de_hora(filtros, "timestamp_evento", parametros)
 
         tecnologias = getattr(filtros, "tecnologia", None) or []
         if tecnologias:
@@ -470,7 +504,7 @@ class VisualizacionTemporalRepository:
         where = " AND ".join(condiciones)
 
         total = self._db.execute(
-            text(f"SELECT count(*) FROM {VISTA_EVENTOS} WHERE {where}"), parametros
+            text(f"SELECT count(*) FROM {TABLA_EVENTOS} WHERE {where}"), parametros
         ).scalar_one()
 
         direccion = "DESC" if str(orden).lower() == "desc" else "ASC"
@@ -483,7 +517,7 @@ class VisualizacionTemporalRepository:
         filas = self._db.execute(
             text(
                 f"""
-                SELECT * FROM {VISTA_EVENTOS}
+                SELECT * FROM {TABLA_EVENTOS}
                  WHERE {where}
                  ORDER BY timestamp_evento {direccion}, id_evento
                  LIMIT :limite OFFSET :desplazamiento
@@ -497,7 +531,7 @@ class VisualizacionTemporalRepository:
     def obtener_handover(self, id_evento: str) -> dict | None:
         """Un evento concreto, para la ventana PRE/POST de HU-C2-005."""
         fila = self._db.execute(
-            text(f"SELECT * FROM {VISTA_EVENTOS} WHERE id_evento = :id_evento"),
+            text(f"SELECT * FROM {TABLA_EVENTOS} WHERE id_evento = :id_evento"),
             {"id_evento": id_evento},
         ).mappings().first()
         return dict(fila) if fila else None

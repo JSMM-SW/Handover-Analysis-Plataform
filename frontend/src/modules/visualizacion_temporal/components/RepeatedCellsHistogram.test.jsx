@@ -1,9 +1,12 @@
 /**
  * Pruebas del histograma de radiobases repetidas (Fase 6, tarea 6.5) — HU-C2-008.
+ *
+ * El intervalo se elige con un deslizador: va de 1 minuto a lo que dura la sesión más larga
+ * (`minutos_max`), y en el extremo derecho se analiza el recorrido completo.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -19,14 +22,23 @@ const CELDAS = [
   { celda_clave: 'LTE:7213766', psc_pci: 461, tech: 'LTE', n_visitas: 1, n_mediciones: 90, tiempo_total_s: 89 },
 ];
 
-let respuesta = { intervalo: 'total', top: 20, bins: [{ inicio: null, fin: null, celdas: CELDAS }], total_celdas: 8 };
+const TOTAL = {
+  intervalo: 'total',
+  minutos: null,
+  minutos_max: 21,
+  top: 20,
+  bins: [{ inicio: null, fin: null, sesion_id: null, celdas: CELDAS }],
+  total_celdas: 8,
+};
+
+let respuesta = TOTAL;
 let urlsPedidas = [];
 
 beforeEach(() => {
   urlsPedidas = [];
   useVisStore.getState().reiniciar();
   useVisStore.getState().setSesion('s1');
-  respuesta = { intervalo: 'total', top: 20, bins: [{ inicio: null, fin: null, celdas: CELDAS }], total_celdas: 8 };
+  respuesta = TOTAL;
 
   vi.stubGlobal(
     'fetch',
@@ -57,42 +69,61 @@ describe('renderizado (CA1)', () => {
     expect(await screen.findByTestId('histograma')).toBeInTheDocument();
   });
 
-  it('muestra cuántas celdas hay en total', async () => {
+  it('muestra cuántos PCI/PSC hay en total', async () => {
     renderizar();
 
-    expect(await screen.findByText('8 celdas en total')).toBeInTheDocument();
+    expect(await screen.findByText('8 PCI/PSC en total')).toBeInTheDocument();
+  });
+
+  it('pide el histograma agrupado por PCI/PSC, como la secuencia de radiobases', async () => {
+    renderizar();
+
+    await waitFor(() => expect(urlsPedidas.some((u) => u.includes('eje=psc_pci'))).toBe(true));
   });
 });
 
-describe('intervalos de análisis (CA2)', () => {
-  it('ofrece los cuatro intervalos', async () => {
+describe('deslizador de intervalo (CA2)', () => {
+  it('arranca en el extremo derecho: el recorrido completo', async () => {
     renderizar();
 
-    await screen.findByRole('button', { name: 'Total' });
-    for (const etiqueta of ['Total', 'Por hora', '10 min', '5 min']) {
-      expect(screen.getByRole('button', { name: etiqueta })).toBeInTheDocument();
-    }
+    const deslizador = await screen.findByRole('slider', { name: 'Intervalo de análisis en minutos' });
+    await waitFor(() => expect(deslizador).toHaveAttribute('max', '21'));
+    expect(deslizador).toHaveValue('21');
+    expect(screen.getByText('Todo el recorrido')).toBeInTheDocument();
+    expect(urlsPedidas.every((u) => !u.includes('minutos='))).toBe(true);
   });
 
-  it('cambiar el intervalo relanza la consulta con el nuevo parámetro', async () => {
-    const usuario = userEvent.setup();
+  it('arrastrar la bolita cambia los minutos y relanza la consulta', async () => {
     renderizar();
 
-    await usuario.click(await screen.findByRole('button', { name: '5 min' }));
+    const deslizador = await screen.findByRole('slider', { name: 'Intervalo de análisis en minutos' });
+    await waitFor(() => expect(deslizador).toHaveAttribute('max', '21'));
 
-    await waitFor(() => {
-      expect(urlsPedidas.some((u) => u.includes('intervalo=5min'))).toBe(true);
-    });
+    fireEvent.change(deslizador, { target: { value: '7' } });
+
+    // El rótulo cambia al instante; la consulta sale en cuanto la bolita se detiene.
+    expect(screen.getByText('7 minutos')).toBeInTheDocument();
+    await waitFor(() => expect(urlsPedidas.some((u) => u.includes('minutos=7'))).toBe(true));
   });
 
-  it('el intervalo activo queda marcado', async () => {
-    const usuario = userEvent.setup();
+  it('volver al extremo derecho vuelve al total', async () => {
     renderizar();
 
-    const porHora = await screen.findByRole('button', { name: 'Por hora' });
-    await usuario.click(porHora);
+    const deslizador = await screen.findByRole('slider', { name: 'Intervalo de análisis en minutos' });
+    await waitFor(() => expect(deslizador).toHaveAttribute('max', '21'));
 
-    await waitFor(() => expect(porHora.className).toContain('vt-segmento--activo'));
+    fireEvent.change(deslizador, { target: { value: '3' } });
+    fireEvent.change(deslizador, { target: { value: '21' } });
+
+    expect(screen.getByText('Todo el recorrido')).toBeInTheDocument();
+  });
+
+  it('con una sesión de un minuto no hay nada que deslizar', async () => {
+    respuesta = { ...TOTAL, minutos_max: 1 };
+    renderizar();
+
+    const deslizador = await screen.findByRole('slider', { name: 'Intervalo de análisis en minutos' });
+    await waitFor(() => expect(deslizador).toBeDisabled());
   });
 });
 
@@ -118,13 +149,12 @@ describe('parámetro top', () => {
 describe('varios intervalos', () => {
   it('permite navegar entre los bins cuando hay más de uno', async () => {
     respuesta = {
-      intervalo: '5min',
-      top: 20,
+      ...TOTAL,
+      minutos: 5,
       bins: [
-        { inicio: '2026-07-01T13:00:00Z', fin: '2026-07-01T13:05:00Z', celdas: CELDAS },
-        { inicio: '2026-07-01T13:05:00Z', fin: '2026-07-01T13:10:00Z', celdas: [CELDAS[0]] },
+        { inicio: '2026-07-01T13:00:00Z', fin: '2026-07-01T13:05:00Z', sesion_id: 's1', celdas: CELDAS },
+        { inicio: '2026-07-01T13:05:00Z', fin: '2026-07-01T13:10:00Z', sesion_id: 's1', celdas: [CELDAS[0]] },
       ],
-      total_celdas: 8,
     };
     const usuario = userEvent.setup();
     renderizar();
@@ -133,6 +163,20 @@ describe('varios intervalos', () => {
 
     await usuario.click(screen.getByRole('button', { name: 'Intervalo siguiente' }));
     expect(await screen.findByText(/Intervalo 2 de 2/)).toBeInTheDocument();
+  });
+
+  it('con varias sesiones, cada intervalo dice de cuál es', async () => {
+    respuesta = {
+      ...TOTAL,
+      minutos: 5,
+      bins: [
+        { inicio: '2026-07-01T13:00:00Z', fin: '2026-07-01T13:05:00Z', sesion_id: 'a', sesion_nombre: 'Session_12_x.csv', celdas: CELDAS },
+        { inicio: '2026-09-28T21:24:53Z', fin: '2026-09-28T21:29:53Z', sesion_id: 'b', sesion_nombre: 'Session_134_y.csv', celdas: CELDAS },
+      ],
+    };
+    renderizar();
+
+    expect(await screen.findByText(/Intervalo 1 de 2 · Sesión 12/)).toBeInTheDocument();
   });
 
   it('con un solo intervalo no aparece la navegación', async () => {
@@ -145,7 +189,7 @@ describe('varios intervalos', () => {
 
 describe('estado vacío', () => {
   it('avisa cuando no hay celdas para los filtros', async () => {
-    respuesta = { intervalo: 'total', top: 20, bins: [], total_celdas: 0 };
+    respuesta = { ...TOTAL, minutos_max: 0, bins: [], total_celdas: 0 };
     renderizar();
 
     expect(await screen.findByText(/Sin radiobases/)).toBeInTheDocument();

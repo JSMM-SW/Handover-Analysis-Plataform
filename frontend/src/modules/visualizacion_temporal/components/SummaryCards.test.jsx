@@ -10,6 +10,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SummaryCards from './SummaryCards.jsx';
+import { desgloseTecnologia } from '../utils/formatoResumen.js';
 import { useVisStore } from '../store/visStore.js';
 
 const RESUMEN = {
@@ -108,10 +109,20 @@ describe('complementos', () => {
     expect(tarjeta).toHaveTextContent('LTE: 6');
   });
 
-  it('indica los ping-pong cuando los hay', async () => {
+  it('la tarjeta de handovers solo muestra los handovers: el ping-pong no se tiene en cuenta', async () => {
     renderizar();
 
-    expect(await screen.findByText('1 ping-pong')).toBeInTheDocument();
+    const tarjeta = (await screen.findByText('Handovers')).closest('article');
+    await waitFor(() => expect(within(tarjeta).getByText('8')).toBeInTheDocument());
+    expect(tarjeta).toHaveTextContent('detectados');
+    expect(document.body).not.toHaveTextContent(/ping-pong/i);
+  });
+
+  it('las tarjetas no llevan micro-gráficas: solo la cifra', async () => {
+    renderizar();
+
+    await screen.findByText('Handovers');
+    expect(document.querySelector('.vt-tarjeta svg:not(.vt-icono)')).toBeNull();
   });
 
   it('los tres obligatorios siguen presentes aunque falten complementos', async () => {
@@ -142,6 +153,18 @@ describe('casos límite', () => {
 
     const aviso = await screen.findByRole('alert', {}, { timeout: 5000 });
     expect(aviso).toHaveTextContent(/No se pudieron cargar los datos/);
+  });
+});
+
+describe('desglose por tecnología de la tarjeta HO / minuto', () => {
+  it('ordena de más a menos y muestra el cambio de tecnología con una flecha', () => {
+    expect(desgloseTecnologia({ 'LTE->WCDMA': 2, LTE: 37, WCDMA: 3 })).toBe(
+      'LTE: 37 · WCDMA: 3 · LTE→WCDMA: 2',
+    );
+  });
+
+  it('sin datos queda vacío', () => {
+    expect(desgloseTecnologia()).toBe('');
   });
 });
 

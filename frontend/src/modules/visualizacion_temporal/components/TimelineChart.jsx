@@ -26,7 +26,7 @@ export default function TimelineChart() {
   const setRangoZoom = useVisStore((e) => e.setRangoZoom);
 
   const series = useSeries();
-  const handovers = useHandovers({ pageSize: 500 });
+  const handovers = useHandovers({ pageSize: 500, alcance: 'graficas' });
 
   const referencia = useRef(null);
   const temporizador = useRef(null);
@@ -84,7 +84,9 @@ export default function TimelineChart() {
   useEffect(() => () => clearTimeout(temporizador.current), []);
 
   /**
-   * Zoom automático cuando se selecciona un handover en la tabla (estructura V1 §3).
+   * Aplica el rango de zoom del store (el que fija el usuario arrastrando en esta gráfica o en la
+   * secuencia de radiobases). Elegir un handover en la tabla ya no lo toca: la gráfica muestra
+   * siempre el recorrido completo salvo que el usuario haga zoom.
    *
    * Se aplica sobre la instancia en lugar de reconstruir la opción para no perder el estado
    * interno del gráfico ni provocar un remontaje.

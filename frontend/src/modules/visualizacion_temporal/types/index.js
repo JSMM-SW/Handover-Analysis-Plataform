@@ -15,7 +15,14 @@ import { COLORES_RF } from '../utils/temaVisual.js';
 // Parámetros de radiofrecuencia
 // ================================================================================================
 
-/** @typedef {'rsrp_dbm'|'rsrq_db'|'rssnr_db'|'rscp_dbm'|'rssi_dbm'} ParametroRF */
+/**
+ * Parámetros de radiofrecuencia que analiza la interfaz.
+ *
+ * RSCP no está: no se tiene en cuenta en ningún análisis. El backend lo sigue devolviendo
+ * (`rscp_dbm`, `delta_rscp_db`) y simplemente se ignora.
+ *
+ * @typedef {'rsrp_dbm'|'rsrq_db'|'rssnr_db'|'rssi_dbm'} ParametroRF
+ */
 
 /**
  * Único diccionario de etiquetas de la interfaz. **Ningún componente escribe estos nombres a
@@ -31,15 +38,18 @@ export const ETIQUETAS_RF = {
   rsrp_dbm: { etiqueta: 'RSRP (dBm)', corta: 'RSRP', unidad: 'dBm', color: COLORES_RF.rsrp_dbm },
   rsrq_db: { etiqueta: 'RSRQ (dB)', corta: 'RSRQ', unidad: 'dB', color: COLORES_RF.rsrq_db },
   rssnr_db: { etiqueta: 'RSSNR (dB)', corta: 'RSSNR', unidad: 'dB', color: COLORES_RF.rssnr_db },
-  rscp_dbm: { etiqueta: 'RSCP (dBm)', corta: 'RSCP', unidad: 'dBm', color: COLORES_RF.rscp_dbm },
   rssi_dbm: { etiqueta: 'RSSI (dBm)', corta: 'RSSI', unidad: 'dBm', color: COLORES_RF.rssi_dbm },
 };
 
 /** Orden en que se muestran los parámetros en toda la interfaz. @type {ParametroRF[]} */
-export const PARAMETROS_RF = ['rsrp_dbm', 'rsrq_db', 'rssnr_db', 'rscp_dbm', 'rssi_dbm'];
+export const PARAMETROS_RF = ['rsrp_dbm', 'rsrq_db', 'rssnr_db', 'rssi_dbm'];
 
-/** @typedef {'LTE'|'WCDMA'|'GSM'} Tecnologia */
-export const TECNOLOGIAS = ['LTE', 'WCDMA', 'GSM'];
+/**
+ * Tecnología de acceso radio tal como aparece en los datos ('LTE', 'WCDMA', 'GSM'…). No hay una
+ * lista fija: la interfaz ofrece las que devuelve `GET /disponibilidad`.
+ *
+ * @typedef {string} Tecnologia
+ */
 
 /** @typedef {'intra_frecuencia'|'inter_frecuencia'|'inter_rat'|'desconocido'} TipoEvento */
 
@@ -71,7 +81,6 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
  * @property {number}   n_mediciones
  * @property {number}   n_celdas
  * @property {string[]} tecnologias
- * @property {string?}  origen          'real' | 'sintetico'
  * @property {number}   n_handovers
  */
 
@@ -93,7 +102,7 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
  * @property {Celda}      celda_origen
  * @property {Celda}      celda_destino
  * @property {TipoEvento} tipo_evento
- * @property {boolean}    ping_pong
+ * @property {boolean}    ping_pong   lo calcula el backend; la interfaz no lo muestra
  * @property {string?}    tipo_tecnologia
  * @property {'alta'|'baja'} confianza
  * @property {string?}    data_state_evento
@@ -145,6 +154,8 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
  * @property {string}  fin
  * @property {string}  celda_clave
  * @property {string}  etiqueta
+ * @property {string?} sesion_id
+ * @property {string?} sesion_nombre
  * @property {number?} cid
  * @property {number?} node_id
  * @property {number?} psc_pci
@@ -204,6 +215,10 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
 /**
  * @typedef {Object} CeldaRepetida
  * @property {string}  celda_clave
+ * @property {string}  etiqueta     «PCI n», «PSC n», «GSM CID n», «Sin PCI» o «Sin PSC»
+ * @property {number?} arfcn        canal de la primera celda
+ * @property {string[]} celdas_incluidas  celdas que suman en la barra (varias si comparten PCI)
+ * @property {number[]} canales          canales de esas celdas
  * @property {number?} cid
  * @property {number?} node_id
  * @property {number?} psc_pci
@@ -214,11 +229,50 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
  */
 
 /**
+ * Un intervalo del histograma. Con varias sesiones, cada una tiene los suyos; el total no es de
+ * ninguna (`sesion_id` nulo).
+ *
+ * @typedef {Object} BinIntervalo
+ * @property {string?} inicio
+ * @property {string?} fin
+ * @property {string?} sesion_id
+ * @property {string?} sesion_nombre
+ * @property {CeldaRepetida[]} celdas
+ */
+
+/**
  * @typedef {Object} CeldasRepetidas
  * @property {'total'|'hora'|'10min'|'5min'} intervalo
- * @property {number} top
- * @property {{inicio: string?, fin: string?, celdas: CeldaRepetida[]}[]} bins
- * @property {number} total_celdas
+ * @property {number?} minutos      duración de cada intervalo; null en el total
+ * @property {number}  minutos_max  lo que dura la sesión más larga: el tope del deslizador
+ * @property {number}  top
+ * @property {BinIntervalo[]} bins
+ * @property {number}  total_celdas
+ */
+
+/**
+ * @typedef {Object} FranjaHoraria
+ * @property {string} inicio  primer minuto con mediciones, 'HH:MM:SS' en hora local
+ * @property {string} fin     último minuto con mediciones, incluido
+ */
+
+/**
+ * Un día con datos de las sesiones elegidas, en la hora local del usuario.
+ *
+ * @typedef {Object} DiaDisponible
+ * @property {string} fecha         'AAAA-MM-DD'
+ * @property {number} n_mediciones
+ * @property {number} n_handovers
+ * @property {FranjaHoraria[]} franjas
+ */
+
+/**
+ * Lo que se puede elegir en los filtros (`GET /disponibilidad`).
+ *
+ * @typedef {Object} Disponibilidad
+ * @property {string} zona_horaria
+ * @property {DiaDisponible[]} dias
+ * @property {string[]} tecnologias
  */
 
 /**
@@ -243,7 +297,7 @@ export const ETIQUETAS_TIPO_EVENTO_CORTAS = {
  * @property {string[]}     sesionIds    una o varias sesiones analizadas juntas
  * @property {string?}      desde        ISO-8601
  * @property {string?}      hasta
- * @property {string?}      horaInicio   'HH:MM'
+ * @property {string?}      horaInicio   'HH:MM', en la hora local del usuario
  * @property {string?}      horaFin
  * @property {Tecnologia[]} tecnologias
  */

@@ -1,9 +1,11 @@
 /**
  * Pruebas de la tabla de eventos (Fase 5, tarea 5.6) — HU-C2-009.
  *
- * Lo importante que se protege aquí es el comportamiento pedido en la maqueta V1 §3: **al hacer
- * clic en una fila, el timeline hace zoom al evento**. Se comprueba mirando el store, que es lo
- * que las gráficas leen.
+ * Lo que se protege aquí:
+ * - **arranca plegada y con el primer evento elegido**, para que su detalle y su gráfica se vean
+ *   sin hacer nada;
+ * - «Desplegar» muestra la tabla completa, y elegir una fila la vuelve a plegar con ese evento;
+ * - elegir un evento **no amplía las gráficas de abajo**: el zoom del store no se toca.
  */
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -62,10 +64,9 @@ afterEach(() => {
   respuesta = { total: 2, page: 1, page_size: 15, items: EVENTOS };
 });
 
-function renderizar() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, gcTime: 0 } },
-  });
+function renderizar(
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } }),
+) {
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -74,18 +75,62 @@ function renderizar() {
   );
 }
 
-describe('renderizado', () => {
-  it('muestra una fila por evento', async () => {
+/** Renderiza con la tabla ya desplegada, para mirar sus columnas. */
+async function renderizarDesplegada() {
+  const usuario = userEvent.setup();
+  renderizar();
+  await usuario.click(await screen.findByRole('button', { name: 'Desplegar' }));
+  await screen.findByText('LTE:7213766');
+  return usuario;
+}
+
+describe('estado por defecto', () => {
+  it('arranca plegada y con el primer evento elegido', async () => {
     renderizar();
 
-    await screen.findByText('LTE:7213766');
+    await waitFor(() => expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1'));
+    expect(useVisStore.getState().tablaColapsada).toBe(true);
+    expect(document.querySelector('.vt-lista-compacta')).toBeInTheDocument();
+    expect(document.querySelector('.vt-lista-compacta__item--activo')).not.toBeNull();
+  });
+
+  it('la selección por defecto no toca el zoom de las gráficas', async () => {
+    renderizar();
+
+    await waitFor(() => expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1'));
+    expect(useVisStore.getState().rangoZoom).toBeNull();
+  });
+
+  it('si el usuario ya eligió un evento, no se le cambia por el primero', async () => {
+    useVisStore.getState().seleccionarHandover('ev-2');
+    renderizar();
+
+    await screen.findByRole('button', { name: 'Desplegar' });
+    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2');
+  });
+
+  it('al cambiar un filtro se vuelve a elegir el primero de la lista nueva', async () => {
+    renderizar();
+    await waitFor(() => expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1'));
+
+    // Con el filtro solo queda ev-2: debe elegirse ese, no el primero de la lista anterior.
+    respuesta = { total: 1, page: 1, page_size: 15, items: [EVENTOS[1]] };
+    useVisStore.getState().toggleTecnologia('WCDMA');
+
+    await waitFor(() => expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2'));
+    expect(useVisStore.getState().seleccionPendiente).toBe(false);
+  });
+});
+
+describe('renderizado de la tabla completa', () => {
+  it('muestra una fila por evento', async () => {
+    await renderizarDesplegada();
+
     expect(document.querySelectorAll('.vt-tabla__fila')).toHaveLength(2);
   });
 
   it('muestra celda origen, destino, tipo y permanencia (CA1)', async () => {
-    renderizar();
-
-    await screen.findByText('LTE:7213766');
+    await renderizarDesplegada();
 
     // Aparece dos veces y debe ser así: es el destino del primer evento y el origen del segundo.
     expect(screen.getAllByText('LTE:7390405')).toHaveLength(2);
@@ -94,150 +139,122 @@ describe('renderizado', () => {
     expect(screen.getByText('89 s')).toBeInTheDocument();
   });
 
-  it('marca el ping-pong y la confianza baja', async () => {
-    renderizar();
+  it('marca la confianza baja y no muestra el ping-pong, que no se tiene en cuenta', async () => {
+    await renderizarDesplegada();
 
-    expect(await screen.findByText('ping-pong')).toBeInTheDocument();
     expect(screen.getByText('confianza baja')).toBeInTheDocument();
+    // ev-2 viene marcado como ping-pong desde el backend: la interfaz no lo enseña.
+    expect(screen.queryByText(/ping-pong/i)).not.toBeInTheDocument();
   });
 
   it('muestra los deltas con signo', async () => {
-    renderizar();
+    await renderizarDesplegada();
 
-    expect(await screen.findByText(/\+14\.0 dB/)).toBeInTheDocument();
+    expect(screen.getByText(/\+14\.0 dB/)).toBeInTheDocument();
     expect(screen.getByText(/-6\.0 dB/)).toBeInTheDocument();
   });
 
   it('un delta ausente se muestra como raya, no como cero', async () => {
     // `null` es "no se pudo medir" y 0 es "no cambió": confundirlos falsearía la lectura.
-    renderizar();
+    await renderizarDesplegada();
 
-    await screen.findByText('LTE:7213766');
     const rayas = screen.getAllByTitle('Sin medida en alguno de los extremos');
-
     expect(rayas.length).toBeGreaterThanOrEqual(2);
     expect(rayas[0]).toHaveTextContent('—');
   });
 });
 
-describe('clic en una fila (maqueta V1 §3)', () => {
-  it('selecciona el evento en el store', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
-
-    const fila = (await screen.findByText('LTE:7213766')).closest('tr');
-    await usuario.click(fila);
-
-    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1');
-  });
-
-  it('encuadra el timeline sobre el evento', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
-
-    const fila = (await screen.findByText('LTE:7213766')).closest('tr');
-    await usuario.click(fila);
-
-    const rango = useVisStore.getState().rangoZoom;
-    expect(rango).not.toBeNull();
-
-    // El evento debe quedar en el centro de la ventana.
-    const centro = (new Date(rango[0]).getTime() + new Date(rango[1]).getTime()) / 2;
-    expect(centro).toBe(new Date('2026-07-01T13:01:30Z').getTime());
-  });
-
-  it('al seleccionar, la tabla se pliega para dejar sitio al detalle', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
-
-    const fila = (await screen.findByText('LTE:7213766')).closest('tr');
-    await usuario.click(fila);
-
-    await waitFor(() => expect(useVisStore.getState().tablaColapsada).toBe(true));
-    expect(document.querySelector('.vt-lista-compacta')).toBeInTheDocument();
-  });
-
-  it('el evento elegido queda resaltado en la lista plegada', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
-
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
-
-    const activo = await waitFor(() =>
-      document.querySelector('.vt-lista-compacta__item--activo'),
-    );
-    expect(activo).not.toBeNull();
-  });
-
+describe('elegir un evento', () => {
   it('desplegar muestra la tabla completa y oculta el detalle', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
-
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
-    await usuario.click(await screen.findByRole('button', { name: 'Desplegar' }));
+    await renderizarDesplegada();
 
     expect(useVisStore.getState().tablaColapsada).toBe(false);
     expect(document.querySelector('.vt-lista-compacta')).toBeNull();
   });
 
   it('al desplegar, la fila del evento que se analizaba queda resaltada y a la vista', async () => {
-    const usuario = userEvent.setup();
     const desplazar = vi.fn();
     window.HTMLElement.prototype.scrollIntoView = desplazar;
-    renderizar();
 
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
-    await usuario.click(await screen.findByRole('button', { name: 'Desplegar' }));
+    await renderizarDesplegada();
 
-    const fila = (await screen.findByText('LTE:7213766')).closest('tr');
+    const fila = screen.getByText('LTE:7213766').closest('tr');
     expect(fila.className).toContain('vt-tabla__fila--seleccionada');
     expect(desplazar).toHaveBeenCalled();
   });
 
-  it('volver a pulsar el mismo evento tras desplegar lo pliega otra vez', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
+  it('elegir una fila la selecciona y vuelve a plegar la tabla', async () => {
+    const usuario = await renderizarDesplegada();
 
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
-    await usuario.click(await screen.findByRole('button', { name: 'Desplegar' }));
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
+    await usuario.click(screen.getByText('WCDMA:13163:30405').closest('tr'));
 
-    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1');
+    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2');
     expect(useVisStore.getState().tablaColapsada).toBe(true);
     expect(document.querySelector('.vt-lista-compacta')).toBeInTheDocument();
   });
 
-  it('pulsar otro evento con la tabla desplegada también la pliega', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
+  it('elegir un evento no amplía las gráficas: siguen mostrando el recorrido completo', async () => {
+    const usuario = await renderizarDesplegada();
 
-    await usuario.click((await screen.findByText('LTE:7213766')).closest('tr'));
-    await usuario.click(await screen.findByRole('button', { name: 'Desplegar' }));
-    await usuario.click((await screen.findByText('WCDMA:13163:30405')).closest('tr'));
+    await usuario.click(screen.getByText('WCDMA:13163:30405').closest('tr'));
 
-    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2');
+    expect(useVisStore.getState().rangoZoom).toBeNull();
+  });
+
+  it('volver a pulsar el mismo evento tras desplegar lo pliega otra vez', async () => {
+    const usuario = await renderizarDesplegada();
+
+    await usuario.click(screen.getByText('LTE:7213766').closest('tr'));
+
+    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1');
     expect(useVisStore.getState().tablaColapsada).toBe(true);
   });
 
   it('se puede seleccionar con el teclado', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
+    const usuario = await renderizarDesplegada();
 
-    const fila = (await screen.findByText('LTE:7213766')).closest('tr');
+    const fila = screen.getByText('WCDMA:13163:30405').closest('tr');
     fila.focus();
     await usuario.keyboard('{Enter}');
 
-    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1');
+    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2');
+  });
+
+  it('en la lista plegada se elige otro evento con un clic', async () => {
+    const usuario = userEvent.setup();
+    renderizar();
+
+    await screen.findByRole('button', { name: 'Desplegar' });
+    const items = [...document.querySelectorAll('.vt-lista-compacta__item')];
+    await usuario.click(items[1]);
+
+    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-2');
+  });
+
+  it('plegada no marca el ping-pong', async () => {
+    renderizar();
+
+    await screen.findByRole('button', { name: 'Desplegar' });
+    expect(document.querySelector('.vt-lista-compacta')).not.toHaveTextContent('PP');
+  });
+
+  it('plegada solo muestra el número y la fecha/hora', async () => {
+    renderizar();
+
+    await screen.findByRole('button', { name: 'Desplegar' });
+    const item = document.querySelector('.vt-lista-compacta__item');
+
+    // Las claves de celda ocupan demasiado en una columna estrecha: quedan fuera.
+    expect(item.textContent).not.toContain('LTE:7213766');
+    expect(item.querySelector('.vt-lista-compacta__hora')).not.toBeNull();
   });
 });
 
 describe('ordenación', () => {
   it('invierte el orden al pulsar dos veces la misma columna', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
+    const usuario = await renderizarDesplegada();
 
-    const cabecera = await screen.findByText(/Δ RSRP/);
-
+    const cabecera = screen.getByText(/Δ RSRP/);
     const filas = () => [...document.querySelectorAll('.vt-tabla__fila')];
 
     await usuario.click(cabecera);
@@ -248,11 +265,9 @@ describe('ordenación', () => {
   });
 
   it('los valores ausentes van al final ordene como ordene', async () => {
-    const usuario = userEvent.setup();
-    renderizar();
+    const usuario = await renderizarDesplegada();
 
-    const cabecera = await screen.findByText(/Δ RSRQ/);
-    await usuario.click(cabecera);
+    await usuario.click(screen.getByText(/Δ RSRQ/));
 
     const filas = [...document.querySelectorAll('.vt-tabla__fila')];
     // ev-2 tiene delta_rsrq_db null, así que debe quedar el último.
@@ -261,46 +276,31 @@ describe('ordenación', () => {
 });
 
 describe('estado vacío', () => {
-  it('sugiere ejecutar la detección cuando no hay eventos', async () => {
+  it('sin eventos sugiere ampliar los filtros: ya no hay que pulsar «Detectar handovers»', async () => {
     respuesta = { total: 0, page: 1, page_size: 15, items: [] };
     renderizar();
 
     expect(await screen.findByText(/No hay handovers para estos filtros/)).toBeInTheDocument();
-    expect(screen.getByText(/Detectar handovers/)).toBeInTheDocument();
+    expect(screen.getByText(/ampliar las fechas/)).toBeInTheDocument();
+    expect(screen.queryByText(/Detectar handovers/)).not.toBeInTheDocument();
+    expect(useVisStore.getState().handoverSeleccionadoId).toBeNull();
   });
 });
 
+describe('detección automática en curso', () => {
+  it('muestra «Detectando handovers…» y no elige ningún evento de la lista que va a cambiar', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    // Una detección que no termina: basta con que exista para que la tabla espere.
+    queryClient
+      .getMutationCache()
+      .build(queryClient, { mutationKey: ['vt', 'deteccion'], mutationFn: () => new Promise(() => {}) })
+      .execute(undefined);
 
-describe('plegado de la tabla', () => {
-  it('sin evento elegido no se ofrece plegar: plegar solo tiene sentido para ver un detalle', async () => {
-    renderizar();
+    renderizar(queryClient);
 
-    await screen.findByText('LTE:7213766');
-    expect(screen.queryByRole('button', { name: 'Plegar tabla' })).not.toBeInTheDocument();
-    expect(document.querySelector('.vt-lista-compacta')).toBeNull();
-  });
-
-  it('la lista plegada conserva la navegación entre eventos', async () => {
-    const usuario = userEvent.setup();
-    useVisStore.getState().toggleTablaColapsada();
-    renderizar();
-
-    await screen.findByRole('button', { name: 'Desplegar' });
-    const items = [...document.querySelectorAll('.vt-lista-compacta__item')];
-    await usuario.click(items[0]);
-
-    expect(useVisStore.getState().handoverSeleccionadoId).toBe('ev-1');
-  });
-
-  it('plegada solo muestra el número y la fecha/hora', async () => {
-    useVisStore.getState().toggleTablaColapsada();
-    renderizar();
-
-    await screen.findByRole('button', { name: 'Desplegar' });
-    const item = document.querySelector('.vt-lista-compacta__item');
-
-    // Las claves de celda ocupan demasiado en una columna estrecha: quedan fuera.
-    expect(item.textContent).not.toContain('LTE:7213766');
-    expect(item.querySelector('.vt-lista-compacta__hora')).not.toBeNull();
+    expect(await screen.findByText('Detectando handovers…')).toBeInTheDocument();
+    expect(useVisStore.getState().handoverSeleccionadoId).toBeNull();
   });
 });

@@ -19,14 +19,12 @@ import { useVisStore } from '../store/visStore.js';
 const ALTO = 200;
 
 export default function CellSequenceChart() {
-  const eje = useVisStore((e) => e.ejeCeldas);
-  const setEje = useVisStore((e) => e.setEjeCeldas);
   const mostrarMarcadores = useVisStore((e) => e.capas.marcadoresHO);
   const idDestacado = useVisStore((e) => e.handoverSeleccionadoId);
   const rangoZoom = useVisStore((e) => e.rangoZoom);
 
   const celdas = useSeriesCeldas();
-  const handovers = useHandovers({ pageSize: 500 });
+  const handovers = useHandovers({ pageSize: 500, alcance: 'graficas' });
   const referencia = useRef(null);
 
   const tramos = useMemo(() => celdas.data?.tramos ?? [], [celdas.data]);
@@ -37,7 +35,6 @@ export default function CellSequenceChart() {
     handovers: eventos,
     mostrarMarcadores,
     idDestacado,
-    eje,
   });
 
   // Sincronización del eje X con el timeline maestro.
@@ -56,29 +53,9 @@ export default function CellSequenceChart() {
     <div className="vt-grafica">
       <div className="vt-barra-herramientas">
         <span className="vt-barra-herramientas__etiqueta">
-          Identificador
-          <AyudaContextual termino="eci_pci" alineacion="izquierda" />
+          PCI/PSC
+          <AyudaContextual termino="pci_psc" alineacion="izquierda" />
         </span>
-        <div className="vt-segmentado" role="group" aria-label="Identificador de radiobase">
-          <button
-            type="button"
-            className={`vt-segmento${eje === 'celda_clave' ? ' vt-segmento--activo' : ''}`}
-            onClick={() => setEje('celda_clave')}
-            aria-pressed={eje === 'celda_clave'}
-            title="Identidad única de la celda dentro del operador"
-          >
-            ECI
-          </button>
-          <button
-            type="button"
-            className={`vt-segmento${eje === 'psc_pci' ? ' vt-segmento--activo' : ''}`}
-            onClick={() => setEje('psc_pci')}
-            aria-pressed={eje === 'psc_pci'}
-            title="PCI/PSC: se reutiliza entre emplazamientos, úsalo como vista complementaria"
-          >
-            PCI/PSC
-          </button>
-        </div>
 
         {celdas.data && (
           <span className="vt-grafica__meta">

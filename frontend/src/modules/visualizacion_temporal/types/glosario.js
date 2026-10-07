@@ -40,7 +40,7 @@ export const GLOSARIO = {
     breve:
       'Cuánta señal llega de la antena. Se mide en dBm y siempre es negativa: cuanto más cerca de cero, mejor.',
     detalle:
-      'Orientativo: por encima de −80 dBm es excelente, entre −80 y −100 es buena y por debajo de −110 la conexión empieza a sufrir.',
+      'Orientativo: desde −80 dBm es excelente, entre −80 y −100 es buena y por debajo de −100 es mala.',
     grupo: 'senal',
   },
   rsrq_db: {
@@ -57,11 +57,6 @@ export const GLOSARIO = {
       'Cuántas veces más fuerte es la señal útil que el ruido. Valores altos son mejores.',
     detalle:
       'Se conserva RSSNR cuando la aplicación lo entrega; los valores no disponibles aparecen como «sin datos».',
-    grupo: 'senal',
-  },
-  rscp_dbm: {
-    titulo: 'RSCP — potencia en 3G',
-    breve: 'El equivalente del RSRP para redes 3G (WCDMA). Cuanto más cerca de cero, mejor.',
     grupo: 'senal',
   },
   rssi_dbm: {
@@ -81,12 +76,12 @@ export const GLOSARIO = {
       'Cada una de las antenas que dan servicio al teléfono. Un mismo mástil suele tener varias celdas orientadas en distintas direcciones.',
     grupo: 'celdas',
   },
-  eci_pci: {
-    titulo: 'ECI y PCI',
+  pci_psc: {
+    titulo: 'PCI y PSC',
     breve:
-      'Dos formas de nombrar una celda. El ECI es su «DNI»: único en toda la red. El PCI es un número corto que se repite entre zonas.',
+      'Número «físico» con el que el teléfono distingue las antenas: PCI en 4G (0–503) y PSC en 3G (0–511). La secuencia de radiobases se rotula con él.',
     detalle:
-      'Por eso el ECI es la vista por defecto: con el PCI, dos celdas distintas con el mismo número parecerían la misma.',
+      'Es corto y se reutiliza: dos antenas lejanas, o la misma antena en dos frecuencias, pueden tener el mismo PCI. Por eso los handovers se detectan con la identidad completa de la celda, y dos celdas con el mismo PCI aparecen a la misma altura de la gráfica. GSM (2G) no tiene ni PCI ni PSC: se rotula con su CID.',
     grupo: 'celdas',
   },
   tramo: {
@@ -101,12 +96,6 @@ export const GLOSARIO = {
       'Intra-frecuencia: cambia de antena en la misma frecuencia (lo más común). Inter-frecuencia: cambia también de frecuencia. Inter-RAT: cambia de tecnología, por ejemplo de 4G a 3G.',
     grupo: 'eventos',
   },
-  ping_pong: {
-    titulo: 'Ping-pong',
-    breve:
-      'El teléfono va a una antena y vuelve enseguida a la anterior (A → B → A). Suele indicar una zona donde la red está mal ajustada.',
-    grupo: 'eventos',
-  },
   confianza: {
     titulo: 'Confianza baja',
     breve:
@@ -116,7 +105,9 @@ export const GLOSARIO = {
   tasa_ho: {
     titulo: 'Handovers por minuto',
     breve:
-      'Traspasos divididos entre la duración del recorrido. Permite comparar recorridos de distinta duración.',
+      'Traspasos divididos entre los minutos de recorrido. Debajo, cuántos fueron dentro de una misma tecnología (LTE: 37) y cuántos de una a otra (LTE→WCDMA: 2).',
+    detalle:
+      'Los minutos son la suma de lo que dura cada sesión, no el tiempo entre una y otra. La flecha va de la tecnología de origen a la de destino.',
     grupo: 'lectura',
   },
   delta: {

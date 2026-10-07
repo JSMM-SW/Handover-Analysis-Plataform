@@ -6,9 +6,10 @@
  * refrescan de más.
  */
 
+import { renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { CAPAS_INICIALES, useVisStore } from './visStore.js';
+import { CAPAS_INICIALES, useFiltros, useFiltrosGraficas, useVisStore } from './visStore.js';
 
 const estado = () => useVisStore.getState();
 
@@ -128,19 +129,25 @@ describe('capas de visualización', () => {
     expect(estado().capas.rsrp_dbm).toBe(true);
     expect(estado().capas.rsrq_db).toBe(true);
     expect(estado().capas.rssnr_db).toBe(true);
-    expect(estado().capas.rscp_dbm).toBe(true);
     expect(estado().capas.rssi_dbm).toBe(true);
     expect(estado().capas.marcadoresHO).toBe(false);
   });
 });
 
 describe('detalle y eje de celdas', () => {
-  it('permite elegir el identificador del eje de radiobases', () => {
-    // Decisión D-2: se ofrecen ECI y PCI, con ECI por defecto.
-    expect(estado().ejeCeldas).toBe('celda_clave');
+  it('la secuencia de radiobases ya no tiene selector ECI/PCI: va siempre por PCI/PSC', () => {
+    expect(estado()).not.toHaveProperty('ejeCeldas');
+    expect(estado()).not.toHaveProperty('setEjeCeldas');
+  });
 
-    estado().setEjeCeldas('psc_pci');
-    expect(estado().ejeCeldas).toBe('psc_pci');
+  it('recuerda qué sesiones ya se detectaron, sin duplicados', () => {
+    estado().marcarDetectadas(['a', 'b']);
+    estado().marcarDetectadas(['b', 'c']);
+
+    expect(estado().sesionesDetectadas).toEqual(['a', 'b', 'c']);
+
+    estado().reiniciar();
+    expect(estado().sesionesDetectadas).toEqual([]);
   });
 
   it('la ventana por defecto es de 5 segundos', () => {
@@ -232,5 +239,144 @@ describe('tabla de eventos y detalle', () => {
     estado().seleccionarHandover('ev-1');
 
     expect(estado().tablaColapsada).toBe(true);
+  });
+});
+
+describe('parámetros de la línea de tiempo', () => {
+  it('RSCP no es una capa: no se tiene en cuenta en ningún análisis', () => {
+    estado().activarTodasLasCapas();
+
+    expect(estado().capas).not.toHaveProperty('rscp_dbm');
+    expect(CAPAS_INICIALES).not.toHaveProperty('rscp_dbm');
+  });
+});
+
+describe('estado por defecto de la sección de eventos', () => {
+  it('arranca con la tabla plegada y la selección pendiente', () => {
+    expect(estado().tablaColapsada).toBe(true);
+    expect(estado().seleccionPendiente).toBe(true);
+    expect(estado().handoverSeleccionadoId).toBeNull();
+  });
+
+  it('la selección por defecto respeta que el usuario haya desplegado la tabla', () => {
+    estado().desplegarTabla();
+    estado().seleccionarPorDefecto('ev-1');
+
+    expect(estado().handoverSeleccionadoId).toBe('ev-1');
+    expect(estado().seleccionPendiente).toBe(false);
+    expect(estado().tablaColapsada).toBe(false);
+  });
+
+  it('elegir un evento no toca el zoom de las gráficas', () => {
+    estado().setRangoZoom(['2026-07-01T13:00:00Z', '2026-07-01T13:05:00Z']);
+    estado().seleccionarHandover('ev-1');
+
+    expect(estado().rangoZoom).toEqual(['2026-07-01T13:00:00Z', '2026-07-01T13:05:00Z']);
+  });
+
+  it.each([
+    ['las fechas', () => estado().setRangoFecha('2026-07-01T05:00:00Z', null)],
+    ['la franja horaria', () => estado().setRangoHora('16:00', null)],
+    ['la tecnología', () => estado().toggleTecnologia('LTE')],
+    ['limpiar los filtros', () => estado().limpiarFiltros()],
+  ])('cambiar %s vuelve a dejar pendiente la selección', (_, cambiar) => {
+    estado().seleccionarHandover('ev-1');
+
+    cambiar();
+
+    expect(estado().handoverSeleccionadoId).toBeNull();
+    expect(estado().seleccionPendiente).toBe(true);
+  });
+
+  it('cambiar de sesión vuelve a plegar la tabla', () => {
+    estado().setSesion('sesion-1');
+    estado().desplegarTabla();
+
+    estado().setSesion('sesion-2');
+
+    expect(estado().tablaColapsada).toBe(true);
+    expect(estado().seleccionPendiente).toBe(true);
+  });
+});
+
+describe('filtros al cambiar de sesión', () => {
+  it('se vacían: los días, horas y tecnologías dependen de las sesiones elegidas', () => {
+    estado().setSesion('sesion-1');
+    estado().setRangoFecha('2026-07-01T05:00:00Z', '2026-07-02T04:59:59Z');
+    estado().setRangoHora('16:00', '17:00');
+    estado().toggleTecnologia('LTE');
+
+    estado().toggleSesion('sesion-2');
+
+    expect(estado()).toMatchObject({
+      desde: null,
+      hasta: null,
+      horaInicio: null,
+      horaFin: null,
+      tecnologias: [],
+    });
+  });
+});
+
+describe('sesión en las gráficas', () => {
+  it('con una sola sesión no hay nada que enfocar', () => {
+    estado().setSesion('sesion-1');
+
+    expect(estado().sesionEnfocada).toBeNull();
+  });
+
+  it('con varias, las gráficas enfocan la primera', () => {
+    estado().setSesiones(['a', 'b']);
+
+    expect(estado().sesionEnfocada).toBe('a');
+  });
+
+  it('añadir otra sesión conserva la que ya estaba enfocada', () => {
+    estado().setSesiones(['a', 'b']);
+    estado().setSesionEnfocada('b');
+
+    estado().toggleSesion('c');
+
+    expect(estado().sesionEnfocada).toBe('b');
+  });
+
+  it('quitar la sesión enfocada enfoca la primera que queda', () => {
+    estado().setSesiones(['a', 'b', 'c']);
+    estado().setSesionEnfocada('b');
+
+    estado().toggleSesion('b');
+
+    expect(estado().sesionEnfocada).toBe('a');
+  });
+
+  it('cambiar el enfoque reinicia el zoom', () => {
+    estado().setSesiones(['a', 'b']);
+    estado().setRangoZoom(['2026-07-01T13:00:00Z', '2026-07-01T13:05:00Z']);
+
+    estado().setSesionEnfocada(null);
+
+    expect(estado().sesionEnfocada).toBeNull();
+    expect(estado().rangoZoom).toBeNull();
+  });
+});
+
+describe('filtros de las gráficas', () => {
+  it('con una sesión enfocada solo piden esa; el análisis sigue con todas', () => {
+    estado().setSesiones(['a', 'b']);
+    estado().setSesionEnfocada('b');
+
+    const { result } = renderHook(() => ({ graficas: useFiltrosGraficas(), analisis: useFiltros() }));
+
+    expect(result.current.graficas.sesionIds).toEqual(['b']);
+    expect(result.current.analisis.sesionIds).toEqual(['a', 'b']);
+  });
+
+  it('con «Todas» piden todas las sesiones', () => {
+    estado().setSesiones(['a', 'b']);
+    estado().setSesionEnfocada(null);
+
+    const { result } = renderHook(() => useFiltrosGraficas());
+
+    expect(result.current.sesionIds).toEqual(['a', 'b']);
   });
 });
