@@ -34,6 +34,7 @@ o perjudicó?).
 
 from datetime import date
 from typing import Callable
+from zoneinfo import ZoneInfo
 from app.modules.kpis.repository import KpisRepository
 
 from app.modules.kpis.schemas import (
@@ -78,6 +79,13 @@ DIAS_SEMANA_ORDEN = tuple(range(7))  # 0=Lunes ... 6=Domingo, orden de datetime.
 # usuario, no inventados -- no modificar sin volver a confirmar con él.
 UHO_RSSI_MIN_DBM = -100
 UHO_RSRQ_MIN_DB = -15
+
+# Mismo criterio que ingesta/etl/normalizer.py y kpis/repository.py: los
+# timestamps llegan en UTC, hay que convertirlos antes de clasificar por
+# hora/día/franja -- si no, todo queda desfasado 5 horas respecto a la
+# hora real en Ecuador.
+ZONA_HORARIA_ORIGEN = ZoneInfo("America/Guayaquil")
+
 
 _CONTADOR_VACIO = {"total": 0, "exitosos": 0, "fallidos": 0, "indeterminados": 0, "ping_pongs": 0}
 
@@ -184,13 +192,14 @@ def _detectar_eventos_handover(secuencia: list[tuple]) -> list[dict]:
         celdas_visitadas.append(celda_nueva)
         eventos.append(
             {
-                "timestamp": registro_actual[1],
+                "timestamp": registro_actual[1].astimezone(ZONA_HORARIA_ORIGEN),
                 "celda": celda_nueva,
                 "clasificacion": _clasificar_handover(registro_origen, registro_actual),
                 "uho": _es_uho(registro_origen),
                 "ping_pong": False,  # se completa en la pasada de abajo
             }
         )
+
         celda_actual = celda_nueva
 
     # Ping-pong = patrón A -> B -> A sobre las CELDAS VISITADAS (no sobre la
@@ -229,10 +238,11 @@ def calcular_resumen_kpis(
     fecha_inicio: date,
     fecha_fin: date,
     repositorio: KpisRepository,
-    tecnologia: int | None = None,
-    franja: str | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = None,
+    franja: list[str] | None = None,
+    sesion_label: list[int] | None = None,
 ) -> KpiSummaryResponse:
+
     """Resumen agregado de KPIs de handover para un rango de fechas.
 
     `tasa_handover` = total_ho / total_mediciones: qué tan seguido ocurre un
@@ -282,10 +292,11 @@ def calcular_distribucion_horaria(
     fecha_inicio: date,
     fecha_fin: date,
     repositorio: KpisRepository,
-    tecnologia: int | None = None,
-    franja: str | None = None,
-    sesion_label: int | None = None
+    tecnologia: list[int] | None = None,
+    franja: list[str] | None = None,
+    sesion_label: list[int] | None = None,
 ) -> list[HourlyDistributionResponse]:
+
     """Distribución de eventos de handover por hora del día (0-23), con el
     desglose de las 4 categorías en cada hora -- no solo el total, para que
     el frontend pueda graficar exitosos/fallidos/ping-pong/indeterminados
@@ -312,27 +323,31 @@ def _franja_horaria(hora: int) -> str:
     return "noche"
 
 
-def _filtrar_por_franja(eventos: list[dict], franja: str | None) -> list[dict]:
+def _filtrar_por_franja(eventos: list[dict], franjas: list[str] | None) -> list[dict]:
     """Filtra una lista de eventos de handover ya detectados, quedándose
-    solo con los que ocurrieron dentro de la franja horaria pedida.
+    solo con los que ocurrieron dentro de alguna de las franjas horarias
+    pedidas. Una lista vacía o None se trata como "todas" (sin filtro).
 
     Se aplica DESPUÉS de `_detectar_eventos_handover`, nunca antes: filtrar
     la secuencia cruda de mediciones antes de detectar transiciones podría
     generar handovers falsos entre mediciones que en la realidad no eran
     consecutivas (con huecos de horas fuera de la franja de por medio).
     """
-    if franja is None:
+    if not franjas:
         return eventos
-    return [evento for evento in eventos if _franja_horaria(evento["timestamp"].hour) == franja]
+    conjunto = set(franjas)
+    return [evento for evento in eventos if _franja_horaria(evento["timestamp"].hour) in conjunto]
+
 
 
 def calcular_distribucion_franja_horaria(
     fecha_inicio: date,
     fecha_fin: date,
     repositorio: KpisRepository,
-    tecnologia: int | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = None,
+    sesion_label: list[int] | None = None,
 ) -> list[FranjaHorariaResponse]:
+
     """Igual que `calcular_distribucion_horaria`, pero agrupado en 3 franjas
     en vez de 24 horas individuales."""
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
@@ -355,10 +370,11 @@ def calcular_distribucion_dia_semana(
     fecha_inicio: date,
     fecha_fin: date,
     repositorio: KpisRepository,
-    tecnologia: int | None = None,
-    franja: str | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = None,
+    franja: list[str] | None = None,
+    sesion_label: list[int] | None = None,
 ) -> list[DiaSemanaResponse]:
+
     """Distribución de eventos de handover por día de la semana (Lunes a
     Domingo), con el mismo desglose de categorías que las demás
     distribuciones.
@@ -402,7 +418,7 @@ def _etiqueta_periodo(clave: str, periodo: str) -> str:
     etiqueta legible para mostrar en el eje de la gráfica."""
     if periodo == "diario":
         anio, mes, dia = clave.split("-")
-        return f"{dia}/{mes}"
+        return  f"{dia}/{mes}/{anio[2:]}" 
     if periodo == "semanal":
         anio, semana = clave.split("-W")
         return f"Sem {semana}/{anio}"
@@ -417,10 +433,11 @@ def calcular_tendencia(
     fecha_fin: date,
     repositorio: KpisRepository,
     periodo: str = "diario",
-    tecnologia: int | None = None,
-    franja: str | None = None,
-    sesion_label: int | None = None
+    tecnologia: list[int] | None = None,
+    franja: list[str] | None = None,
+    sesion_label: list[int] | None = None,
 ) -> list[TrendResponse]:
+
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por
     `periodo` (diario/semanal/mensual/anual -- ver `PERIODOS_VALIDOS`).
     """

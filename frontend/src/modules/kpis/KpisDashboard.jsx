@@ -8,7 +8,8 @@ import {
     fetchTrend,
     fetchSesiones,
 } from '../../services/kpisService';
-
+import MultiSelectDropdown from './MultiSelectDropdown';
+import VentanaTemporalSelector from './VentanaTemporalSelector';
 
 import {
     ComposedChart, LineChart, PieChart, Bar, Line, Pie, Cell,
@@ -18,23 +19,84 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import './KpisDashboard.css';
 
+/**
+ * Lee el valor actual de una variable CSS del tema (ej. "--color-exito")
+ * y lo mantiene sincronizado cuando el usuario alterna claro/oscuro.
+ *
+ * Los gráficos de Recharts se dibujan como SVG y reciben sus colores por
+ * atributos (fill/stroke), no por CSS -- los navegadores no resuelven
+ * `var(--token)` de forma confiable ahí (se ve todo en negro), y
+ * html2canvas tampoco sabe interpretar `var(...)` al exportar el PDF.
+ * Por eso se resuelve el valor real (ej. "#34d399") en JavaScript con
+ * `getComputedStyle`, en vez de pasar el string `var(--token)` directo.
+ *
+ * El MutationObserver detecta cuando cambia `data-tema` en <html> (ya sea
+ * por `alternarTema` en App.jsx o por `exportToPDF`, que fuerza el tema
+ * oscuro durante la captura) para recalcular el color.
+ *
+ * @param {string} nombreVariable - nombre de la variable CSS, con "--".
+ * @returns {string} el color ya resuelto (ej. "#34d399").
+ */
+function usarColorDeTema(nombreVariable) {
+    const [color, setColor] = useState('#000000');
+
+    useEffect(() => {
+        const raiz = document.documentElement;
+        const leerColor = () => {
+            const valor = getComputedStyle(raiz).getPropertyValue(nombreVariable).trim();
+            if (valor) setColor(valor);
+        };
+        leerColor();
+
+        const observador = new MutationObserver(leerColor);
+        observador.observe(raiz, { attributes: true, attributeFilter: ['data-tema'] });
+        return () => observador.disconnect();
+    }, [nombreVariable]);
+
+    return color;
+}
+
+/**
+ * Espera a que el navegador pinte dos frames seguidos.
+ *
+ * Al cambiar `data-tema`, el MutationObserver de `usarColorDeTema` agenda
+ * un re-render de React; el primer frame deja que React aplique los nuevos
+ * colores al DOM y el segundo garantiza que el navegador ya los pintó
+ * antes de que html2canvas capture.
+ *
+ * @returns {Promise<void>} se resuelve después del segundo frame.
+ */
+function esperarRepintado() {
+    return new Promise((resolver) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolver()));
+    });
+}
+
 const ETIQUETAS_FRANJA = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noche' };
-const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS' };
+const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS', '3': '2G' };
 const ETIQUETAS_PERIODO = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual', anual: 'Anual' };
-const COLOR_EXITOSO = '#34d399';
-const COLOR_FALLIDO = '#f87171';
-const COLOR_INDETERMINADO = '#9aa2b1';
-const COLOR_PING_PONG = '#fbbf24';
+
+const OPCIONES_TECNOLOGIA = [
+    { value: '1', label: 'LTE / 4G' },
+    { value: '2', label: '3G / UMTS' },
+    { value: '3', label: '2G' },
+    { value: '0', label: 'Sin señal' },
+];
+
+const OPCIONES_FRANJA = [
+    { value: 'manana', label: 'Mañana (06-12)' },
+    { value: 'tarde', label: 'Tarde (12-19)' },
+    { value: 'noche', label: 'Noche (19-06)' },
+];
 
 export default function KpisDashboard() {
     const [startDate, setStartDate] = useState('2026-05-01');
     const [endDate, setEndDate] = useState('2026-05-24');
-    const [tecnologia, setTecnologia] = useState('');
+    const [tecnologias, setTecnologias] = useState([]);
     const [periodo, setPeriodo] = useState('diario');
-    const [franja, setFranja] = useState('');
-    const [sesionLabel, setSesionLabel] = useState('');
+    const [franjas, setFranjas] = useState([]);
+    const [sesionLabels, setSesionLabels] = useState([]);
     const [sesiones, setSesiones] = useState([]);
-
 
     const [summaryData, setSummaryData] = useState(null);
     const [hourlyData, setHourlyData] = useState([]);
@@ -47,18 +109,26 @@ export default function KpisDashboard() {
 
     const dashboardRef = useRef(null);
 
+    const colorExitoso = usarColorDeTema('--color-exito');
+    const colorFallido = usarColorDeTema('--color-error');
+    const colorIndeterminado = usarColorDeTema('--color-texto-tenue');
+    const colorPingPong = usarColorDeTema('--color-advertencia');
+    const colorBorde = usarColorDeTema('--color-borde');
+    const colorTextoTenue = usarColorDeTema('--color-texto-tenue');
+    const colorSuperficie = usarColorDeTema('--color-superficie');
+    const colorTexto = usarColorDeTema('--color-texto');
+
     const loadData = async () => {
         setLoading(true);
         setError(null);
         try {
-                const [summary, hourly, franjaResultado, diaSemana, trend] = await Promise.all([
-                fetchKpiSummary(startDate, endDate, tecnologia, franja, sesionLabel),
-                fetchHourlyDistribution(startDate, endDate, tecnologia, franja, sesionLabel),
-                fetchFranjaHoraria(startDate, endDate, tecnologia, sesionLabel),
-                fetchDistribucionDiaSemana(startDate, endDate, tecnologia, franja, sesionLabel),
-                fetchTrend(startDate, endDate, periodo, tecnologia, franja, sesionLabel),
+            const [summary, hourly, franjaResultado, diaSemana, trend] = await Promise.all([
+                fetchKpiSummary(startDate, endDate, tecnologias, franjas, sesionLabels),
+                fetchHourlyDistribution(startDate, endDate, tecnologias, franjas, sesionLabels),
+                fetchFranjaHoraria(startDate, endDate, tecnologias, sesionLabels),
+                fetchDistribucionDiaSemana(startDate, endDate, tecnologias, franjas, sesionLabels),
+                fetchTrend(startDate, endDate, periodo, tecnologias, franjas, sesionLabels),
             ]);
-
 
             const horaConEtiqueta = hourly.map(item => ({
                 ...item,
@@ -69,12 +139,11 @@ export default function KpisDashboard() {
                 franja_etiqueta: ETIQUETAS_FRANJA[item.franja] ?? item.franja,
             }));
 
-                       setSummaryData(summary);
+            setSummaryData(summary);
             setHourlyData(horaConEtiqueta);
             setFranjaData(franjaConEtiqueta);
             setDiaSemanaData(diaSemana);
             setTrendData(trend);
-
         } catch (err) {
             setError(err.message);
         } finally {
@@ -82,7 +151,7 @@ export default function KpisDashboard() {
         }
     };
 
-      useEffect(() => {
+    useEffect(() => {
         // loadData() llama a setLoading/setError de forma sincrona antes del
         // primer await, que es el patron estandar de fetching de datos (ver
         // "You Might Not Need an Effect" / "Fetching data" en la doc de React).
@@ -91,18 +160,29 @@ export default function KpisDashboard() {
         // cambio mas grande que no corresponde hacer solo para pasar el lint.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         loadData();
-    }, [startDate, endDate, tecnologia, periodo, franja, sesionLabel]);
+    }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
 
     useEffect(() => {
         fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
     }, []);
 
-   
-
+    /**
+     * Genera el PDF del dashboard, siempre con la apariencia del modo oscuro.
+     *
+     * Fuerza temporalmente `data-tema="oscuro"` en <html> para que tanto el
+     * CSS como los colores de Recharts (vía `usarColorDeTema`) se rendericen
+     * en oscuro, captura con html2canvas y luego restaura el tema que tenía
+     * el usuario. Se modifica el atributo directamente (no el estado de
+     * App.jsx) para no persistir el cambio en localStorage.
+     *
+     * @returns {Promise<void>}
+     */
     const exportToPDF = async () => {
         const element = dashboardRef.current;
         if (!element) return;
 
+        const raiz = document.documentElement;
+        const temaAnterior = raiz.dataset.tema;
         const controles = element.querySelector('.kpis-controls');
         const resumenFiltros = element.querySelector('.kpis-filtros-resumen-pdf');
 
@@ -111,28 +191,52 @@ export default function KpisDashboard() {
         // reemplazamos por texto plano solo durante la captura.
         controles.style.display = 'none';
         resumenFiltros.style.display = 'flex';
+        raiz.dataset.tema = 'oscuro';
 
-        const canvas = await html2canvas(element, { backgroundColor: '#0b0d12', scale: 2 });
-        const imgData = canvas.toDataURL('image/png');
+        try {
+            await esperarRepintado();
 
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            // Se lee aquí (y no del hook) porque el valor del hook es el del
+            // render anterior al cambio de tema.
+            const fondoOscuro = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
 
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`Reporte_Handovers_${startDate}_al_${endDate}.pdf`);
+            const canvas = await html2canvas(element, {
+                backgroundColor: fondoOscuro,
+                scale: 2,
+            });
 
-        controles.style.display = 'flex';
-        resumenFiltros.style.display = 'none';
+            const imgData = canvas.toDataURL('image/png');
+
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save(`Reporte_Handovers_${startDate}_al_${endDate}.pdf`);
+        } finally {
+            raiz.dataset.tema = temaAnterior;
+            controles.style.display = 'flex';
+            resumenFiltros.style.display = 'none';
+        }
     };
 
     const hasData = summaryData && summaryData.total_handovers > 0;
 
     const pieData = summaryData ? [
-        { name: 'Exitoso', value: summaryData.exitosos, color: COLOR_EXITOSO },
-        { name: 'Fallido', value: summaryData.fallidos, color: COLOR_FALLIDO },
-        { name: 'Indeterminado', value: summaryData.indeterminados, color: COLOR_INDETERMINADO },
+        { name: 'Exitoso', value: summaryData.exitosos, color: colorExitoso },
+        { name: 'Fallido', value: summaryData.fallidos, color: colorFallido },
+        { name: 'Indeterminado', value: summaryData.indeterminados, color: colorIndeterminado },
     ] : [];
+
+    const opcionesSesion = sesiones.map((sesion) => ({
+        value: String(sesion.sesion_label),
+        label: `${sessionName(sesion)} (${sesion.records_valid} registros)`,
+    }));
+
+    const resumenSeleccion = (seleccion, etiquetas, allLabel = 'Todas') => {
+        if (seleccion.length === 0) return allLabel;
+        return seleccion.map((valor) => etiquetas[valor] ?? valor).join(', ');
+    };
 
     return (
         <div className="kpis-shell" ref={dashboardRef}>
@@ -144,43 +248,35 @@ export default function KpisDashboard() {
                 <div className="kpis-controls">
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Ventana Temporal</span>
-                        <div className="kpis-date-inputs">
-                            <input type="date" className="kpis-input" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                            <span style={{ color: '#9aa2b1', fontSize: '13px' }}>a</span>
-                            <input type="date" className="kpis-input" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-                        </div>
-                    </div>
-                    <div className="kpis-date-filter">
-                        <span className="kpis-date-label">Tecnología</span>
-                        <select className="kpis-input" value={tecnologia} onChange={(e) => setTecnologia(e.target.value)}>
-                            <option value="">Todas</option>
-                            <option value="1">LTE / 4G</option>
-                            <option value="2">3G / UMTS</option>
-                            <option value="0">Sin señal</option>
-                        </select>
-                    </div>
-                    <div className="kpis-date-filter">
-                        <span className="kpis-date-label">Franja Horaria</span>
-                        <select className="kpis-input" value={franja} onChange={(e) => setFranja(e.target.value)}>
-                            <option value="">Todas</option>
-                            <option value="manana">Mañana (06-12)</option>
-                            <option value="tarde">Tarde (12-19)</option>
-                            <option value="noche">Noche (19-06)</option>
-                        </select>
-                    </div>
-                                        <div className="kpis-date-filter">
-                        <span className="kpis-date-label">Sesión</span>
-                        <select className="kpis-input" value={sesionLabel} onChange={(e) => setSesionLabel(e.target.value)}>
-                            <option value="">Todas</option>
-                            {sesiones.map((sesion) => (
-                                                                <option key={sesion.sesion_label} value={sesion.sesion_label}>
-                                    {sessionName(sesion)} ({sesion.records_valid} registros)
-                                </option>
-
-                            ))}
-                        </select>
+                        <VentanaTemporalSelector
+                            periodo={periodo}
+                            startDate={startDate}
+                            endDate={endDate}
+                            onChange={(nuevoInicio, nuevoFin) => {
+                                setStartDate(nuevoInicio);
+                                setEndDate(nuevoFin);
+                            }}
+                        />
                     </div>
 
+                    <MultiSelectDropdown
+                        label="Tecnología"
+                        options={OPCIONES_TECNOLOGIA}
+                        selected={tecnologias}
+                        onChange={setTecnologias}
+                    />
+                    <MultiSelectDropdown
+                        label="Franja Horaria"
+                        options={OPCIONES_FRANJA}
+                        selected={franjas}
+                        onChange={setFranjas}
+                    />
+                    <MultiSelectDropdown
+                        label="Sesión"
+                        options={opcionesSesion}
+                        selected={sesionLabels}
+                        onChange={setSesionLabels}
+                    />
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
@@ -202,10 +298,10 @@ export default function KpisDashboard() {
                     por tener <select>/<input type="date"> nativos. */}
                 <div className="kpis-filtros-resumen-pdf" style={{ display: 'none' }}>
                     <span>Periodo: {startDate} a {endDate}</span>
-                    <span>Tecnología: {ETIQUETAS_TECNOLOGIA[tecnologia] ?? 'Todas'}</span>
-                    <span>Franja horaria: {ETIQUETAS_FRANJA[franja] ?? 'Todas'}</span>
+                    <span>Tecnología: {resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}</span>
+                    <span>Franja horaria: {resumenSeleccion(franjas, ETIQUETAS_FRANJA)}</span>
                     <span>Periodicidad: {ETIQUETAS_PERIODO[periodo]}</span>
-                    <span>Sesión: {sesionLabel ? `#${sesionLabel}` : 'Todas'}</span>
+                    <span>Sesión: {sesionLabels.length === 0 ? 'Todas' : sesionLabels.map((s) => `#${s}`).join(', ')}</span>
                 </div>
             </header>
 
@@ -258,7 +354,7 @@ export default function KpisDashboard() {
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Handover Exitosos</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large" style={{ color: COLOR_EXITOSO }}>{summaryData.tasa_exito}%</span>
+                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{summaryData.tasa_exito}%</span>
                             </div>
                             <p className="kpis-stat-sub">{summaryData.exitosos} handovers exitosos</p>
                         </div>
@@ -270,15 +366,15 @@ export default function KpisDashboard() {
                             <div style={{ height: '280px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={trendData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#262b36" vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line type="monotone" dataKey="exitosos" stroke={COLOR_EXITOSO} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
-                                        <Line type="monotone" dataKey="fallidos" stroke={COLOR_FALLIDO} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
-                                        <Line type="monotone" dataKey="indeterminados" stroke={COLOR_INDETERMINADO} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={COLOR_PING_PONG} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Line type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
+                                        <Line type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
+                                        <Line type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
+                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -294,18 +390,17 @@ export default function KpisDashboard() {
                                                 <Cell key={`cell-${index}`} fill={entry.color} />
                                             ))}
                                         </Pie>
-                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                                     </PieChart>
                                 </ResponsiveContainer>
                                 <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', display: 'block' }}>{summaryData.total_handovers}</span>
-                                    <span style={{ fontSize: '11px', color: '#9aa2b1', textTransform: 'uppercase' }}>Total</span>
+                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{summaryData.total_handovers}</span>
+                                    <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total</span>
                                 </div>
                             </div>
                         </div>
                     </div>
-
 
                     <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
@@ -313,15 +408,15 @@ export default function KpisDashboard() {
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={hourlyData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#262b36" vertical={false} />
-                                        <XAxis dataKey="hora_etiqueta" stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
+                                        <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={COLOR_EXITOSO} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={COLOR_FALLIDO} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={COLOR_INDETERMINADO} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={COLOR_PING_PONG} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
+                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
+                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
+                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
@@ -332,41 +427,40 @@ export default function KpisDashboard() {
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={franjaData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#262b36" vertical={false} />
-                                        <XAxis dataKey="franja_etiqueta" stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
+                                        <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={COLOR_EXITOSO} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={COLOR_FALLIDO} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={COLOR_INDETERMINADO} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={COLOR_PING_PONG} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
+                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
+                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
+                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
-                                        <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
+                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Distribución por Día de la Semana</h3>
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={diaSemanaData}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#262b36" vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke="#9aa2b1" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: '#14171f', borderColor: '#262b36', color: '#fff' }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={COLOR_EXITOSO} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={COLOR_FALLIDO} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={COLOR_INDETERMINADO} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={COLOR_PING_PONG} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
+                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
+                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
+                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
                         </div>
                     </div>
-
                 </>
             )}
         </div>

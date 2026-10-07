@@ -1,49 +1,12 @@
+/* Módulo de ingesta: usa exclusivamente las variables globales de tema
+   definidas en src/index.css (claro por defecto, oscuro con
+   :root[data-tema="oscuro"]), igual que KpisDashboard.css, para que el
+   interruptor de tema de App.jsx aplique a todos los módulos por igual. */
+
 .ingesta-page {
-    --color-bg: #f7f8fa;
-    --color-surface: #ffffff;
-    --color-border: #e5e7eb;
-    --color-text: #111827;
-    --color-text-muted: #6b7280;
-    --color-text-faint: #9ca3af;
-    --color-primary: #2563eb;
-    --color-primary-hover: #1d4ed8;
-    --color-primary-soft: #eff6ff;
-    --color-success: #16a34a;
-    --color-success-soft: #f0fdf4;
-    --color-error: #dc2626;
-    --color-error-soft: #fef2f2;
-    --color-warning: #b45309;
-    --color-warning-soft: #fffbeb;
-    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-    --shadow-md: 0 4px 16px rgba(16, 24, 40, 0.08);
-    --radius: 12px;
-
-    min-height: 100vh;
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: -apple-system, "Segoe UI", Roboto, Inter, Arial, sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-    .ingesta-page {
-        --color-bg: #0b0d12;
-        --color-surface: #14171f;
-        --color-border: #262b36;
-        --color-text: #f3f4f6;
-        --color-text-muted: #9aa2b1;
-        --color-text-faint: #6b7280;
-        --color-primary: #4f8cff;
-        --color-primary-hover: #6ea0ff;
-        --color-primary-soft: rgba(79, 140, 255, 0.12);
-        --color-success: #34d399;
-        --color-success-soft: rgba(52, 211, 153, 0.1);
-        --color-error: #f87171;
-        --color-error-soft: rgba(248, 113, 113, 0.1);
-        --color-warning: #fbbf24;
-        --color-warning-soft: rgba(251, 191, 36, 0.1);
-        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-        --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
-    }
+    background: var(--color-fondo);
+    color: var(--color-texto);
+    font-family: var(--fuente-base);
 }
 
 .ingesta-page * {
@@ -51,69 +14,68 @@
 }
 
 .ingesta-shell {
-    max-width: 720px;
+    max-width: 1200px;
     margin: 0 auto;
-    padding: 48px 24px 80px;
+    padding: 30px;
 }
 
-/* Header */
+/* Encabezado (mismo formato que .kpis-header) */
 .ingesta-header {
-    margin-bottom: 32px;
-}
-
-.ingesta-eyebrow {
-    display: inline-block;
-    font-size: 12px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-primary);
-    background: var(--color-primary-soft);
-    padding: 4px 10px;
-    border-radius: 999px;
-    margin-bottom: 12px;
+    border-bottom: 1px solid var(--color-borde);
+    padding-bottom: 20px;
+    margin-bottom: 24px;
 }
 
 .ingesta-title {
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
-    letter-spacing: -0.02em;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
+    color: var(--color-texto);
 }
 
 .ingesta-subtitle {
-    font-size: 15px;
-    color: var(--color-text-muted);
+    font-size: 14px;
+    color: var(--color-texto-tenue);
     margin: 0;
     line-height: 1.5;
 }
 
-/* Cards */
+/* Tarjetas (mismo formato que .kpis-card) */
 .ingesta-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-sm);
-    padding: 28px;
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: 12px;
+    padding: 20px;
 }
 
 .ingesta-card + .ingesta-card {
-    margin-top: 20px;
+    margin-top: 24px;
 }
 
 .ingesta-card-title {
-    font-size: 16px;
+    font-size: 13px;
     font-weight: 600;
+    color: var(--color-texto-tenue);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
     margin: 0 0 4px;
 }
 
 .ingesta-card-hint {
     font-size: 13px;
-    color: var(--color-text-muted);
-    margin: 0 0 20px;
+    color: var(--color-texto-tenue);
+    margin: 0 0 16px;
 }
 
-/* Dropzone */
+.ingesta-file-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-texto);
+    margin: 0;
+    word-break: break-all;
+}
+
+/* Zona para arrastrar archivos */
 .ingesta-dropzone {
     position: relative;
     display: flex;
@@ -122,29 +84,25 @@
     justify-content: center;
     gap: 10px;
     text-align: center;
-    border: 1.5px dashed var(--color-border);
-    border-radius: var(--radius);
+    border: 1.5px dashed var(--color-borde);
+    border-radius: 12px;
     padding: 32px 20px;
-    background: var(--color-bg);
+    background: var(--color-superficie-hundida);
     transition: border-color 150ms ease, background-color 150ms ease;
     cursor: pointer;
 }
 
 .ingesta-dropzone:hover,
-.ingesta-dropzone:focus-within {
-    border-color: var(--color-primary);
-    background: var(--color-primary-soft);
-}
-
+.ingesta-dropzone:focus-within,
 .ingesta-dropzone.is-dragging {
-    border-color: var(--color-primary);
-    background: var(--color-primary-soft);
+    border-color: var(--color-primario);
+    background: var(--color-primario-suave);
 }
 
 .ingesta-dropzone.has-file {
     border-style: solid;
-    border-color: var(--color-success);
-    background: var(--color-success-soft);
+    border-color: var(--color-exito);
+    background: var(--color-exito-suave);
 }
 
 .ingesta-dropzone input[type="file"] {
@@ -157,50 +115,57 @@
 .ingesta-dropzone-icon {
     width: 36px;
     height: 36px;
-    color: var(--color-text-faint);
+    color: var(--color-texto-debil);
 }
 
 .ingesta-dropzone.has-file .ingesta-dropzone-icon {
-    color: var(--color-success);
+    color: var(--color-exito);
 }
 
 .ingesta-dropzone-text {
     font-size: 14px;
-    color: var(--color-text);
+    color: var(--color-texto);
     font-weight: 500;
 }
 
 .ingesta-dropzone-filename {
     font-size: 14px;
     font-weight: 600;
-    color: var(--color-text);
+    color: var(--color-texto);
     word-break: break-all;
 }
 
 .ingesta-dropzone-hint {
     font-size: 12px;
-    color: var(--color-text-faint);
+    color: var(--color-texto-debil);
 }
 
-/* Button */
+/* Acciones bajo la zona de carga */
+.ingesta-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+/* Botón principal (mismo formato que .kpis-btn-export) */
 .ingesta-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    width: 100%;
-    margin-top: 20px;
-    padding: 12px 20px;
+    padding: 8px 16px;
     font-size: 14px;
     font-weight: 600;
+    font-family: var(--fuente-base);
     white-space: nowrap;
     text-decoration: none;
-    color: #fff;
-    background: var(--color-primary);
+    color: white;
+    background: var(--color-primario);
     border: none;
-    border-radius: 10px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background-color 150ms ease, transform 100ms ease;
+    transition: background-color 150ms ease;
 }
 
 .ingesta-btn svg {
@@ -210,17 +175,28 @@
 }
 
 .ingesta-btn:hover:not(:disabled) {
-    background: var(--color-primary-hover);
-}
-
-.ingesta-btn:active:not(:disabled) {
-    transform: scale(0.99);
+    background: var(--color-primario-hover);
 }
 
 .ingesta-btn:disabled {
-    background: var(--color-border);
-    color: var(--color-text-faint);
+    background: var(--color-borde);
+    color: var(--color-texto-debil);
     cursor: not-allowed;
+}
+
+/* Botón secundario sin fondo ("Quitar selección") */
+.ingesta-btn-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 13px;
+    font-family: var(--fuente-base);
+    color: var(--color-texto-tenue);
+    cursor: pointer;
+}
+
+.ingesta-btn-link:hover {
+    color: var(--color-texto);
 }
 
 .ingesta-spinner {
@@ -239,10 +215,10 @@
     }
 }
 
-/* Steps */
+/* Pasos del pipeline */
 .ingesta-steps {
     list-style: none;
-    margin: 24px 0 0;
+    margin: 20px 0 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -255,7 +231,7 @@
     gap: 12px;
     padding: 8px 4px;
     font-size: 13.5px;
-    color: var(--color-text-muted);
+    color: var(--color-texto-tenue);
 }
 
 .ingesta-step-icon {
@@ -273,37 +249,42 @@
     height: 12px;
 }
 
-.ingesta-step.is-success .ingesta-step-icon {
-    background: var(--color-success-soft);
-    color: var(--color-success);
-}
-
 .ingesta-step.is-success {
-    color: var(--color-text);
+    color: var(--color-texto);
 }
 
-.ingesta-step.is-error .ingesta-step-icon {
-    background: var(--color-error-soft);
-    color: var(--color-error);
+.ingesta-step.is-success .ingesta-step-icon {
+    background: var(--color-exito-suave);
+    color: var(--color-exito);
 }
 
 .ingesta-step.is-error {
     color: var(--color-error);
 }
 
-.ingesta-step.is-pending .ingesta-step-icon {
-    background: var(--color-bg);
-    border: 1.5px solid var(--color-border);
+.ingesta-step.is-error .ingesta-step-icon {
+    background: var(--color-error-suave);
+    color: var(--color-error);
 }
 
-/* Alerts */
+.ingesta-step.is-pending .ingesta-step-icon {
+    background: var(--color-superficie-hundida);
+    border: 1.5px solid var(--color-borde);
+}
+
+/* Alertas */
 .ingesta-alert {
     display: flex;
     gap: 12px;
+    margin-top: 16px;
     padding: 16px 18px;
-    border-radius: var(--radius);
+    border-radius: 10px;
     font-size: 14px;
     line-height: 1.5;
+}
+
+.ingesta-alert p {
+    margin: 0;
 }
 
 .ingesta-alert-icon {
@@ -314,7 +295,7 @@
 }
 
 .ingesta-alert.is-error {
-    background: var(--color-error-soft);
+    background: var(--color-error-suave);
     color: var(--color-error);
 }
 
@@ -323,7 +304,19 @@
     margin: 0 0 2px;
 }
 
-/* Results */
+/* Resultados */
+.ingesta-result {
+    margin-top: 16px;
+}
+
+.ingesta-result-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 4px;
+}
+
 .ingesta-status-pill {
     display: inline-flex;
     align-items: center;
@@ -335,26 +328,18 @@
 }
 
 .ingesta-status-pill.is-completed {
-    background: var(--color-success-soft);
-    color: var(--color-success);
+    background: var(--color-exito-suave);
+    color: var(--color-exito);
 }
 
 .ingesta-status-pill.is-failed {
-    background: var(--color-error-soft);
+    background: var(--color-error-suave);
     color: var(--color-error);
-}
-
-.ingesta-result-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 4px;
 }
 
 .ingesta-result-meta {
     font-size: 12.5px;
-    color: var(--color-text-faint);
+    color: var(--color-texto-debil);
     margin: 0 0 20px;
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -362,12 +347,13 @@
 .ingesta-stat-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    gap: 12px;
     margin-bottom: 8px;
 }
 
 .ingesta-stat {
-    border: 1px solid var(--color-border);
+    background: var(--color-superficie-hundida);
+    border: 1px solid var(--color-borde);
     border-radius: 10px;
     padding: 14px 12px;
     text-align: center;
@@ -376,17 +362,19 @@
 .ingesta-stat-value {
     font-size: 22px;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    color: var(--color-texto);
 }
 
 .ingesta-stat-label {
     font-size: 11.5px;
-    color: var(--color-text-muted);
+    color: var(--color-texto-tenue);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
     margin-top: 2px;
 }
 
 .ingesta-stat.is-valid .ingesta-stat-value {
-    color: var(--color-success);
+    color: var(--color-exito);
 }
 
 .ingesta-stat.is-rejected .ingesta-stat-value {
@@ -398,11 +386,11 @@
 }
 
 .ingesta-section-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--color-text-faint);
+    letter-spacing: 0.4px;
+    color: var(--color-texto-tenue);
     margin: 0 0 10px;
 }
 
@@ -420,22 +408,28 @@
     padding: 10px 12px;
     border-radius: 8px;
     line-height: 1.4;
+    margin: 0;
 }
 
 .ingesta-note.is-warning {
-    background: var(--color-warning-soft);
-    color: var(--color-warning);
+    background: var(--color-advertencia-suave);
+    color: var(--color-advertencia);
+}
+
+.ingesta-note.is-error {
+    background: var(--color-error-suave);
+    color: var(--color-error);
 }
 
 .ingesta-note.is-empty {
-    color: var(--color-text-faint);
+    color: var(--color-texto-debil);
     font-style: italic;
     padding-left: 2px;
 }
 
 @media (max-width: 520px) {
     .ingesta-shell {
-        padding: 32px 16px 60px;
+        padding: 20px 16px;
     }
 
     .ingesta-stat-grid {

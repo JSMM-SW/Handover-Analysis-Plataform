@@ -2,13 +2,20 @@ const URL_BASE = "http://localhost:8000/api/v1/kpis";
 
 /**
  * Arma el query string a partir de un objeto, omitiendo valores vacíos
- * (undefined, null o cadena vacía) -- así los filtros opcionales
- * (tecnologia, periodo) no se mandan cuando el usuario elige "Todas".
+ * (undefined, null, cadena vacía, o arrays vacíos) -- así los filtros
+ * opcionales no se mandan cuando el usuario no seleccionó nada. Si un
+ * valor es un array (tecnologia, franja, sesionLabel -- filtros
+ * multi-selección), repite la clave una vez por elemento
+ * (?tecnologia=1&tecnologia=2), que es como FastAPI espera listas en
+ * query params.
  */
 function construirQueryParams(parametros) {
     const query = new URLSearchParams();
     for (const [clave, valor] of Object.entries(parametros)) {
-        if (valor !== undefined && valor !== null && valor !== '') {
+        if (valor === undefined || valor === null || valor === '') continue;
+        if (Array.isArray(valor)) {
+            valor.forEach((elemento) => query.append(clave, elemento));
+        } else {
             query.append(clave, valor);
         }
     }
@@ -21,28 +28,28 @@ async function obtenerJSON(url, mensajeError) {
     return response.json();
 }
 
-export const fetchKpiSummary = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
+export const fetchKpiSummary = async (startDate, endDate, tecnologias, franjas, sesionLabels) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia: tecnologias, franja: franjas, sesion_label: sesionLabels });
     return obtenerJSON(`${URL_BASE}/summary?${query}`, "Error al cargar el resumen de KPIs");
 };
 
-export const fetchHourlyDistribution = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
+export const fetchHourlyDistribution = async (startDate, endDate, tecnologias, franjas, sesionLabels) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia: tecnologias, franja: franjas, sesion_label: sesionLabels });
     return obtenerJSON(`${URL_BASE}/hourly?${query}`, "Error al cargar la distribución por horas");
 };
 
-export const fetchTrend = async (startDate, endDate, periodo = 'diario', tecnologia, franja, sesionLabel) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, periodo, tecnologia, franja, sesion_label: sesionLabel });
+export const fetchTrend = async (startDate, endDate, periodo = 'diario', tecnologias, franjas, sesionLabels) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, periodo, tecnologia: tecnologias, franja: franjas, sesion_label: sesionLabels });
     return obtenerJSON(`${URL_BASE}/trend?${query}`, "Error al cargar la tendencia");
 };
 
-export const fetchFranjaHoraria = async (startDate, endDate, tecnologia, sesionLabel) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, sesion_label: sesionLabel });
+export const fetchFranjaHoraria = async (startDate, endDate, tecnologias, sesionLabels) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia: tecnologias, sesion_label: sesionLabels });
     return obtenerJSON(`${URL_BASE}/franja-horaria?${query}`, "Error al cargar la distribución por franja horaria");
 };
 
-export const fetchDistribucionDiaSemana = async (startDate, endDate, tecnologia, franja, sesionLabel) => {
-    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia, franja, sesion_label: sesionLabel });
+export const fetchDistribucionDiaSemana = async (startDate, endDate, tecnologias, franjas, sesionLabels) => {
+    const query = construirQueryParams({ start_date: startDate, end_date: endDate, tecnologia: tecnologias, franja: franjas, sesion_label: sesionLabels });
     return obtenerJSON(`${URL_BASE}/dia-semana?${query}`, "Error al cargar la distribución por día de la semana");
 };
 
