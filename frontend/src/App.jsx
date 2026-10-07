@@ -5,6 +5,7 @@ import KpisDashboard from './modules/kpis/KpisDashboard';
 import GeoespacialPage from './modules/visualizacion_geoespacial/GeoespacialPage';
 import VisualizacionTemporalPage from './modules/visualizacion_temporal';
 import './App.css';
+import logo from './assets/logo.png';
 
 const MODULE_PATHS = ['/ingesta', '/kpis', '/geoespacial', '/visualizacion-temporal'];
 const CLAVE_TEMA = 'handover-analysis-tema';
@@ -65,7 +66,8 @@ export default function App() {
     <BrowserRouter>
       <div className="app-layout">
         <aside className="app-sidebar">
-          <div className="app-brand">H<span> / </span>ANALYSIS</div>
+                    <img src={logo} alt="H Analytics" className="app-brand-logo" />
+
           <p>Plataforma de handovers</p>
           <nav aria-label="Menú principal">
             <NavLink to="/ingesta">Ingesta</NavLink>

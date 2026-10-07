@@ -1,7 +1,7 @@
 .app-layout { display: flex; min-height: 100vh; background: var(--color-fondo); }
 .app-sidebar { width: 210px; flex-shrink: 0; background: #142c3e; color: #d4e4ef; padding: 30px 18px; box-sizing: border-box; display: flex; flex-direction: column; }
-.app-brand { font-weight: 800; letter-spacing: 1px; font-size: 18px; color: white; }
-.app-brand span { color: #4ad5b5; }
+.app-brand-logo { display: block; width: 100%; max-width: 160px; height: auto; border-radius: 10px; }
+
 .app-sidebar p, .app-sidebar small { font-size: 11px; color: #9eb4c5; }
 .app-sidebar p { margin: 8px 0 35px; }
 .app-sidebar nav { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
