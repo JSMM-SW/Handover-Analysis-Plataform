@@ -23,6 +23,10 @@ import './KpisDashboard.css';
  * Lee el valor actual de una variable CSS del tema (ej. "--color-exito")
  * y lo mantiene sincronizado cuando el usuario alterna claro/oscuro.
  *
+ * El nombre empieza con "use" (en inglés) a propósito: React exige ese
+ * prefijo en toda función que llame a useState/useEffect para reconocerla
+ * como hook (regla react-hooks/rules-of-hooks del lint).
+ *
  * Los gráficos de Recharts se dibujan como SVG y reciben sus colores por
  * atributos (fill/stroke), no por CSS -- los navegadores no resuelven
  * `var(--token)` de forma confiable ahí (se ve todo en negro), y
@@ -37,7 +41,7 @@ import './KpisDashboard.css';
  * @param {string} nombreVariable - nombre de la variable CSS, con "--".
  * @returns {string} el color ya resuelto (ej. "#34d399").
  */
-function usarColorDeTema(nombreVariable) {
+function useColorDeTema(nombreVariable) {
     const [color, setColor] = useState('#000000');
 
     useEffect(() => {
@@ -59,7 +63,7 @@ function usarColorDeTema(nombreVariable) {
 /**
  * Espera a que el navegador pinte dos frames seguidos.
  *
- * Al cambiar `data-tema`, el MutationObserver de `usarColorDeTema` agenda
+ * Al cambiar `data-tema`, el MutationObserver de `useColorDeTema` agenda
  * un re-render de React; el primer frame deja que React aplique los nuevos
  * colores al DOM y el segundo garantiza que el navegador ya los pintó
  * antes de que html2canvas capture.
@@ -109,57 +113,60 @@ export default function KpisDashboard() {
 
     const dashboardRef = useRef(null);
 
-    const colorExitoso = usarColorDeTema('--color-exito');
-    const colorFallido = usarColorDeTema('--color-error');
-    const colorIndeterminado = usarColorDeTema('--color-texto-tenue');
-    const colorPingPong = usarColorDeTema('--color-advertencia');
-    const colorBorde = usarColorDeTema('--color-borde');
-    const colorTextoTenue = usarColorDeTema('--color-texto-tenue');
-    const colorSuperficie = usarColorDeTema('--color-superficie');
-    const colorTexto = usarColorDeTema('--color-texto');
-
-    const loadData = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const [summary, hourly, franjaResultado, diaSemana, trend] = await Promise.all([
-                fetchKpiSummary(startDate, endDate, tecnologias, franjas, sesionLabels),
-                fetchHourlyDistribution(startDate, endDate, tecnologias, franjas, sesionLabels),
-                fetchFranjaHoraria(startDate, endDate, tecnologias, sesionLabels),
-                fetchDistribucionDiaSemana(startDate, endDate, tecnologias, franjas, sesionLabels),
-                fetchTrend(startDate, endDate, periodo, tecnologias, franjas, sesionLabels),
-            ]);
-
-            const horaConEtiqueta = hourly.map(item => ({
-                ...item,
-                hora_etiqueta: `${String(item.hora).padStart(2, '0')}:00`,
-            }));
-            const franjaConEtiqueta = franjaResultado.map(item => ({
-                ...item,
-                franja_etiqueta: ETIQUETAS_FRANJA[item.franja] ?? item.franja,
-            }));
-
-            setSummaryData(summary);
-            setHourlyData(horaConEtiqueta);
-            setFranjaData(franjaConEtiqueta);
-            setDiaSemanaData(diaSemana);
-            setTrendData(trend);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    const colorExitoso = useColorDeTema('--color-exito');
+    const colorFallido = useColorDeTema('--color-error');
+    const colorIndeterminado = useColorDeTema('--color-texto-tenue');
+    const colorPingPong = useColorDeTema('--color-advertencia');
+    const colorBorde = useColorDeTema('--color-borde');
+    const colorTextoTenue = useColorDeTema('--color-texto-tenue');
+    const colorSuperficie = useColorDeTema('--color-superficie');
+    const colorTexto = useColorDeTema('--color-texto');
 
     useEffect(() => {
-        // loadData() llama a setLoading/setError de forma sincrona antes del
-        // primer await, que es el patron estandar de fetching de datos (ver
-        // "You Might Not Need an Effect" / "Fetching data" en la doc de React).
-        // Una solucion mas "correcta" seria migrar a @tanstack/react-query (ya
-        // disponible en el proyecto gracias al merge con develop), pero es un
-        // cambio mas grande que no corresponde hacer solo para pasar el lint.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        loadData();
+        /**
+         * Consulta en paralelo todos los KPIs del dashboard con los filtros
+         * actuales y guarda los resultados en el estado.
+         *
+         * Vive dentro del efecto (y no en el cuerpo del componente) para que
+         * no sea una dependencia más del useEffect: así el efecto solo se
+         * vuelve a ejecutar cuando cambian los filtros.
+         *
+         * @returns {Promise<void>}
+         */
+        const cargarDatos = async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const [summary, hourly, franjaResultado, diaSemana, trend] = await Promise.all([
+                    fetchKpiSummary(startDate, endDate, tecnologias, franjas, sesionLabels),
+                    fetchHourlyDistribution(startDate, endDate, tecnologias, franjas, sesionLabels),
+                    fetchFranjaHoraria(startDate, endDate, tecnologias, sesionLabels),
+                    fetchDistribucionDiaSemana(startDate, endDate, tecnologias, franjas, sesionLabels),
+                    fetchTrend(startDate, endDate, periodo, tecnologias, franjas, sesionLabels),
+                ]);
+
+                const horaConEtiqueta = hourly.map(item => ({
+                    ...item,
+                    hora_etiqueta: `${String(item.hora).padStart(2, '0')}:00`,
+                }));
+                const franjaConEtiqueta = franjaResultado.map(item => ({
+                    ...item,
+                    franja_etiqueta: ETIQUETAS_FRANJA[item.franja] ?? item.franja,
+                }));
+
+                setSummaryData(summary);
+                setHourlyData(horaConEtiqueta);
+                setFranjaData(franjaConEtiqueta);
+                setDiaSemanaData(diaSemana);
+                setTrendData(trend);
+            } catch (err) {
+                setError(err.message);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        cargarDatos();
     }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
 
     useEffect(() => {
@@ -170,7 +177,7 @@ export default function KpisDashboard() {
      * Genera el PDF del dashboard, siempre con la apariencia del modo oscuro.
      *
      * Fuerza temporalmente `data-tema="oscuro"` en <html> para que tanto el
-     * CSS como los colores de Recharts (vía `usarColorDeTema`) se rendericen
+     * CSS como los colores de Recharts (vía `useColorDeTema`) se rendericen
      * en oscuro, captura con html2canvas y luego restaura el tema que tenía
      * el usuario. Se modifica el atributo directamente (no el estado de
      * App.jsx) para no persistir el cambio en localStorage.
