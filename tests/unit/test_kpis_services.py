@@ -15,7 +15,7 @@ en `test_kpis_reglas.py`; aquí se verifica que los servicios las combinan
 correctamente.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from app.modules.kpis.services import (
@@ -84,9 +84,17 @@ def _medicion(celda: int, instante: datetime, rssi: int | None, rsrq: int | None
 
 
 def _hora(dia: int, hora: int, minuto: int = 0) -> datetime:
-    """Instante UTC de mayo de 2026, para escribir las secuencias de forma
-    compacta."""
-    return datetime(2026, 5, dia, hora, minuto, tzinfo=timezone.utc)
+    """Instante UTC de mayo de 2026 que, tras la conversión a hora local de
+    Ecuador que hace `_detectar_eventos_handover` (resta 5 horas), cae
+    exactamente en `hora`:`minuto` del día `dia`.
+
+    Se le suman 5 horas al construir el UTC (en vez de las 0) para que los
+    escenarios de los tests se puedan seguir escribiendo en términos de
+    "qué hora era en Ecuador" -- `timedelta` resuelve solo el cruce de día
+    cuando `hora + 5 >= 24` (ej. las 21:00 locales nacen como la 01:00/02:00
+    UTC del día siguiente).
+    """
+    return datetime(2026, 5, dia, tzinfo=timezone.utc) + timedelta(hours=hora + 5, minutes=minuto)
 
 
 def _secuencia_escenario() -> list[tuple]:
@@ -100,6 +108,10 @@ def _secuencia_escenario() -> list[tuple]:
     | 13:00 | 2->1  | fallido       | True  (-85, -12)   | Sí        |
     | 20:00 | 1->3  | indeterminado | False (-105, -13)  | No        |
     | 21:00 | 3->4  | indeterminado | None (sin datos)   | No        |
+
+    Las horas de la tabla son hora LOCAL de Ecuador -- `_hora()` ya se
+    encarga de construir el UTC correcto para que caigan ahí tras la
+    conversión del servicio.
     """
     return [
         _medicion(1, _hora(5, 8, 0), rssi=-95, rsrq=-14),
@@ -172,10 +184,10 @@ def test_resumen_pasa_los_filtros_al_repositorio():
     Tecnología y sesión se pasan a ambas consultas."""
     repositorio = RepositorioKpisFalso()
 
-    calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, tecnologia=1, franja="tarde", sesion_label=7)
+    calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, tecnologia=[1], franja=["tarde"], sesion_label=[7])
 
-    assert repositorio.llamadas["obtener_secuencia_completa"] == (FECHA_INICIO, FECHA_FIN, 1, 7)
-    assert repositorio.llamadas["contar_mediciones"] == (FECHA_INICIO, FECHA_FIN, 1, "tarde", 7)
+    assert repositorio.llamadas["obtener_secuencia_completa"] == (FECHA_INICIO, FECHA_FIN, [1], [7])
+    assert repositorio.llamadas["contar_mediciones"] == (FECHA_INICIO, FECHA_FIN, [1], ["tarde"], [7])
 
 
 def test_resumen_con_franja_cuenta_solo_los_eventos_de_esa_franja():
@@ -183,7 +195,7 @@ def test_resumen_con_franja_cuenta_solo_los_eventos_de_esa_franja():
     21:00 del escenario."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario(), total_mediciones=4)
 
-    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, franja="noche")
+    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, franja=["noche"])
 
     assert resumen.total_handovers == 2
     assert resumen.indeterminados == 2
@@ -202,7 +214,7 @@ def test_resumen_franja_se_aplica_despues_de_detectar_no_antes():
     ]
     repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=2)
 
-    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, franja="noche")
+    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, franja=["noche"])
 
     assert resumen.total_handovers == 0
 
@@ -233,7 +245,7 @@ def test_distribucion_horaria_respeta_el_filtro_de_franja():
     """Con franja 'manana' solo queda el handover de las 08:00."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
-    distribucion = calcular_distribucion_horaria(FECHA_INICIO, FECHA_FIN, repositorio, franja="manana")
+    distribucion = calcular_distribucion_horaria(FECHA_INICIO, FECHA_FIN, repositorio, franja=["manana"])
 
     assert sum(item.total for item in distribucion) == 1
     assert distribucion[8].total == 1
@@ -291,7 +303,7 @@ def test_distribucion_dia_semana_respeta_el_filtro_de_franja():
     filtro global de franja horaria."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
-    distribucion = calcular_distribucion_dia_semana(FECHA_INICIO, FECHA_FIN, repositorio, franja="tarde")
+    distribucion = calcular_distribucion_dia_semana(FECHA_INICIO, FECHA_FIN, repositorio, franja=["tarde"])
 
     assert distribucion[1].total == 1
     assert distribucion[1].fallidos == 1
@@ -320,8 +332,8 @@ def test_tendencia_diaria_un_punto_por_dia_ordenado():
     tendencia = calcular_tendencia(FECHA_INICIO, FECHA_FIN, repositorio, periodo="diario")
 
     assert [(punto.periodo, punto.etiqueta) for punto in tendencia] == [
-        ("2026-05-05", "05/05"),
-        ("2026-05-06", "06/05"),
+        ("2026-05-05", "05/05/26"),
+        ("2026-05-06", "06/05/26"),
     ]
     primer_dia, segundo_dia = tendencia
     assert (primer_dia.exitosos, primer_dia.tasa_exito) == (1, 100.0)

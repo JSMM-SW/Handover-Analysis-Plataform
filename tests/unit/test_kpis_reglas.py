@@ -279,7 +279,7 @@ def test_filtrar_por_franja_conserva_solo_los_eventos_de_esa_franja():
     18:59."""
     eventos = [{"timestamp": INSTANTE_BASE.replace(hour=hora)} for hora in (3, 9, 12, 18, 19)]
 
-    filtrados = _filtrar_por_franja(eventos, "tarde")
+    filtrados = _filtrar_por_franja(eventos, ["tarde"])
 
     assert [evento["timestamp"].hour for evento in filtrados] == [12, 18]
 
@@ -336,7 +336,7 @@ def test_clave_periodo_semanal_usa_calendario_iso_en_cambio_de_anio():
 @pytest.mark.parametrize(
     "clave, periodo, etiqueta_esperada",
     [
-        ("2026-05-05", "diario", "05/05"),
+        ("2026-05-05", "diario", "05/05/26"),
         ("2026-W19", "semanal", "Sem 19/2026"),
         ("2026-05", "mensual", "05/2026"),
         ("2026", "anual", "2026"),

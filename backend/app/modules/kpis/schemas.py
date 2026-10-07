@@ -39,10 +39,16 @@ class KpiSummaryResponse(BaseModel):
         description="total_handovers / total_mediciones (%). Qué tan seguido ocurre un "
         "handover respecto al total de mediciones -- no es una tasa de éxito."
     )
-    exitosos: int = Field(description="Handovers donde mejoraron todos los indicadores de señal disponibles")
-    fallidos: int = Field(description="Handovers donde al menos un indicador disponible no mejoró")
+    exitosos: int = Field(
+        description="Handovers donde NO se cumplió el criterio PHD: rssi_destino > rssi_origen "
+        "y rsrq_destino >= rsrq_origen -- la conexión mejoró o se mantuvo mejor"
+    )
+    fallidos: int = Field(
+        description="Handovers donde SÍ se cumplió el criterio PHD: rssi_destino <= rssi_origen "
+        "o rsrq_destino < rsrq_origen -- la conexión se degradó"
+    )
     indeterminados: int = Field(
-        description="Handovers sin ningún indicador de señal disponible en ambos lados de la "
+        description="Handovers sin RSSI/RSRQ disponibles en ambos lados de la "
         "transición -- no se pueden clasificar como éxito ni fallo"
     )
     tasa_exito: float = Field(
@@ -50,8 +56,10 @@ class KpiSummaryResponse(BaseModel):
         "del denominador a propósito, no hay evidencia para clasificarlos."
     )
     tasa_innecesarios: float = Field(
-        description="fallidos / total_handovers (%). 'Handover innecesario': el salto ocurrió "
-        "pero no mejoró la conexión (mismo concepto que 'fallido', otro nombre para el front)."
+        description="uho_eventos / uho_evaluables (%), según el criterio UHO: el salto no hacía "
+        "falta porque la señal de la celda de ORIGEN ya era buena (RSSI >= -100 dBm y "
+        "RSRQ >= -15 dB). Es independiente de PHD/tasa_exito -- responde si el salto era "
+        "necesario, no si mejoró la señal."
     )
     ping_pongs: int = Field(description="Handovers que formaron parte de un patrón A -> B -> A")
     tasa_hopp: float = Field(description="ping_pongs / total_handovers (%)")
@@ -99,7 +107,7 @@ class TrendResponse(BaseModel):
     agrupada por periodo (diario/semanal/mensual/anual)."""
 
     periodo: str = Field(description="Clave de agrupación técnica, ordenable (ej. '2026-05-06', '2026-W19')")
-    etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05', 'Sem 19/2026')")
+    etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05/26', 'Sem 19/2026')")
     total_handovers: int
     exitosos: int
     fallidos: int
