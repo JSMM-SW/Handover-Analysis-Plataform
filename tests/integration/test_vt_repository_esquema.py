@@ -1,10 +1,12 @@
 """
 Pruebas de integración de la consulta de mediciones contra el esquema real de Supabase (BLQ-21).
 
-Comprueban que el SQL que construye el repositorio es válido para PostgreSQL —sintaxis y tipos
-compatibles en el `UNION ALL`— tanto con el esquema que hoy tiene `handover_record` como con el
-esquema antiguo de `develop`. Se omiten si no hay conexión a la base de datos.
+Comprueban que el SQL que construye el repositorio es válido para PostgreSQL tanto con el esquema
+que hoy tiene `handover_record` como con el esquema antiguo de `develop`. Se omiten si no hay
+conexión a la base de datos.
 """
+
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import text
@@ -65,10 +67,21 @@ def test_la_consulta_con_el_esquema_antiguo_sigue_siendo_valida(db):
 def test_el_repositorio_lista_sesiones_reales_con_nombre_legible(db):
     invalidar_cache_esquema()
     sesiones = VisualizacionTemporalRepository(db).listar_sesiones()
-    reales = [s for s in sesiones if s["origen"] == "real"]
 
-    if not reales:
+    if not sesiones:
         pytest.skip("No hay sesiones del ETL cargadas")
 
-    assert all(s["sesion_nombre"] for s in reales)
-    assert all(s["n_celdas"] > 0 for s in reales)
+    assert all(s["sesion_nombre"] for s in sesiones)
+    assert all(s["n_celdas"] > 0 for s in sesiones)
+
+
+def test_la_tabla_de_eventos_se_lee_sin_vistas(db):
+    """BLQ-23: la tabla de eventos no depende de `v_vt_evento_detalle` ni de ninguna vista."""
+    sesiones = VisualizacionTemporalRepository(db).listar_sesiones()
+    if not sesiones:
+        pytest.skip("No hay sesiones del ETL cargadas")
+
+    filtros = SimpleNamespace(sesion_ids=[str(sesiones[0]["sesion_id"])])
+    total, filas = VisualizacionTemporalRepository(db).listar_handovers(filtros, page_size=5)
+
+    assert total >= len(filas)

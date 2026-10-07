@@ -4,30 +4,13 @@
  * Un `<select multiple>` nativo obliga a usar Ctrl+clic, algo que casi nadie descubre solo. Aquí
  * se abre una lista con casillas: un clic añade o quita una sesión, y el botón resume lo elegido.
  *
- * Muchas sesiones comparten nombre (el mismo archivo cargado varias veces), así que cada opción
- * muestra además el inicio del identificador para poder distinguirlas.
+ * Cada opción muestra **solo el nombre de la sesión**. La fecha, las mediciones y los handovers
+ * de cada una se ven después en el resumen y en el calendario de los filtros.
  */
 
 import { IconoCerrar } from './Iconos.jsx';
 import { sessionName } from '../../../shared/sessionNames';
 import { useDesplegable } from '../hooks/useInterfaz.js';
-
-/** Fecha legible del inicio de la sesión. */
-function fechaSesion(sesion) {
-  return sesion.inicio
-    ? new Date(sesion.inicio).toLocaleDateString('es-EC', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-    : 'sin fecha';
-}
-
-/** Nombre legible de una sesión: los nombres se repiten, así que se acompaña de la fecha. */
-function etiquetaSesion(sesion) {
-  const nombre = sessionName(sesion);
-  return `${nombre} · ${fechaSesion(sesion)} · ${sesion.n_mediciones.toLocaleString('es-EC')} mediciones`;
-}
 
 /**
  * @param {Object} props
@@ -55,7 +38,7 @@ export default function SelectorSesiones({
     : elegidas.length === 0
       ? 'Selecciona una o varias sesiones…'
       : elegidas.length === 1
-        ? etiquetaSesion(elegidas[0])
+        ? sessionName(elegidas[0])
         : `${elegidas.length} sesiones seleccionadas`;
 
   return (
@@ -106,15 +89,7 @@ export default function SelectorSesiones({
                       checked={marcada}
                       onChange={() => onAlternar(sesion.sesion_id)}
                     />
-                    <span className="vt-multiselect__texto">
-                      <span className="vt-multiselect__nombre">
-                        {sessionName(sesion)}
-                      </span>
-                      <span className="vt-multiselect__meta">
-                        {fechaSesion(sesion)} · {sesion.n_mediciones.toLocaleString('es-EC')}{' '}
-                        mediciones · {sesion.n_handovers} HO · id {sesion.sesion_id.slice(0, 8)}
-                      </span>
-                    </span>
+                    <span className="vt-multiselect__nombre">{sessionName(sesion)}</span>
                   </label>
                 </li>
               );

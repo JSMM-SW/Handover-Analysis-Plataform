@@ -10,9 +10,11 @@ Nota sobre los parámetros RF: los cinco (`rsrp_dbm`, `rsrq_db`, `rssnr_db`, `rs
 2147483647 de la aplicación de medición (decisión D-5).
 """
 
-from datetime import datetime, time
+import re
+from datetime import date, datetime, time
 from enum import Enum
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -186,12 +188,19 @@ class ParametroRF(str, Enum):
     RSSI = "rssi_dbm"
 
 
-class Tecnologia(str, Enum):
-    """Tecnología de acceso radio, tal como la reporta la aplicación de medición."""
+#: Forma admitida para una tecnología. Los valores **no se fijan en el código**: la interfaz
+#: ofrece los que hay en la base (`GET /disponibilidad`), y uno que no aparezca en los datos
+#: simplemente no deja pasar ninguna fila. El patrón solo descarta entradas sin sentido.
+_PATRON_TECNOLOGIA = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_+\-]{0,19}$")
 
-    LTE = "LTE"
-    WCDMA = "WCDMA"
-    GSM = "GSM"
+
+def zona_horaria_valida(nombre: str) -> bool:
+    """Indica si `nombre` es una zona IANA conocida (p. ej. 'America/Guayaquil')."""
+    try:
+        ZoneInfo(nombre)
+    except (ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
 
 
 class EjeCelda(str, Enum):
@@ -232,8 +241,15 @@ class FiltrosTemporales(BaseModel):
         default=None, description="Filtro de hora del día; se aplica a cada día del rango."
     )
     hora_fin: time | None = Field(default=None, description="Ídem.")
-    tecnologia: list[Tecnologia] = Field(
+    tecnologia: list[str] = Field(
         default_factory=list, description="Tecnologías a incluir. Vacío significa todas."
+    )
+    zona_horaria: str = Field(
+        default="UTC",
+        description=(
+            "Zona IANA en la que el usuario escribe la franja horaria. La base guarda los "
+            "instantes en UTC; sin la zona, las 16:00 de Ecuador se compararían con las 16:00 UTC."
+        ),
     )
 
     @model_validator(mode="after")
@@ -250,6 +266,12 @@ class FiltrosTemporales(BaseModel):
             raise ValueError("Rango inválido: 'desde' es posterior a 'hasta'.")
         if self.hora_inicio and self.hora_fin and self.hora_inicio >= self.hora_fin:
             raise ValueError("Rango horario inválido: 'hora_inicio' no es anterior a 'hora_fin'.")
+
+        invalidas = [t for t in self.tecnologia if not _PATRON_TECNOLOGIA.match(str(t))]
+        if invalidas:
+            raise ValueError(f"Tecnología no válida: {', '.join(map(str, invalidas))}.")
+        if not zona_horaria_valida(self.zona_horaria):
+            raise ValueError(f"Zona horaria desconocida: '{self.zona_horaria}'.")
         return self
 
 
@@ -259,15 +281,14 @@ class SesionOut(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "sesion_id": "11111111-1111-4111-8111-111111111111",
-                "sesion_nombre": "Session_S1_20260701_080000",
-                "inicio": "2026-07-01T13:00:00Z",
-                "fin": "2026-07-01T13:10:29Z",
-                "n_mediciones": 600,
-                "n_celdas": 8,
-                "tecnologias": ["LTE", "WCDMA"],
-                "origen": "sintetico",
-                "n_handovers": 8,
+                "sesion_id": "46bd7c25-3a0a-4ff0-b301-1221d5adb1c6",
+                "sesion_nombre": "Sesión 134 · Session_32_20260928_162453.csv",
+                "inicio": "2026-09-28T21:24:53Z",
+                "fin": "2026-09-28T21:45:43Z",
+                "n_mediciones": 1217,
+                "n_celdas": 24,
+                "tecnologias": ["LTE"],
+                "n_handovers": 39,
             }
         }
     )
@@ -279,7 +300,6 @@ class SesionOut(BaseModel):
     n_mediciones: int = 0
     n_celdas: int = 0
     tecnologias: list[str] = Field(default_factory=list)
-    origen: str | None = Field(default=None, description="'real' o 'sintetico'.")
     n_handovers: int = 0
 
 
@@ -329,7 +349,14 @@ class TramoCelda(BaseModel):
     inicio: datetime
     fin: datetime
     celda_clave: str
-    etiqueta: str = Field(description="Valor mostrado en el eje según el identificador elegido.")
+    etiqueta: str = Field(
+        description=(
+            "Valor mostrado en el eje: la clave de la celda, o «PCI n» / «PSC n» / «<tech> CID n» "
+            "con `eje=psc_pci`."
+        )
+    )
+    sesion_id: str | None = Field(default=None, description="Sesión a la que pertenece el tramo.")
+    sesion_nombre: str | None = None
     cid: int | None = None
     node_id: int | None = None
     psc_pci: int | None = None
@@ -341,8 +368,10 @@ class TramoCelda(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "Altura estable de la celda en el eje Y. Se asigna por orden de primera aparición, "
-            "de modo que una celda quede siempre a la misma altura aunque cambien los filtros."
+            "Altura estable en el eje Y, una por rótulo (`etiqueta`): por celda con "
+            "`eje=celda_clave` y por PCI/PSC con `eje=psc_pci`. Se asigna por orden de primera "
+            "aparición, de modo que un rótulo quede siempre a la misma altura aunque cambien los "
+            "filtros."
         ),
     )
 
@@ -417,12 +446,29 @@ class ResumenOut(BaseModel):
 class CeldaRepetida(BaseModel):
     """Una celda y cuántas veces se ha vuelto a ella (HU-C2-008)."""
 
-    celda_clave: str
+    celda_clave: str = Field(
+        description="Celda; con `eje=psc_pci`, la primera de las que comparten el PCI/PSC."
+    )
+    etiqueta: str = Field(
+        default="",
+        description="Rótulo físico: «PCI n» (LTE), «PSC n» (WCDMA), «GSM CID n», «Sin PCI» o «Sin PSC».",
+    )
     cid: int | None = None
     node_id: int | None = None
     psc_pci: int | None = None
     tech: str | None = None
-    n_visitas: int = Field(description="Tramos distintos en los que esta celda fue la servidora.")
+    arfcn: int | None = Field(default=None, description="Canal de la primera celda.")
+    celdas_incluidas: list[str] = Field(
+        default_factory=list,
+        description="Celdas que suman en esta barra (varias si comparten PCI/PSC).",
+    )
+    canales: list[int] = Field(default_factory=list, description="Canales de esas celdas.")
+    n_visitas: int = Field(
+        description=(
+            "Veces que el terminal volvió: tramos de la celda, o rachas seguidas del mismo "
+            "PCI/PSC con `eje=psc_pci`."
+        )
+    )
     n_mediciones: int = 0
     tiempo_total_s: float = 0.0
 
@@ -432,6 +478,11 @@ class BinIntervalo(BaseModel):
 
     inicio: datetime | None = None
     fin: datetime | None = None
+    sesion_id: str | None = Field(
+        default=None,
+        description="Sesión a la que pertenece el intervalo. Nulo en el total, que las junta todas.",
+    )
+    sesion_nombre: str | None = None
     celdas: list[CeldaRepetida] = Field(default_factory=list)
 
 
@@ -439,6 +490,70 @@ class CeldasRepetidasOut(BaseModel):
     """Distribución de radiobases repetidas (HU-C2-008)."""
 
     intervalo: IntervaloAnalisis = IntervaloAnalisis.TOTAL
+    minutos: int | None = Field(
+        default=None,
+        description="Duración de cada intervalo en minutos. Nulo cuando se analiza el total.",
+    )
+    minutos_max: int = Field(
+        default=0,
+        description=(
+            "Minutos que dura la sesión más larga del rango filtrado: el tope útil del "
+            "deslizador de intervalo, por encima del cual cada sesión cabe en un solo intervalo."
+        ),
+    )
     top: int = 20
+    eje: EjeCelda = EjeCelda.CELDA
     bins: list[BinIntervalo] = Field(default_factory=list)
-    total_celdas: int = 0
+    total_celdas: int = Field(
+        default=0, description="Barras distintas en todo el rango: celdas, o PCI/PSC con `eje=psc_pci`."
+    )
+
+
+# ================================================================================================
+# Disponibilidad de datos — calendario y filtros de la configuración del análisis
+# ================================================================================================
+
+
+class FranjaHoraria(BaseModel):
+    """Tramo continuo del día con mediciones, en la hora local del usuario."""
+
+    inicio: time = Field(description="Primer minuto con mediciones (HH:MM).")
+    fin: time = Field(description="Último minuto con mediciones, incluido (HH:MM).")
+
+
+class DiaDisponible(BaseModel):
+    """Un día con datos de las sesiones elegidas."""
+
+    fecha: date = Field(description="Día en la zona horaria pedida.")
+    n_mediciones: int = 0
+    n_handovers: int = 0
+    franjas: list[FranjaHoraria] = Field(default_factory=list)
+
+
+class DisponibilidadOut(BaseModel):
+    """Qué fechas, horas y tecnologías tienen datos en las sesiones elegidas.
+
+    Alimenta el calendario y los filtros de la configuración del análisis: solo se ofrece lo que
+    existe en la base, para que el usuario no tenga que ir probando día por día.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "zona_horaria": "America/Guayaquil",
+                "dias": [
+                    {
+                        "fecha": "2026-09-28",
+                        "n_mediciones": 1217,
+                        "n_handovers": 39,
+                        "franjas": [{"inicio": "16:24:00", "fin": "16:45:00"}],
+                    }
+                ],
+                "tecnologias": ["LTE"],
+            }
+        }
+    )
+
+    zona_horaria: str
+    dias: list[DiaDisponible] = Field(default_factory=list)
+    tecnologias: list[str] = Field(default_factory=list)

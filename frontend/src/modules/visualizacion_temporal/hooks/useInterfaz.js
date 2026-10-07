@@ -133,47 +133,38 @@ export function useDesplegable() {
 }
 
 /**
- * Abre el calendario (o el reloj) nativo al pulsar **en cualquier parte** del campo, no solo en
- * el icono. `showPicker` puede lanzar si el navegador no lo permite en ese momento: entonces el
- * campo se comporta como siempre y el usuario puede escribir la fecha.
+ * Devuelve `valor` con un pequeño retraso: solo cuando deja de cambiar durante `ms` milisegundos.
+ *
+ * Lo usa el deslizador del histograma: mientras se arrastra, el rótulo se actualiza al instante,
+ * pero la consulta al backend solo sale cuando el usuario se detiene un momento. Sin esto se
+ * lanzaría una petición por cada minuto que cruza la bolita.
  */
-export function abrirSelectorNativo(evento) {
-  try {
-    evento.currentTarget.showPicker?.();
-  } catch {
-    // Sin soporte o sin gesto de usuario válido: no hay nada que hacer.
-  }
+export function useValorDiferido(valor, ms = 250) {
+  const [diferido, setDiferido] = useState(valor);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDiferido(valor), ms);
+    return () => clearTimeout(id);
+  }, [valor, ms]);
+
+  return diferido;
 }
 
 /**
- * Comportamiento de `CampoHora`: texto con marcador de ejemplo mientras está vacío y sin foco;
- * campo de hora nativo en cuanto el usuario lo pulsa o ya tiene un valor.
+ * Indica si un aviso pasajero debe verse: se muestra al aparecer `clave` y se oculta solo
+ * pasados `ms` milisegundos. Una `clave` nueva (otro aviso) lo vuelve a mostrar.
  *
- * El reloj se abre justo después del cambio de tipo (en el siguiente fotograma), porque
- * `showPicker` solo funciona sobre un campo que ya es `type="time"`.
+ * @param {unknown} clave  identifica el aviso actual; `null` si no hay ninguno
+ * @param {number} [ms]
  */
-export function useCampoHora(valor) {
-  const [enfocado, setEnfocado] = useState(false);
-  const referencia = useRef(null);
-
-  const tipo = valor || enfocado ? 'time' : 'text';
+export function useAvisoTemporal(clave, ms = 3000) {
+  const [vencida, setVencida] = useState(null);
 
   useEffect(() => {
-    if (!enfocado) return undefined;
-    const id = requestAnimationFrame(() => {
-      try {
-        referencia.current?.showPicker?.();
-      } catch {
-        // Sin soporte o sin gesto válido: se puede escribir la hora igualmente.
-      }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [enfocado]);
+    if (clave === null || clave === undefined) return undefined;
+    const id = setTimeout(() => setVencida(clave), ms);
+    return () => clearTimeout(id);
+  }, [clave, ms]);
 
-  return {
-    tipo,
-    referencia,
-    alEnfocar: () => setEnfocado(true),
-    alSalir: () => setEnfocado(false),
-  };
+  return clave !== null && clave !== undefined && vencida !== clave;
 }

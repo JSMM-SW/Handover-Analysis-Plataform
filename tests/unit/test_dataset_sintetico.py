@@ -7,8 +7,6 @@ cumplir lo que declara, las pruebas del detector estarían midiendo contra una
 regla equivocada sin que nadie se enterase.
 """
 
-import pathlib
-
 import pytest
 
 from tests.fixtures.dataset_sintetico import (
@@ -22,12 +20,8 @@ from tests.fixtures.dataset_sintetico import (
     TOTAL_MEDICIONES_ESPERADAS,
     celda_por_etiqueta,
     generar_mediciones,
-    generar_sql,
     verificar_coherencia,
 )
-
-RAIZ = pathlib.Path(__file__).resolve().parents[2]
-SQL_DATOS_PRUEBA = RAIZ / "docs" / "sql" / "03_datos_prueba.sql"
 
 
 def test_el_dataset_cumple_lo_que_declara():
@@ -146,29 +140,3 @@ def test_la_degradacion_de_señal_precede_a_cada_handover():
         assert rsrp_al_salir <= rsrp_al_entrar, (
             f"La señal de {evento.origen} no se degrada antes del HO del segundo {evento.segundo}"
         )
-
-
-def test_el_sql_de_datos_de_prueba_esta_sincronizado():
-    """El .sql versionado debe coincidir con lo que produce el generador.
-
-    Si esta prueba falla, regenera el archivo:
-        python -m tests.fixtures.dataset_sintetico
-
-    `docs/sql/` no se versiona (es documentación local del autor), así que en un clon sin esa
-    carpeta la prueba se omite en lugar de fallar.
-    """
-    if not SQL_DATOS_PRUEBA.exists():
-        pytest.skip(f"{SQL_DATOS_PRUEBA} no existe en este entorno (docs/sql/ no se versiona)")
-    assert SQL_DATOS_PRUEBA.read_text(encoding="utf-8") == generar_sql(), (
-        "docs/sql/03_datos_prueba.sql está desactualizado respecto al generador"
-    )
-
-
-def test_el_sql_declara_la_verdad_de_referencia():
-    """El script debe documentar cuántos HO se esperan (criterio de cierre de la Fase 1)."""
-    # Validate the generated script even in clones without the author's local docs/sql/.
-    sql = generar_sql()
-
-    assert f"HANDOVERS ESPERADOS : {TOTAL_HANDOVERS_ESPERADOS}" in sql
-    assert SESION_ID in sql
-    assert "muestras_confirmacion" in sql

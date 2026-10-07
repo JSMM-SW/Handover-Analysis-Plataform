@@ -5,87 +5,74 @@
  * cuenta otra vez. Es lo que revela los patrones de movilidad y las zonas de solapamiento donde
  * proliferan los handovers problemáticos.
  *
+ * El intervalo de análisis se elige **arrastrando una bolita**: a medida que avanza, crecen los
+ * minutos de cada intervalo y el histograma se actualiza; en el extremo derecho se analiza el
+ * recorrido completo. La lógica del deslizador vive en `useHistogramaRepetidas`.
+ *
  * Se dibuja con **barras horizontales** para que los identificadores de celda se lean sin rotar;
  * los que no caben se truncan y el nombre completo aparece al pasar el ratón por el rótulo.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 
 import AyudaContextual from './AyudaContextual.jsx';
 import CampoNumero from './CampoNumero.jsx';
 import { Cargando, ErrorConsulta, SinResultados } from './EstadoConsulta.jsx';
 import { IconoFlechaDerecha, IconoFlechaIzquierda } from './Iconos.jsx';
-import { useCeldasRepetidas } from '../hooks/useDatosVT.js';
+import { useHistogramaRepetidas } from '../hooks/useHistogramaRepetidas.js';
 import {
   altoHistograma,
-  formatearHora,
   indiceDeRotulo,
   useOpcionCeldasRepetidas,
 } from '../hooks/useSeriesEcharts.js';
-import { useVisStore } from '../store/visStore.js';
 
 const ALTO_ESTADO = 220;
 
-/** Intervalos de análisis del CA2 de la historia. */
-const INTERVALOS = [
-  { valor: 'total', etiqueta: 'Total' },
-  { valor: 'hora', etiqueta: 'Por hora' },
-  { valor: '10min', etiqueta: '10 min' },
-  { valor: '5min', etiqueta: '5 min' },
-];
-
 export default function RepeatedCellsHistogram() {
-  const [intervalo, setIntervalo] = useState('total');
   const [top, setTop] = useState(20);
-  const [indiceBin, setIndiceBin] = useState(0);
 
-  const eje = useVisStore((e) => e.ejeCeldas);
   const referencia = useRef(null);
 
-  const { data, isLoading, isError, error, refetch, isFetching, isPlaceholderData } =
-    useCeldasRepetidas({ intervalo, top });
+  const { consulta, celdas, rotulos, deslizador, intervalos } = useHistogramaRepetidas({ top });
+  const { data, isLoading, isError, error, refetch, isFetching, isPlaceholderData } = consulta;
 
-  const bins = useMemo(() => data?.bins ?? [], [data]);
-  const binActual = bins[Math.min(indiceBin, Math.max(bins.length - 1, 0))] ?? null;
-  const celdas = useMemo(() => binActual?.celdas ?? [], [binActual]);
-
-  const opcion = useOpcionCeldasRepetidas({ celdas, eje });
+  const opcion = useOpcionCeldasRepetidas({ celdas, rotulos });
 
   /** Al pasar por un rótulo truncado se abre el tooltip de su barra, con el nombre completo. */
   const alPasarRaton = useCallback(
     (evento) => {
-      const indice = indiceDeRotulo(evento, celdas, eje);
+      const indice = indiceDeRotulo(evento, rotulos);
       if (indice < 0) return;
       referencia.current
         ?.getEchartsInstance?.()
         ?.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: indice });
     },
-    [celdas, eje],
+    [rotulos],
   );
-
-  const cambiarIntervalo = (nuevo) => {
-    setIntervalo(nuevo);
-    setIndiceBin(0); // los bins del intervalo anterior ya no aplican
-  };
 
   return (
     <div className="vt-grafica">
       <div className="vt-barra-herramientas">
-        <span className="vt-barra-herramientas__etiqueta">Intervalo</span>
-        <div className="vt-segmentado" role="group" aria-label="Intervalo de análisis">
-          {INTERVALOS.map((opcionIntervalo) => (
-            <button
-              key={opcionIntervalo.valor}
-              type="button"
-              className={`vt-segmento${intervalo === opcionIntervalo.valor ? ' vt-segmento--activo' : ''}`}
-              onClick={() => cambiarIntervalo(opcionIntervalo.valor)}
-              aria-pressed={intervalo === opcionIntervalo.valor}
-            >
-              {opcionIntervalo.etiqueta}
-            </button>
-          ))}
-        </div>
+        <label className="vt-deslizador">
+          <span className="vt-barra-herramientas__etiqueta">Intervalo</span>
+          <input
+            type="range"
+            className="vt-deslizador__control"
+            min={1}
+            max={deslizador.maximo}
+            step={1}
+            value={deslizador.valor}
+            onChange={(e) => deslizador.mover(Number(e.target.value))}
+            disabled={deslizador.deshabilitado}
+            aria-label="Intervalo de análisis en minutos"
+            aria-valuetext={deslizador.texto}
+            style={{ '--vt-progreso': `${deslizador.progreso}%` }}
+          />
+          <output className="vt-deslizador__valor" aria-live="polite">
+            {deslizador.texto}
+          </output>
+        </label>
 
         <span className="vt-barra-herramientas__separador" aria-hidden="true" />
 
@@ -102,35 +89,33 @@ export default function RepeatedCellsHistogram() {
 
         {data && (
           <span className="vt-grafica__meta">
-            {data.total_celdas} celdas en total
+            {data.total_celdas} PCI/PSC en total
             <AyudaContextual termino="visitas" alineacion="derecha" />
           </span>
         )}
       </div>
 
       {/* Navegación entre intervalos cuando hay más de uno */}
-      {bins.length > 1 && (
+      {intervalos.total > 1 && (
         <div className="vt-paginacion vt-paginacion--compacta">
           <button
             type="button"
             className="vt-boton vt-boton--secundario vt-boton--icono"
-            onClick={() => setIndiceBin((i) => Math.max(0, i - 1))}
-            disabled={indiceBin === 0}
+            onClick={intervalos.irAnterior}
+            disabled={intervalos.indice === 0}
             aria-label="Intervalo anterior"
           >
             <IconoFlechaIzquierda tamano={16} />
           </button>
           <span>
-            Intervalo {indiceBin + 1} de {bins.length}
-            {binActual?.inicio && (
-              <> · {formatearHora(binActual.inicio)} – {formatearHora(binActual.fin)}</>
-            )}
+            Intervalo {intervalos.indice + 1} de {intervalos.total}
+            {intervalos.etiqueta && <> · {intervalos.etiqueta}</>}
           </span>
           <button
             type="button"
             className="vt-boton vt-boton--secundario vt-boton--icono"
-            onClick={() => setIndiceBin((i) => Math.min(bins.length - 1, i + 1))}
-            disabled={indiceBin >= bins.length - 1}
+            onClick={intervalos.irSiguiente}
+            disabled={intervalos.indice >= intervalos.total - 1}
             aria-label="Intervalo siguiente"
           >
             <IconoFlechaDerecha tamano={16} />

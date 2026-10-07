@@ -5,6 +5,7 @@
  */
 
 import { construirQuery, peticion } from './client.js';
+import { zonaHoraria } from '../utils/fechas.js';
 
 /**
  * Traduce los filtros del store al bloque de query params del backend.
@@ -23,12 +24,23 @@ export function filtrosAQuery(filtros = {}) {
     hora_inicio: filtros.horaInicio ?? null,
     hora_fin: filtros.horaFin ?? null,
     tecnologia: filtros.tecnologias ?? [],
+    // La franja horaria se escribe en hora local; el backend la compara en esta zona.
+    zona_horaria: zonaHoraria(),
   };
 }
 
 /** `GET /sesiones` — sesiones disponibles. @returns {Promise<import('../types/index.js').Sesion[]>} */
 export function obtenerSesiones({ signal } = {}) {
   return peticion('/sesiones', { signal });
+}
+
+/**
+ * `GET /disponibilidad` — días, franjas horarias y tecnologías con datos en las sesiones elegidas.
+ * @returns {Promise<import('../types/index.js').Disponibilidad>}
+ */
+export function obtenerDisponibilidad(sesionIds, { signal } = {}) {
+  const query = construirQuery({ sesion_id: sesionIds, zona_horaria: zonaHoraria() });
+  return peticion(`/disponibilidad${query}`, { signal });
 }
 
 /**
@@ -107,9 +119,15 @@ export function obtenerResumen(filtros, { signal } = {}) {
 
 /**
  * `GET /celdas-repetidas` — histograma de radiobases (HU-C2-008).
+ *
+ * `minutos` es la duración de cada intervalo; `null` analiza el total. `eje` decide qué cuenta
+ * cada barra: una celda (`celda_clave`) o un PCI/PSC (`psc_pci`).
  * @returns {Promise<import('../types/index.js').CeldasRepetidas>}
  */
-export function obtenerCeldasRepetidas(filtros, { intervalo = 'total', top = 20, signal } = {}) {
-  const query = construirQuery({ ...filtrosAQuery(filtros), intervalo, top });
+export function obtenerCeldasRepetidas(
+  filtros,
+  { minutos = null, top = 20, eje = 'celda_clave', signal } = {},
+) {
+  const query = construirQuery({ ...filtrosAQuery(filtros), minutos, top, eje });
   return peticion(`/celdas-repetidas${query}`, { signal });
 }

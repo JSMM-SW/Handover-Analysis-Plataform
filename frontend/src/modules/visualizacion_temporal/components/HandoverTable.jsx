@@ -1,9 +1,12 @@
 /**
  * Tabla de eventos de handover — HU-C2-009 y estructura V1 §3.
  *
- * El comportamiento clave está pedido explícitamente en la maqueta: **al hacer clic en una fila el
- * timeline hace zoom automático al evento**. Se implementa escribiendo en el store la selección y
- * el rango de zoom; las gráficas reaccionan solas.
+ * **Arranca plegada y con el primer evento elegido**, de modo que lo primero que se ve es su
+ * detalle con la gráfica PRE/POST. «Desplegar» muestra la tabla completa y oculta el detalle;
+ * elegir una fila vuelve a plegarla con ese evento.
+ *
+ * Elegir un evento **no mueve las gráficas de abajo**: la línea de tiempo y la secuencia de
+ * radiobases siguen mostrando el recorrido completo, con el evento elegido resaltado.
  *
  * Las columnas Δ son de RSRP y RSRQ, no de RSSI y SINR como decía la maqueta original: son los
  * parámetros que el dataset real entrega (decisiones D-1 y D-5). La columna de SINR se muestra
@@ -15,9 +18,9 @@ import { sessionName } from '../../../shared/sessionNames';
 
 import { Cargando, ErrorConsulta, SinResultados } from './EstadoConsulta.jsx';
 import { IconoFlechaDerecha, IconoFlechaIzquierda } from './Iconos.jsx';
-import { useHandovers } from '../hooks/useDatosVT.js';
-import { formatearFechaHora, rangoAlrededorDe } from '../hooks/useSeriesEcharts.js';
-import { useVisStore } from '../store/visStore.js';
+import { useDetectando, useHandovers, useSeleccionPorDefecto } from '../hooks/useDatosVT.js';
+import { formatearFechaHora } from '../hooks/useSeriesEcharts.js';
+import { useFiltros, useVisStore } from '../store/visStore.js';
 import { ETIQUETAS_TIPO_EVENTO, ETIQUETAS_TIPO_EVENTO_CORTAS } from '../types/index.js';
 import { fechaCorta, horaCorta } from '../utils/fechas.js';
 
@@ -60,20 +63,25 @@ const COLUMNAS = [
 ];
 
 export default function HandoverTable() {
-  const [pagina, setPagina] = useState(1);
+  const filtros = useFiltros();
+  // La página pertenece a unos filtros: al cambiarlos se vuelve a la primera, que es donde está
+  // el evento que se elige por defecto.
+  const [paginacion, setPaginacion] = useState({ filtros, pagina: 1 });
+  const pagina = paginacion.filtros === filtros ? paginacion.pagina : 1;
+  const setPagina = (cambio) =>
+    setPaginacion({ filtros, pagina: typeof cambio === 'function' ? cambio(pagina) : cambio });
+
   const [orden, setOrden] = useState({ clave: 'timestamp_evento', ascendente: true });
 
   const seleccionado = useVisStore((e) => e.handoverSeleccionadoId);
   const seleccionarHandover = useVisStore((e) => e.seleccionarHandover);
-  const setRangoZoom = useVisStore((e) => e.setRangoZoom);
-  const ventanaSegundos = useVisStore((e) => e.ventanaSegundos);
   const colapsada = useVisStore((e) => e.tablaColapsada);
   const desplegarTabla = useVisStore((e) => e.desplegarTabla);
   const variasSesiones = useVisStore((e) => e.sesionIds.length > 1);
 
   const filaSeleccionada = useRef(null);
 
-  const { data, isLoading, isError, error, refetch } = useHandovers({
+  const { data, isLoading, isError, error, refetch, isPlaceholderData } = useHandovers({
     page: pagina,
     pageSize: POR_PAGINA,
   });
@@ -96,11 +104,15 @@ export default function HandoverTable() {
     return items;
   }, [data, orden]);
 
-  /** Clic en una fila: selecciona el evento y encuadra el timeline sobre él (V1 §3). */
-  const alSeleccionar = (evento) => {
-    seleccionarHandover(evento.id_evento);
-    setRangoZoom(rangoAlrededorDe(evento.timestamp_evento, ventanaSegundos));
-  };
+  // Mientras se detectan los handovers, la lista que hay en la base va a ser reemplazada: no se
+  // muestra ni se elige nada de ella.
+  const detectando = useDetectando();
+
+  // Por defecto, el primer evento de la lista queda elegido y su detalle a la vista.
+  useSeleccionPorDefecto(eventos[0], Boolean(data) && !isPlaceholderData && !detectando);
+
+  /** Clic en una fila: selecciona el evento y muestra su detalle, sin tocar las gráficas. */
+  const alSeleccionar = (evento) => seleccionarHandover(evento.id_evento);
 
   /**
    * Al desplegar la tabla, la fila del evento que se estaba analizando se lleva a la vista: así
@@ -117,6 +129,7 @@ export default function HandoverTable() {
       actual.clave === clave ? { clave, ascendente: !actual.ascendente } : { clave, ascendente: true },
     );
 
+  if (detectando) return <Cargando mensaje="Detectando handovers…" alto={180} />;
   if (isError) return <ErrorConsulta error={error} onReintentar={refetch} alto={180} />;
   if (isLoading) return <Cargando mensaje="Cargando eventos…" alto={180} />;
 
@@ -124,7 +137,7 @@ export default function HandoverTable() {
     return (
       <SinResultados
         titulo="No hay handovers para estos filtros"
-        mensaje="Si es la primera vez que analizas esta sesión, pulsa «Detectar handovers» en la configuración del análisis."
+        mensaje="Prueba a ampliar las fechas o la franja horaria, o a quitar el filtro de tecnología."
         alto={180}
       />
     );
@@ -150,8 +163,7 @@ export default function HandoverTable() {
 
         {/*
           Lista visual de eventos. Plegada no caben las claves de celda, así que cada evento se
-          reconoce por su número, su hora y el color de su tipo; el ping-pong lleva su marca
-          porque es lo primero que un análisis querrá localizar.
+          reconoce por su número, su hora y el color de su tipo.
         */}
         <ol className="vt-lista-compacta">
           {eventos.map((evento, posicion) => {
@@ -183,11 +195,6 @@ export default function HandoverTable() {
                     >
                       {ETIQUETAS_TIPO_EVENTO_CORTAS[evento.tipo_evento] ?? evento.tipo_evento}
                     </span>
-                    {evento.ping_pong && (
-                      <span className="vt-tipo-corto vt-tipo-corto--pingpong" title="Ping-pong">
-                        PP
-                      </span>
-                    )}
                   </span>
                 </button>
               </li>
@@ -227,7 +234,7 @@ export default function HandoverTable() {
   return (
     <div className="vt-tabla-envoltorio">
       <div className="vt-tabla__barra">
-        <span>{data.total} handovers · clic en una fila para ver su detalle</span>
+        <span>{data.total} handovers · clic en una fila para ver su detalle y su gráfica</span>
       </div>
       <table className="vt-tabla">
         <thead>
@@ -296,7 +303,6 @@ export default function HandoverTable() {
                 <span className={`vt-etiqueta vt-etiqueta--${evento.tipo_evento}`}>
                   {ETIQUETAS_TIPO_EVENTO[evento.tipo_evento] ?? evento.tipo_evento}
                 </span>
-                {evento.ping_pong && <span className="vt-etiqueta vt-etiqueta--pingpong">ping-pong</span>}
                 {evento.confianza === 'baja' && (
                   <span className="vt-etiqueta vt-etiqueta--baja" title="Identidad de celda incompleta">
                     confianza baja

@@ -14,12 +14,10 @@ detector. Si se derivasen del propio algoritmo, la prueba sería una tautología
 afirma "en el segundo 90 la celda servidora pasa de A a B", que es un hecho de construcción del
 dataset, y es el detector quien debe redescubrirlo.
 
-Usos
-----
-1. Fase 2: fixture de las pruebas unitarias de `detector.py`.
-2. Fase 1: fuente de `docs/sql/03_datos_prueba.sql`, que se genera ejecutando este módulo:
-
-       python -m tests.fixtures.dataset_sintetico
+Uso
+---
+Fixture **en memoria** de las pruebas unitarias de `detector.py` y de `services.py`. No se carga
+en la base de datos: la aplicación trabaja solo con las sesiones reales del Módulo 1.
 
 Convenciones
 ------------
@@ -335,119 +333,3 @@ def verificar_coherencia() -> None:
     assert 0 < con_rssnr < len(mediciones), "RSSNR debe estar parcialmente disponible"
 
     assert len({m["celda_clave"] for m in mediciones}) == CELDAS_DISTINTAS_ESPERADAS
-
-
-# --------------------------------------------------------------------------------------------
-# Emisión del SQL de datos de prueba
-# --------------------------------------------------------------------------------------------
-
-
-def _sql_valor(valor) -> str:
-    if valor is None:
-        return "NULL"
-    if isinstance(valor, bool):
-        return "TRUE" if valor else "FALSE"
-    if isinstance(valor, datetime):
-        return f"'{valor.isoformat()}'"
-    if isinstance(valor, str):
-        escapado = valor.replace("'", "''")
-        return f"'{escapado}'"
-    return str(valor)
-
-
-COLUMNAS_SQL = [
-    "report_index", "sesion_id", "sesion_nombre", "timestamp_medicion", "tech", "net_type",
-    "cid", "node_id", "psc_pci", "lac_tac", "arfcn", "band",
-    "rsrp_dbm", "rsrq_db", "rssnr_db", "rscp_dbm", "rssi_dbm",
-    "data_state", "call_state", "gps_fix", "latitud", "longitud", "archivo_origen",
-]
-
-
-def generar_sql() -> str:
-    """Construye el contenido de `docs/sql/03_datos_prueba.sql`."""
-    mediciones = generar_mediciones()
-    con_rssnr = sum(1 for m in mediciones if m["rssnr_db"] is not None)
-    con_rsrq = sum(1 for m in mediciones if m["rsrq_db"] is not None)
-
-    lineas: list[str] = []
-    add = lineas.append
-
-    add("-- =============================================================================")
-    add("-- 03 — Datos de prueba del Módulo 2 (visualización temporal)")
-    add("--")
-    add("-- ARCHIVO GENERADO AUTOMÁTICAMENTE. No editar a mano.")
-    add("--   Fuente: tests/fixtures/dataset_sintetico.py")
-    add("--   Regenerar: python -m tests.fixtures.dataset_sintetico")
-    add("--")
-    add("-- Recorrido sintético de verdad conocida, usado para desarrollar y validar el")
-    add("-- detector sin depender de que el Módulo 1 esté terminado.")
-    add("-- =============================================================================")
-    add("--")
-    add("-- VERDAD DE REFERENCIA")
-    add(f"--   Sesión              : {SESION_NOMBRE}")
-    add(f"--   sesion_id           : {SESION_ID}")
-    add(f"--   Mediciones          : {len(mediciones)} a 1 Hz")
-    add(f"--   Inicio (UTC)        : {INICIO_UTC.isoformat()}")
-    add(f"--   Hueco de captura    : segundos {HUECO_INICIO_S}..{HUECO_FIN_S - 1} "
-        f"({HUECO_FIN_S - HUECO_INICIO_S} s sin datos)")
-    add(f"--   HANDOVERS ESPERADOS : {TOTAL_HANDOVERS_ESPERADOS}")
-    add("--")
-    add("--   Parámetros de detección con los que esta verdad es válida:")
-    add(f"--     muestras_confirmacion = {MUESTRAS_CONFIRMACION}")
-    add(f"--     ventana_ping_pong_s   = {VENTANA_PING_PONG_S}")
-    add(f"--     max_gap_s             = {MAX_GAP_S}   (< 30 s del hueco: por eso el hueco NO")
-    add("--                                      genera evento)")
-    add("--")
-    add("--   #  segundo  origen -> destino   tipo                ping-pong  confianza")
-    add("--   -- -------  -----------------   -----------------   ---------  ---------")
-    for i, evento in enumerate(EVENTOS_ESPERADOS, start=1):
-        add(
-            f"--   {i:<2} {evento.segundo:>7}  {evento.origen:>6} -> {evento.destino:<9}"
-            f" {evento.tipo_evento:<19} {'sí' if evento.ping_pong else 'no':<10} "
-            f"{evento.confianza}"
-        )
-    add("--")
-    add("--   Cobertura de parámetros RF (a propósito, parcial):")
-    add(f"--     rsrp_dbm : {sum(1 for m in mediciones if m['rsrp_dbm'] is not None)}/{len(mediciones)}")
-    add(f"--     rsrq_db  : {con_rsrq}/{len(mediciones)}")
-    add(f"--     rssnr_db : {con_rssnr}/{len(mediciones)}  <- ausente en el tramo final,")
-    add("--                          para ejercitar la ruta \"sin datos válidos\" de la UI")
-    add("-- =============================================================================")
-    add("")
-    add("BEGIN;")
-    add("")
-    add("-- Idempotencia: re-ejecutar el script deja la sesión en el mismo estado.")
-    add(f"DELETE FROM eventos_handover  WHERE sesion_id = '{SESION_ID}';")
-    add(f"DELETE FROM vt_medicion_prueba WHERE sesion_id = '{SESION_ID}';")
-    add("")
-    add(f"INSERT INTO vt_medicion_prueba ({', '.join(COLUMNAS_SQL)}) VALUES")
-
-    filas = [
-        "    (" + ", ".join(_sql_valor(m[col]) for col in COLUMNAS_SQL) + ")"
-        for m in mediciones
-    ]
-    add(",\n".join(filas) + ";")
-    add("")
-    add("COMMIT;")
-    add("")
-    add("-- Verificación posterior (ejecutar aparte):")
-    add(f"--   SELECT count(*) FROM vt_medicion_prueba WHERE sesion_id = '{SESION_ID}';")
-    add(f"--     -> debe devolver {len(mediciones)}")
-    add(f"--   SELECT count(DISTINCT celda_clave) FROM vt_medicion_prueba WHERE sesion_id = '{SESION_ID}';")
-    add(f"--     -> debe devolver {len({m['celda_clave'] for m in mediciones})}")
-    add("")
-    return "\n".join(lineas)
-
-
-if __name__ == "__main__":
-    import pathlib
-
-    verificar_coherencia()
-    destino = pathlib.Path(__file__).resolve().parents[2] / "docs" / "sql" / "03_datos_prueba.sql"
-    destino.write_text(generar_sql(), encoding="utf-8")
-
-    mediciones = generar_mediciones()
-    print(f"OK  {destino}")
-    print(f"    mediciones          : {len(mediciones)}")
-    print(f"    handovers esperados : {TOTAL_HANDOVERS_ESPERADOS}")
-    print(f"    celdas distintas    : {len({m['celda_clave'] for m in mediciones})}")

@@ -110,12 +110,12 @@ export function IconoCerrar(props) {
   );
 }
 
-/** Destello: acción de detectar. */
-export function IconoDestello(props) {
+/** Calendario: campos de fecha. */
+export function IconoCalendario(props) {
   return (
     <Icono {...props}>
-      <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
-      <path d="M19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z" />
+      <rect x="4" y="5.5" width="16" height="14.5" rx="2.5" />
+      <path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" />
     </Icono>
   );
 }

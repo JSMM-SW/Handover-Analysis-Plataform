@@ -11,12 +11,11 @@ import { describe, expect, it } from 'vitest';
 import {
   EJE_POR_PARAMETRO,
   altoHistograma,
-  etiquetaCelda,
   indiceDeRotulo,
+  rotulosCeldas,
   construirMarcadoresHO,
   construirSeriesEcharts,
   instantesConHuecosDatables,
-  rangoAlrededorDe,
 } from './useSeriesEcharts.js';
 
 const RESPUESTA = {
@@ -86,7 +85,7 @@ describe('construirSeriesEcharts', () => {
 
   it('todos los parámetros tienen eje asignado', () => {
     expect(Object.keys(EJE_POR_PARAMETRO).sort()).toEqual(
-      ['rscp_dbm', 'rsrp_dbm', 'rsrq_db', 'rssi_dbm', 'rssnr_db'].sort(),
+      ['rsrp_dbm', 'rsrq_db', 'rssi_dbm', 'rssnr_db'].sort(),
     );
   });
 
@@ -120,7 +119,7 @@ describe('construirSeriesEcharts', () => {
   });
 
   it('ignora un parámetro que el backend no devolvió', () => {
-    const series = construirSeriesEcharts(RESPUESTA, ['rsrp_dbm', 'rscp_dbm']);
+    const series = construirSeriesEcharts(RESPUESTA, ['rsrp_dbm', 'rssi_dbm']);
 
     expect(series.map((s) => s.id)).toEqual(['rsrp_dbm']);
   });
@@ -210,32 +209,6 @@ describe('construirMarcadoresHO', () => {
   });
 });
 
-describe('rangoAlrededorDe', () => {
-  it('centra una ventana simétrica en el evento', () => {
-    const [inicio, fin] = rangoAlrededorDe('2026-07-01T13:00:00Z', 5, 6);
-
-    expect(new Date(inicio).toISOString()).toBe('2026-07-01T12:59:30.000Z');
-    expect(new Date(fin).toISOString()).toBe('2026-07-01T13:00:30.000Z');
-  });
-
-  it('la ventana crece con los segundos de detalle', () => {
-    const corta = rangoAlrededorDe('2026-07-01T13:00:00Z', 5, 6);
-    const larga = rangoAlrededorDe('2026-07-01T13:00:00Z', 30, 6);
-
-    const anchura = ([a, b]) => new Date(b).getTime() - new Date(a).getTime();
-    expect(anchura(larga)).toBeGreaterThan(anchura(corta));
-  });
-
-  it('el evento queda exactamente en el centro', () => {
-    const centro = new Date('2026-07-01T13:00:00Z').getTime();
-    const [inicio, fin] = rangoAlrededorDe('2026-07-01T13:00:00Z', 5);
-
-    const medio = (new Date(inicio).getTime() + new Date(fin).getTime()) / 2;
-    expect(medio).toBe(centro);
-  });
-});
-
-
 describe('instantesConHuecosDatables', () => {
   it('sitúa el corte en el punto medio del hueco', () => {
     const salida = instantesConHuecosDatables([
@@ -263,14 +236,26 @@ describe('instantesConHuecosDatables', () => {
 
 describe('histograma horizontal de radiobases', () => {
   const CELDAS = [
-    { celda_clave: 'LTE:7279051', psc_pci: 283 },
-    { celda_clave: 'WCDMA:13163:30405', psc_pci: null },
+    { celda_clave: 'LTE:7279051', etiqueta: 'PCI 283', arfcn: 700 },
+    { celda_clave: 'GSM:13163:30405', etiqueta: 'GSM CID 30405', arfcn: 62 },
   ];
 
-  it('rotula por PCI solo cuando la celda lo tiene', () => {
-    expect(etiquetaCelda(CELDAS[0], 'psc_pci')).toBe('PCI 283');
-    expect(etiquetaCelda(CELDAS[1], 'psc_pci')).toBe('WCDMA:13163:30405');
-    expect(etiquetaCelda(CELDAS[0])).toBe('LTE:7279051');
+  it('rotula cada barra con el PCI/PSC que envía el backend', () => {
+    expect(rotulosCeldas(CELDAS)).toEqual(['PCI 283', 'GSM CID 30405']);
+  });
+
+  it('no añade el canal: las celdas que comparten PCI ya vienen sumadas en una barra', () => {
+    const agrupada = [
+      {
+        celda_clave: 'LTE:7174347',
+        etiqueta: 'PCI 407',
+        arfcn: 700,
+        celdas_incluidas: ['LTE:7174347', 'LTE:7174354'],
+        canales: [700, 850],
+      },
+    ];
+
+    expect(rotulosCeldas(agrupada)).toEqual(['PCI 407']);
   });
 
   it('el alto crece con el número de celdas y nunca queda aplastado', () => {
@@ -280,11 +265,11 @@ describe('histograma horizontal de radiobases', () => {
 
   it('localiza la barra del rótulo sobre el que pasa el ratón', () => {
     // Es lo que permite ver el nombre completo de una celda truncada.
-    const evento = { componentType: 'yAxis', value: 'WCDMA:13163:30405' };
-    expect(indiceDeRotulo(evento, CELDAS)).toBe(1);
+    const evento = { componentType: 'yAxis', value: 'GSM CID 30405' };
+    expect(indiceDeRotulo(evento, rotulosCeldas(CELDAS))).toBe(1);
   });
 
   it('ignora eventos que no vienen de un rótulo', () => {
-    expect(indiceDeRotulo({ componentType: 'series', value: 2 }, CELDAS)).toBe(-1);
+    expect(indiceDeRotulo({ componentType: 'series', value: 2 }, rotulosCeldas(CELDAS))).toBe(-1);
   });
 });
