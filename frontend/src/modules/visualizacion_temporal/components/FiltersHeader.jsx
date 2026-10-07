@@ -6,26 +6,29 @@
  *
  * Cómo funcionan los filtros de tiempo:
  *
+ * - **Solo se ofrece lo que existe.** El calendario deja elegir únicamente los días con
+ *   mediciones de las sesiones elegidas (los que tienen handovers llevan un punto), la franja
+ *   horaria solo ofrece horas con datos en esos días, y las tecnologías son las que aparecen en
+ *   la base. Todo sale de `GET /disponibilidad` a través de `useFiltrosDisponibles`.
  * - **Fechas «Desde» y «Hasta»** marcan días completos: desde las 00:00 del primero hasta las
- *   23:59:59 del último. Pulsar en cualquier parte del campo abre el calendario.
+ *   23:59:59 del último.
  * - **Franja horaria** acota las horas dentro de esos días. Si no se indica, se analiza el día
- *   entero (00:00 a 23:59); si se indica, se aplica a cada día del rango.
- * - **La fecha se envía con zona.** El usuario piensa en hora local y el backend compara en UTC;
- *   la conversión se hace en `utils/fechas.js`.
+ *   entero; si se indica, se aplica a cada día del rango.
+ * - **Todo va en hora local.** Las fechas se envían como instantes con zona y la franja horaria
+ *   con la zona del navegador, que el backend usa para comparar (`utils/fechas.js`).
  * - **Todo filtro aplicado se ve** como un chip que se quita con un clic.
  */
 
 import { useMemo } from 'react';
 
 import AyudaContextual from './AyudaContextual.jsx';
-import CampoHora from './CampoHora.jsx';
-import { IconoAjustes, IconoCerrar, IconoDestello } from './Iconos.jsx';
+import { IconoAjustes, IconoCerrar } from './Iconos.jsx';
+import SelectorFecha from './SelectorFecha.jsx';
 import SelectorSesiones from './SelectorSesiones.jsx';
-import { useDeteccion, useResumen, useSesiones } from '../hooks/useDatosVT.js';
-import { abrirSelectorNativo } from '../hooks/useInterfaz.js';
+import { useDeteccionAutomatica, useResumen, useSesiones } from '../hooks/useDatosVT.js';
+import { useFiltrosDisponibles } from '../hooks/useFiltrosDisponibles.js';
 import { useVisStore } from '../store/visStore.js';
-import { TECNOLOGIAS } from '../types/index.js';
-import { aFechaLocal, aInstanteUTC, textoFecha } from '../utils/fechas.js';
+import { textoFecha } from '../utils/fechas.js';
 
 export default function FiltersHeader() {
   const sesionIds = useVisStore((e) => e.sesionIds);
@@ -44,13 +47,12 @@ export default function FiltersHeader() {
 
   const { data: sesiones = [], isLoading, isError, error } = useSesiones();
   const resumen = useResumen();
-  const deteccion = useDeteccion();
+  // Los handovers se detectan solos al elegir sesiones: ya no hay botón.
+  const deteccion = useDeteccionAutomatica();
+  const disponibles = useFiltrosDisponibles();
 
   const haySesion = sesionIds.length > 0;
-
-  // Los campos solo muestran la fecha; el store guarda el instante que abarca el día completo.
-  const fechaDesde = aFechaLocal(desde);
-  const fechaHasta = aFechaLocal(hasta);
+  const cargandoDatos = haySesion && disponibles.cargando;
 
   const chips = useMemo(() => {
     const activos = [];
@@ -59,9 +61,9 @@ export default function FiltersHeader() {
     if (hasta)
       activos.push({ clave: 'hasta', texto: `Hasta ${textoFecha(hasta)}`, quitar: () => setRangoFecha(desde, null) });
     if (horaInicio)
-      activos.push({ clave: 'hi', texto: `Desde las ${horaInicio}`, quitar: () => setRangoHora(null, horaFin) });
+      activos.push({ clave: 'hi', texto: `Desde las ${horaInicio.slice(0, 5)}`, quitar: () => setRangoHora(null, horaFin) });
     if (horaFin)
-      activos.push({ clave: 'hf', texto: `Hasta las ${horaFin}`, quitar: () => setRangoHora(horaInicio, null) });
+      activos.push({ clave: 'hf', texto: `Hasta las ${horaFin.slice(0, 5)}`, quitar: () => setRangoHora(horaInicio, null) });
     tecnologias.forEach((t) =>
       activos.push({ clave: `tec-${t}`, texto: t, quitar: () => toggleTecnologia(t) }),
     );
@@ -102,17 +104,6 @@ export default function FiltersHeader() {
                 deshabilitado={isError}
               />
             </div>
-
-            <button
-              type="button"
-              className="vt-boton vt-boton--primario"
-              onClick={() => deteccion.mutate({ sesionIds })}
-              disabled={!haySesion || deteccion.isPending}
-              title="Recorre las mediciones de las sesiones elegidas y detecta los cambios de celda servidora"
-            >
-              <IconoDestello tamano={16} />
-              {deteccion.isPending ? 'Detectando…' : 'Detectar handovers'}
-            </button>
           </div>
         </div>
       </div>
@@ -135,54 +126,68 @@ export default function FiltersHeader() {
           </span>
 
           <div className="vt-filtros__rejilla">
-            <label className="vt-campo">
+            <div className="vt-campo">
               <span className="vt-campo__etiqueta">Desde</span>
-              <input
-                className={`vt-input vt-input--fecha${fechaDesde ? '' : ' vt-input--vacio'}`}
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setRangoFecha(aInstanteUTC(e.target.value, null, 'inicio'), hasta)}
-                onClick={abrirSelectorNativo}
-                aria-label="Fecha de inicio"
-                max={fechaHasta || undefined}
+              <SelectorFecha
+                etiqueta="Fecha de inicio"
+                valor={disponibles.fechaDesde}
+                dias={disponibles.dias}
+                max={disponibles.fechaHasta}
+                onCambio={disponibles.elegirDesde}
+                cargando={cargandoDatos}
               />
-            </label>
+            </div>
 
-            <label className="vt-campo">
+            <div className="vt-campo">
               <span className="vt-campo__etiqueta">Hasta</span>
-              <input
-                className={`vt-input vt-input--fecha${fechaHasta ? '' : ' vt-input--vacio'}`}
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setRangoFecha(desde, aInstanteUTC(e.target.value, null, 'fin'))}
-                onClick={abrirSelectorNativo}
-                aria-label="Fecha de fin"
-                min={fechaDesde || undefined}
+              <SelectorFecha
+                etiqueta="Fecha de fin"
+                valor={disponibles.fechaHasta}
+                dias={disponibles.dias}
+                min={disponibles.fechaDesde}
+                onCambio={disponibles.elegirHasta}
+                cargando={cargandoDatos}
               />
-            </label>
+            </div>
 
             <div className="vt-campo">
               <span className="vt-campo__etiqueta">
                 Franja horaria
                 <AyudaContextual
                   titulo="Franja horaria"
-                  texto="Si no eliges horas, se analiza cada día completo (de 00:00 a 23:59). Si las eliges, solo se analizan esas horas dentro de las fechas seleccionadas."
+                  texto="Si no eliges horas, se analiza cada día completo. Si las eliges, solo se analizan esas horas dentro de las fechas seleccionadas. Solo se ofrecen horas con mediciones."
                 />
               </span>
               <div className="vt-campo__par">
-                <CampoHora
-                  valor={horaInicio}
-                  onCambio={(hora) => setRangoHora(hora, horaFin)}
-                  ejemplo="08:00"
-                  etiqueta="Franja horaria: desde"
-                />
+                <select
+                  className={`vt-select vt-select--hora${horaInicio ? '' : ' vt-input--vacio'}`}
+                  value={horaInicio ?? ''}
+                  onChange={(e) => disponibles.elegirHoraInicio(e.target.value)}
+                  aria-label="Franja horaria: desde"
+                  disabled={!disponibles.horasInicio.length}
+                >
+                  <option value="">Desde…</option>
+                  {disponibles.horasInicio.map((opcion) => (
+                    <option key={opcion.valor} value={opcion.valor}>
+                      {opcion.etiqueta}
+                    </option>
+                  ))}
+                </select>
                 <span className="vt-campo__separador" aria-hidden="true">–</span>
-                <CampoHora
-                  valor={horaFin}
-                  onCambio={(hora) => setRangoHora(horaInicio, hora)}
-                  ejemplo="18:00"
-                  etiqueta="Franja horaria: hasta"
-                />
+                <select
+                  className={`vt-select vt-select--hora${horaFin ? '' : ' vt-input--vacio'}`}
+                  value={horaFin ?? ''}
+                  onChange={(e) => disponibles.elegirHoraFin(e.target.value)}
+                  aria-label="Franja horaria: hasta"
+                  disabled={!disponibles.horasFin.length}
+                >
+                  <option value="">Hasta…</option>
+                  {disponibles.horasFin.map((opcion) => (
+                    <option key={opcion.valor} value={opcion.valor}>
+                      {opcion.etiqueta}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -191,26 +196,33 @@ export default function FiltersHeader() {
                 <span id="vt-etiqueta-tecnologia">Tecnología</span>
                 <AyudaContextual termino="tecnologia" alineacion="derecha" />
               </span>
-              <div
-                className="vt-segmentado vt-segmentado--multiple"
-                role="group"
-                aria-labelledby="vt-etiqueta-tecnologia"
-              >
-                {TECNOLOGIAS.map((t) => (
-                  <label
-                    key={t}
-                    className={`vt-segmento${tecnologias.includes(t) ? ' vt-segmento--activo' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="vt-visualmente-oculto"
-                      checked={tecnologias.includes(t)}
-                      onChange={() => toggleTecnologia(t)}
-                    />
-                    <span>{t}</span>
-                  </label>
-                ))}
-              </div>
+              {disponibles.tecnologias.length ? (
+                <div
+                  className="vt-segmentado vt-segmentado--multiple"
+                  role="group"
+                  aria-labelledby="vt-etiqueta-tecnologia"
+                >
+                  {/* Las que aparecen en los datos de las sesiones elegidas, no una lista fija. */}
+                  {disponibles.tecnologias.map((t) => (
+                    <label
+                      key={t}
+                      className={`vt-segmento${tecnologias.includes(t) ? ' vt-segmento--activo' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="vt-visualmente-oculto"
+                        checked={tecnologias.includes(t)}
+                        onChange={() => toggleTecnologia(t)}
+                      />
+                      <span>{t}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <span className="vt-filtros__vacio">
+                  {cargandoDatos ? 'Cargando…' : haySesion ? 'Sin tecnología registrada' : '—'}
+                </span>
+              )}
             </div>
           </div>
 
@@ -273,17 +285,41 @@ export default function FiltersHeader() {
         </p>
       )}
 
-      {deteccion.isError && (
+      {disponibles.error && (
         <p className="vt-aviso vt-aviso--error" role="alert">
-          La detección falló: {deteccion.error?.message}
+          No se pudieron cargar las fechas con datos: {disponibles.error.message}
         </p>
       )}
 
-      {deteccion.isSuccess && (
+      {deteccion.isPending && (
+        <p className="vt-aviso vt-aviso--info" role="status">
+          Detectando handovers…
+        </p>
+      )}
+
+      {deteccion.fallidas.length > 0 && !deteccion.isPending && (
+        <div className="vt-aviso vt-aviso--error" role="alert">
+          No se pudieron detectar los handovers de{' '}
+          {deteccion.fallidas.length === 1 ? 'una sesión' : `${deteccion.fallidas.length} sesiones`}:{' '}
+          {deteccion.fallidas.map((f) => f.mensaje).join(' · ')}
+          <button
+            type="button"
+            className="vt-boton vt-boton--texto vt-boton--pequeno"
+            onClick={deteccion.reintentar}
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* Total de las sesiones elegidas (lo mismo que la tarjeta «Handovers»); se oculta a los 3 s. */}
+      {deteccion.avisoVisible && deteccion.resumenSeleccion.sesiones > 0 && (
         <p className="vt-aviso vt-aviso--ok" role="status">
-          Detección completada: <strong>{deteccion.data.total_handovers}</strong> handovers
-          {deteccion.data.sesiones > 1 ? ` en ${deteccion.data.sesiones} sesiones` : ''} (
-          {deteccion.data.duracion_ms} ms).
+          Handovers detectados: <strong>{deteccion.resumenSeleccion.total_handovers}</strong>
+          {deteccion.resumenSeleccion.sesiones > 1
+            ? ` en ${deteccion.resumenSeleccion.sesiones} sesiones`
+            : ''}
+          .
         </p>
       )}
     </section>

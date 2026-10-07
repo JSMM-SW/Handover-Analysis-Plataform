@@ -5,18 +5,25 @@
  * (`docs/11-sistema-visual.md`). El recorrido de lectura va de lo general a lo particular:
  *
  * 1. Configuración del análisis (qué sesiones y qué parte).
- * 2. Resumen en tarjetas con su tendencia.
+ * 2. Resumen en tarjetas.
  * 3. Eventos de handover: tabla y detalle en **una misma sección**.
- * 4. Línea de tiempo y secuencia de radiobases, alineadas.
- * 5. Radiobases repetidas.
+ * 4. Con varias sesiones, cuál muestran las gráficas.
+ * 5. Línea de tiempo y secuencia de radiobases, alineadas.
+ * 6. Radiobases repetidas.
  *
- * **Tabla y detalle se alternan, no se apilan.** Elegir un evento pliega la tabla a una lista y
- * muestra el detalle a su lado; «Desplegar» vuelve a la tabla completa y oculta el detalle. Así
- * nunca aparece un detalle suelto más abajo que obligue a desplazarse para encontrarlo.
+ * **Tabla y detalle se alternan, no se apilan.** La sección arranca plegada con el primer evento
+ * elegido y su gráfica a la vista; elegir otro evento muestra el suyo, y «Desplegar» vuelve a la
+ * tabla completa y oculta el detalle. Así nunca aparece un detalle suelto más abajo que obligue a
+ * desplazarse para encontrarlo.
+ *
+ * **Las gráficas de abajo no siguen a la tabla.** Elegir un evento lo resalta en la línea de
+ * tiempo y en la secuencia de radiobases, pero no las amplía: siempre muestran el recorrido
+ * completo, salvo que el usuario haga zoom.
  */
 
 import AyudaContextual from './components/AyudaContextual.jsx';
 import CellSequenceChart from './components/CellSequenceChart.jsx';
+import EnfoqueSesion from './components/EnfoqueSesion.jsx';
 import GlosarioPanel from './components/GlosarioPanel.jsx';
 import HandoverDetailPanel from './components/HandoverDetailPanel.jsx';
 import HandoverTable from './components/HandoverTable.jsx';
@@ -64,7 +71,7 @@ function Bienvenida() {
         <li>
           <span className="vt-bienvenida__numero">2</span>
           <span>
-            Si es la primera vez, pulsa <strong>Detectar handovers</strong>.
+            Los <strong>handovers se detectan solos</strong> al elegir la sesión.
           </span>
         </li>
         <li>
@@ -147,7 +154,7 @@ export default function VisualizacionTemporalPage() {
             ayuda={
               mostrarDetalle
                 ? 'Elige otro evento de la lista o pulsa «Desplegar» para volver a la tabla completa.'
-                : 'Cada fila es un traspaso detectado. Haz clic en una para ver su detalle y ampliar la línea de tiempo sobre él.'
+                : 'Cada fila es un traspaso detectado. Haz clic en una para ver su detalle y su gráfica antes y después del traspaso.'
             }
             termino="handover"
             className={mostrarDetalle ? 'vt-seccion--acento' : ''}
@@ -169,10 +176,12 @@ export default function VisualizacionTemporalPage() {
             </div>
           </Seccion>
 
+          <EnfoqueSesion />
+
           {/* Las gráficas ocupan siempre el ancho completo: comprimirlas las vuelve ilegibles. */}
           <Seccion
             titulo="Línea de tiempo"
-            ayuda="Evolución de la señal durante el recorrido. Cada línea vertical marca un handover."
+            ayuda="Evolución de la señal durante todo el recorrido. Cada línea vertical marca un handover; el elegido en la tabla se resalta en otro color."
             termino="handover"
           >
             <TimelineChart />

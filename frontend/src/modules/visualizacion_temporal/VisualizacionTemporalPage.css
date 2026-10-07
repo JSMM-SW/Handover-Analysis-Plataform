@@ -358,38 +358,16 @@
   cursor: not-allowed;
 }
 
-.vt-input--fecha,
-.vt-input--hora {
-  cursor: pointer;
-}
-
-.vt-input--fecha {
-  width: 100%;
-}
-
-/* Campo vacío: el formato «dd/mm/aaaa» o «--:--» se ve como marcador, en gris tenue. */
-.vt-input--vacio::-webkit-datetime-edit {
-  color: var(--vt-texto-tenue);
-}
-
+/* Campo vacío: el marcador («dd/mm/aaaa», «Desde…») se ve en gris tenue. */
 .vt-input--vacio {
   color: var(--vt-texto-tenue);
 }
 
-.vt-input::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.55;
-}
-
-.vt-input--hora {
-  width: 104px;
-  flex: 0 0 auto;
-}
-
-/* Dentro de la franja horaria los dos relojes reparten el ancho de la columna. */
-.vt-campo__par .vt-input--hora {
+/* Dentro de la franja horaria los dos selectores reparten el ancho de la columna. */
+.vt-select--hora {
   flex: 1 1 0;
   width: auto;
+  min-width: 0;
 }
 
 .vt-input--numero {
@@ -482,7 +460,7 @@
 
 .vt-multiselect__opcion {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -499,26 +477,256 @@
 }
 
 .vt-multiselect__opcion input {
-  margin-top: 3px;
+  margin: 0;
   accent-color: var(--vt-acento-fuerte);
   cursor: pointer;
 }
 
-.vt-multiselect__texto {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .vt-multiselect__nombre {
+  min-width: 0;
   font-size: 0.86rem;
   font-weight: 600;
   color: var(--vt-texto);
 }
 
-.vt-multiselect__meta {
-  font-size: 0.74rem;
+/* ------------------------------------------------- Calendario de días con datos */
+
+.vt-fecha {
+  position: relative;
+  min-width: 0;
+}
+
+.vt-fecha__boton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+
+.vt-fecha__boton .vt-icono {
   color: var(--vt-texto-suave);
+  opacity: 0.8;
+}
+
+.vt-fecha__boton[aria-expanded="true"] {
+  border-color: var(--vt-acento);
+  box-shadow: var(--vt-anillo);
+}
+
+.vt-calendario {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 46;
+  width: 288px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 12px 12px;
+  border: 1px solid var(--vt-borde);
+  border-radius: 12px;
+  background: var(--vt-superficie);
+  box-shadow: var(--vt-sombra-elevada);
+  animation: vt-aparecer 140ms ease-out;
+}
+
+.vt-calendario__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.vt-calendario__mes {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: var(--vt-texto);
+  text-transform: capitalize;
+}
+
+.vt-calendario__rejilla {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.vt-calendario__rejilla th {
+  padding: 4px 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--vt-texto-tenue);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.vt-calendario__rejilla td {
+  padding: 2px;
+  text-align: center;
+}
+
+.vt-calendario__dia {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  max-width: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vt-texto-tenue);
+  font: inherit;
+  font-size: 0.8rem;
+  /* Los días sin datos se ven apagados y no se pueden pulsar. */
+  cursor: not-allowed;
+}
+
+.vt-calendario__dia--disponible {
+  background: var(--vt-acento-tenue);
+  color: var(--vt-acento-fuerte);
+  font-weight: 650;
+  cursor: pointer;
+  transition: background-color var(--vt-transicion), border-color var(--vt-transicion);
+}
+
+.vt-calendario__dia--disponible:hover {
+  border-color: var(--vt-acento);
+}
+
+.vt-calendario__dia--elegido {
+  background: var(--vt-acento-fuerte);
+  color: #fff;
+}
+
+.vt-calendario__dia:focus-visible {
+  outline: none;
+  box-shadow: var(--vt-anillo);
+}
+
+/* Punto verde: ese día tiene handovers detectados. */
+.vt-calendario__punto {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4f9e6f;
+  vertical-align: middle;
+}
+
+.vt-calendario__dia .vt-calendario__punto {
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.vt-calendario__dia--elegido .vt-calendario__punto {
+  background: #fff;
+}
+
+.vt-calendario__pie,
+.vt-calendario__vacio {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  color: var(--vt-texto-suave);
+}
+
+/* ------------------------------------------------- Deslizador */
+
+.vt-deslizador {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+/*
+ * Pista con la parte recorrida en azul y una bolita blanca con borde: se arrastra con el ratón o
+ * con el dedo, y con las flechas del teclado avanza de minuto en minuto.
+ */
+.vt-deslizador__control {
+  --vt-progreso: 100%;
+  flex: 1 1 auto;
+  min-width: 120px;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.vt-deslizador__control:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.vt-deslizador__control::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--vt-acento) var(--vt-progreso),
+    var(--vt-hundido) var(--vt-progreso)
+  );
+}
+
+.vt-deslizador__control::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--vt-hundido);
+}
+
+.vt-deslizador__control::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--vt-acento);
+}
+
+.vt-deslizador__control::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--vt-acento-fuerte);
+  border-radius: 50%;
+  background: var(--vt-superficie);
+  box-shadow: 0 1px 3px rgba(46, 58, 69, 0.25);
+  appearance: none;
+  transition: transform var(--vt-transicion);
+}
+
+.vt-deslizador__control::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--vt-acento-fuerte);
+  border-radius: 50%;
+  background: var(--vt-superficie);
+  box-shadow: 0 1px 3px rgba(46, 58, 69, 0.25);
+}
+
+.vt-deslizador__control:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+.vt-deslizador__control:focus-visible {
+  outline: none;
+}
+
+.vt-deslizador__control:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--vt-anillo);
+}
+
+.vt-deslizador__control:focus-visible::-moz-range-thumb {
+  box-shadow: var(--vt-anillo);
+}
+
+.vt-deslizador__valor {
+  min-width: 9.5em;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--vt-acento-fuerte);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* ------------------------------------------------- Control segmentado */
@@ -900,10 +1108,21 @@ fieldset:disabled .vt-segmento {
   animation: vt-aparecer 180ms ease-out;
 }
 
+.vt-aviso--error .vt-boton {
+  margin-left: 6px;
+  color: inherit;
+}
+
 .vt-aviso--error {
   background: #fbeae5;
   color: #8e3b2a;
   border-color: #f0cfc5;
+}
+
+.vt-aviso--info {
+  background: var(--vt-acento-tenue);
+  color: var(--vt-acento-fuerte);
+  border-color: var(--vt-acento-borde);
 }
 
 .vt-aviso--ok {
@@ -1073,6 +1292,40 @@ fieldset:disabled .vt-segmento {
   color: var(--vt-texto-suave);
 }
 
+/* ------------------------------------------------- Sesión en las gráficas */
+
+.vt-enfoque {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--vt-acento-borde);
+  border-radius: var(--vt-radio);
+  background: var(--vt-acento-tenue);
+  animation: vt-aparecer 240ms ease-out;
+}
+
+.vt-enfoque__titulo {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: var(--vt-texto);
+}
+
+.vt-enfoque__opciones {
+  flex-wrap: wrap;
+  background: var(--vt-superficie);
+}
+
+.vt-enfoque__aviso {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--vt-texto-suave);
+}
+
 /* ------------------------------------------------- Tarjetas de resumen */
 
 .vt-tarjetas {
@@ -1100,7 +1353,7 @@ fieldset:disabled .vt-segmento {
 }
 
 /*
- * Cada tarjeta tiene su propio tono pastel (borde superior, icono y sparkline) para
+ * Cada tarjeta tiene su propio tono pastel (borde superior e icono) para
  * reconocerla de un vistazo. El tono se declara con tres variables que heredan los hijos.
  */
 .vt-tarjeta {
@@ -1146,14 +1399,6 @@ fieldset:disabled .vt-segmento {
   text-overflow: ellipsis;
 }
 
-.vt-tarjeta__cuerpo {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 10px;
-  min-width: 0;
-}
-
 .vt-tarjeta__cifras {
   display: flex;
   flex-direction: column;
@@ -1174,53 +1419,6 @@ fieldset:disabled .vt-segmento {
   font-size: 0.75rem;
   color: var(--vt-texto-suave);
   overflow-wrap: break-word;
-}
-
-/* Si el detalle es largo (desglose por tecnología), el sparkline baja a su propia línea. */
-.vt-tarjeta__cuerpo {
-  flex-wrap: wrap;
-}
-
-.vt-tarjeta__cuerpo .vt-sparkline {
-  margin-left: auto;
-}
-
-/* ------------------------------------------------- Sparklines */
-
-.vt-sparkline {
-  display: block;
-  flex: 0 0 auto;
-  width: 44%;
-  max-width: 110px;
-  height: 32px;
-  overflow: visible;
-}
-
-.vt-sparkline--vacio {
-  height: 32px;
-}
-
-.vt-sparkline__linea {
-  fill: none;
-  stroke: var(--vt-tono, var(--vt-acento));
-  stroke-width: 1.6;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-
-.vt-sparkline__area {
-  fill: var(--vt-tono-tenue, var(--vt-acento-tenue));
-  opacity: 0.8;
-}
-
-.vt-sparkline__barra {
-  fill: var(--vt-tono, var(--vt-acento-borde));
-  opacity: 0.75;
-  transition: fill var(--vt-transicion);
-}
-
-.vt-tarjeta:hover .vt-sparkline__barra {
-  opacity: 1;
 }
 
 /* ============================================================================ 8. Gráficas */
@@ -1565,8 +1763,6 @@ fieldset:disabled .vt-segmento {
 .vt-tipo-corto--inter_frecuencia { background: #f7eddb; color: #6f521a; border-color: #ecdcb9; }
 .vt-etiqueta--inter_rat,
 .vt-tipo-corto--inter_rat { background: #f0e7f0; color: #654a6a; border-color: #e1d2e2; }
-.vt-etiqueta--pingpong,
-.vt-tipo-corto--pingpong { background: #f7e3dc; color: #8e3b2a; border-color: #eecabd; }
 .vt-etiqueta--baja { background: #f4ecdf; color: #66543a; border-color: #e6d8c1; }
 .vt-etiqueta--desconocido,
 .vt-tipo-corto--desconocido { background: var(--vt-hundido); color: var(--vt-texto-suave); border-color: var(--vt-borde); }
@@ -2048,7 +2244,7 @@ html:has(.vt-pagina) {
  *   ≥ 1200 px  Escritorio amplio: 5 tarjetas en fila; lista de eventos junto al detalle.
  *   900–1199   Escritorio estrecho: tarjetas en rejilla automática; detalle bajo la lista.
  *   600–899    Tablet: configuración en panel lateral; tarjetas de dos en dos.
- *   < 600      Móvil: una tarjeta por fila, con el sparkline a la derecha del número.
+ *   < 600      Móvil: una tarjeta por fila.
  */
 
 @media (min-width: 900px) {
@@ -2232,19 +2428,10 @@ html:has(.vt-pagina) {
     gap: 10px;
   }
 
-  /* Una por fila: número a la izquierda y tendencia a la derecha, en una línea compacta. */
+  /* Una por fila, compacta. */
   .vt-tarjeta {
     gap: 8px;
     padding: 14px 16px;
-  }
-
-  .vt-tarjeta__cuerpo {
-    align-items: center;
-  }
-
-  .vt-sparkline {
-    width: 40%;
-    max-width: 140px;
   }
 
   .vt-pagina__acciones {

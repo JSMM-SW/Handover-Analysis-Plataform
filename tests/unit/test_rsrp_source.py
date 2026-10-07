@@ -13,11 +13,11 @@ from app.shared.db.models import HandoverRecord
 
 def test_temporal_uses_strongest_as_rsrp_without_rssi_fallback():
     columns = {'id_registro', 'execution_id', 'timestamp_medicion', 'rssi', 'rsrp'}
-    sql = construir_sql_mediciones(columns, incluir_prueba=False)
+    sql = construir_sql_mediciones(columns)
     assert 'h."rsrp"::smallint AS rsrp_dbm' in sql
     assert 'h."rssi"::smallint AS rssi_dbm' in sql
     assert 'NULL::smallint AS rscp_dbm' in sql
-    sql = construir_sql_mediciones(columns - {'rsrp'}, incluir_prueba=False)
+    sql = construir_sql_mediciones(columns - {'rsrp'})
     assert 'NULL::smallint AS rsrp_dbm' in sql
 
 

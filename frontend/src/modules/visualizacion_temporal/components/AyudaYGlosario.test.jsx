@@ -15,6 +15,11 @@ import { PARAMETROS_RF } from '../types/index.js';
 beforeEach(() => useVisStore.getState().reiniciar());
 
 describe('contenido del glosario', () => {
+  it('no explica lo que la interfaz ya no muestra (ping-pong y RSCP)', () => {
+    expect(GLOSARIO.ping_pong).toBeUndefined();
+    expect(GLOSARIO.rscp_dbm).toBeUndefined();
+  });
+
   it('explica todos los parámetros de radiofrecuencia del módulo', () => {
     // Si se añade un parámetro y no se explica, el docente se encuentra una sigla sin ayuda.
     PARAMETROS_RF.forEach((parametro) => {
@@ -56,7 +61,7 @@ describe('AyudaContextual', () => {
 
   it('se abre con el teclado y se cierra con Escape', async () => {
     const usuario = userEvent.setup();
-    render(<AyudaContextual termino="ping_pong" />);
+    render(<AyudaContextual termino="tipo_evento" />);
 
     await usuario.tab();
     expect(screen.getByRole('tooltip')).toBeInTheDocument();

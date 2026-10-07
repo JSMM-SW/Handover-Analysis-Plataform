@@ -64,13 +64,23 @@ export function textoBreve(iso) {
   });
 }
 
-/** Nombre de la zona horaria del navegador, para poder decírselo al usuario. */
+/**
+ * Zona IANA del navegador (p. ej. 'America/Guayaquil'). Se envía al backend para que compare la
+ * franja horaria y agrupe los días del calendario en la hora que ve el usuario, y no en UTC.
+ */
 export function zonaHoraria() {
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'hora local';
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   } catch {
-    return 'hora local';
+    return 'UTC';
   }
+}
+
+/** De 'AAAA-MM-DD' a 'dd/mm/aaaa', sin pasar por `Date` (que lo interpretaría en UTC). */
+export function textoDia(fecha) {
+  if (!fecha) return '';
+  const [anio, mes, dia] = fecha.split('-');
+  return `${dia}/${mes}/${anio}`;
 }
 
 /** Solo la hora local 'HH:MM:SS', para la lista visual de eventos. */

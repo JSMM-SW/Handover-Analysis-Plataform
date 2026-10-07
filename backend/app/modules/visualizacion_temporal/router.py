@@ -24,6 +24,7 @@ from app.modules.visualizacion_temporal.exceptions import (
 from app.modules.visualizacion_temporal.repository import VisualizacionTemporalRepository
 from app.modules.visualizacion_temporal.schemas import (
     CeldasRepetidasOut,
+    DisponibilidadOut,
     EjeCelda,
     FiltrosTemporales,
     IntervaloAnalisis,
@@ -34,7 +35,6 @@ from app.modules.visualizacion_temporal.schemas import (
     ResumenOut,
     SeriesOut,
     SesionOut,
-    Tecnologia,
     TramosCeldaOut,
     VentanaHandoverOut,
 )
@@ -65,8 +65,19 @@ def filtros_comunes(
         default=None, description="Filtro de hora del día (HH:MM), aplicado a cada día del rango."
     ),
     hora_fin: time | None = Query(default=None, description="Ídem."),
-    tecnologia: list[Tecnologia] = Query(
-        default=[], description="Tecnologías a incluir. Vacío significa todas."
+    tecnologia: list[str] = Query(
+        default=[],
+        description=(
+            "Tecnologías a incluir, tal como aparecen en los datos (`GET /disponibilidad`). "
+            "Vacío significa todas."
+        ),
+    ),
+    zona_horaria: str = Query(
+        default="UTC",
+        description=(
+            "Zona IANA en la que se interpreta la franja horaria, p. ej. `America/Guayaquil`. "
+            "Las fechas `desde`/`hasta` ya llevan su propia zona y no dependen de ella."
+        ),
     ),
 ) -> FiltrosTemporales:
     """Bloque de filtros común a todos los endpoints de lectura (HU-C2-006).
@@ -82,6 +93,7 @@ def filtros_comunes(
             hora_inicio=hora_inicio,
             hora_fin=hora_fin,
             tecnologia=tecnologia,
+            zona_horaria=zona_horaria,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -123,6 +135,39 @@ def listar_sesiones(
     repositorio: VisualizacionTemporalRepository = Depends(obtener_repositorio),
 ) -> list[SesionOut]:
     return services.listar_sesiones(repositorio)
+
+
+@router.get(
+    "/disponibilidad",
+    response_model=DisponibilidadOut,
+    summary="Fechas, horas y tecnologías con datos en las sesiones elegidas",
+    description=(
+        "Días con mediciones (con sus franjas horarias y cuántos handovers tiene cada uno) y "
+        "tecnologías presentes en las sesiones elegidas. Alimenta el calendario y los filtros "
+        "de la configuración del análisis, que solo ofrecen lo que existe en la base "
+        "(HU-C2-006).\n\n"
+        "Días y horas se expresan en `zona_horaria`, la zona del navegador del usuario."
+    ),
+    responses={404: {"description": "Alguna de las sesiones no existe."}},
+)
+def obtener_disponibilidad(
+    sesion_id: list[str] = Query(description="Sesión o sesiones elegidas (parámetro repetido)."),
+    zona_horaria: str = Query(
+        default="UTC", description="Zona IANA del usuario, p. ej. `America/Guayaquil`."
+    ),
+    repositorio: VisualizacionTemporalRepository = Depends(obtener_repositorio),
+) -> DisponibilidadOut:
+    try:
+        filtros = FiltrosTemporales(sesion_ids=sesion_id, zona_horaria=zona_horaria)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+    try:
+        return services.obtener_disponibilidad(filtros, repository=repositorio)
+    except SesionNoEncontrada as exc:
+        raise _traducir(exc) from exc
 
 
 # ================================================================================================
@@ -344,7 +389,9 @@ def obtener_resumen(
         "Histograma de cuántas veces se ha vuelto a cada celda (HU-C2-008). Una *visita* es un "
         "tramo de permanencia: si el terminal regresa a la misma celda más tarde, cuenta otra "
         "vez, que es lo que revela los patrones de movilidad y las zonas de solapamiento.\n\n"
-        "`intervalo` permite agrupar por hora, 10 o 5 minutos, además del total."
+        "`intervalo` permite agrupar por hora, 10 o 5 minutos, además del total, y `minutos` "
+        "admite cualquier duración (lo que mueve el deslizador de la interfaz); si se indican "
+        "los dos, manda `minutos`. Los intervalos se cuentan desde el inicio de **cada** sesión."
     ),
     responses={404: {"description": "La sesión no existe."}},
 )
@@ -353,12 +400,24 @@ def obtener_celdas_repetidas(
     intervalo: IntervaloAnalisis = Query(
         default=IntervaloAnalisis.TOTAL, description="Intervalo de análisis."
     ),
+    minutos: int | None = Query(
+        default=None, ge=1, le=1440, description="Duración de cada intervalo en minutos."
+    ),
+    eje: EjeCelda = Query(
+        default=EjeCelda.CELDA,
+        description="Qué se cuenta: cada celda (`celda_clave`) o cada PCI/PSC (`psc_pci`).",
+    ),
     top: int = Query(default=20, ge=1, le=200, description="Celdas más frecuentes a devolver."),
     repositorio: VisualizacionTemporalRepository = Depends(obtener_repositorio),
 ) -> CeldasRepetidasOut:
     try:
         return services.obtener_celdas_repetidas(
-            filtros, intervalo=intervalo, top=top, repository=repositorio
+            filtros,
+            intervalo=intervalo,
+            top=top,
+            minutos=minutos,
+            eje=eje,
+            repository=repositorio,
         )
     except SesionNoEncontrada as exc:
         raise _traducir(exc) from exc

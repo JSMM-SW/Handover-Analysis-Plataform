@@ -52,7 +52,6 @@ export const COLORES_RF = {
   rsrp_dbm: '#E0663A', // naranja terracota
   rsrq_db: '#2A9D8F', // verde azulado
   rssnr_db: '#E9B429', // azafrán
-  rscp_dbm: '#7E57C2', // violeta
   rssi_dbm: '#3A7CC3', // azul
 };
 

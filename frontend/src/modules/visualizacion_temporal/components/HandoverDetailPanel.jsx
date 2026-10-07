@@ -114,7 +114,6 @@ export default function HandoverDetailPanel() {
             {evento.tipo_tecnologia && (
               <span className="vt-etiqueta">{evento.tipo_tecnologia}</span>
             )}
-            {evento.ping_pong && <span className="vt-etiqueta vt-etiqueta--pingpong">ping-pong</span>}
             {evento.confianza === 'baja' && (
               <span className="vt-etiqueta vt-etiqueta--baja">confianza baja</span>
             )}

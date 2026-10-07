@@ -9,8 +9,11 @@ ya construido y lanza excepciones de dominio, que el router traduce a códigos H
 from __future__ import annotations
 
 import logging
+import math
 import time
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from datetime import time as dt_time
 
 from app.modules.visualizacion_temporal.detector import (
     HandoverDetectado,
@@ -34,8 +37,11 @@ from app.modules.visualizacion_temporal.schemas import (
     CeldasRepetidasOut,
     CoberturaParametro,
     DiagnosticoDeteccion,
+    DiaDisponible,
+    DisponibilidadOut,
     EstadisticasParametro,
     EventoHandover,
+    FranjaHoraria,
     PaginaHandovers,
     ParametrosDeteccion,
     ResumenDeteccion,
@@ -277,7 +283,6 @@ def listar_sesiones(repository) -> list[SesionOut]:
             n_mediciones=int(fila.get("n_mediciones") or 0),
             n_celdas=int(fila.get("n_celdas") or 0),
             tecnologias=sorted(fila.get("tecnologias") or []),
-            origen=fila.get("origen"),
             n_handovers=int(fila.get("n_handovers") or 0),
         )
         for fila in repository.listar_sesiones()
@@ -422,11 +427,57 @@ def _seleccionar_por_segmentos(
     return seleccion
 
 
+def etiqueta_pci_psc(tech: str | None, psc_pci: int | None, cid: int | None) -> str:
+    """Rótulo físico de una celda: «PCI n» en LTE, «PSC n» en WCDMA.
+
+    - GSM no tiene PCI ni PSC (su equivalente, el BSIC, no viene en los datos): se rotula con su
+      CID, «GSM CID n».
+    - Una celda LTE o WCDMA que no ha informado **nunca** de su PCI/PSC se rotula «Sin PCI» o
+      «Sin PSC». No se recurre al CID para no mezclar dos clases de número en el mismo eje.
+    """
+    if psc_pci is not None and tech == "WCDMA":
+        return f"PSC {psc_pci}"
+    if psc_pci is not None:
+        return f"PCI {psc_pci}"
+    if tech == "LTE":
+        return "Sin PCI"
+    if tech == "WCDMA":
+        return "Sin PSC"
+    return f"{tech or 'Celda'} CID {cid if cid is not None else '?'}"
+
+
+def _pci_por_celda(mediciones: list, clave_de_celda) -> dict[str, int]:
+    """PCI/PSC de cada celda: el primero que informó en cualquiera de sus mediciones.
+
+    El PCI es una propiedad fija de la celda, pero la aplicación a veces lo deja vacío en alguna
+    fila suelta. Resolverlo por celda, y no por tramo, evita que un tramo corto sin PCI aparezca
+    con otro rótulo que el resto de la misma celda.
+    """
+    pci: dict[str, int] = {}
+    for medicion in mediciones:
+        if medicion.psc_pci is None:
+            continue
+        clave = clave_de_celda(medicion)
+        if clave is not None:
+            pci.setdefault(clave, medicion.psc_pci)
+    return pci
+
+
 def obtener_tramos_celda(filtros, eje: str = "celda_clave", repository=None) -> TramosCeldaOut:
     """Secuencia temporal de la celda servidora, para la gráfica escalonada (HU-C2-003).
 
+    Los tramos se forman **siempre por celda** (`celda_clave`, el ECI en LTE), igual que en la
+    detección: un cambio de tramo es un cambio de celda servidora.
+
+    `eje` decide el rótulo y la altura de cada tramo en el eje Y:
+
+    - `celda_clave`: una altura por celda, rotulada con su clave.
+    - `psc_pci` (el que usa la interfaz): una altura por **PCI/PSC**, rotulada «PCI n» o «PSC n».
+      Dos celdas que comparten PCI (p. ej. la misma antena en dos frecuencias) quedan a la misma
+      altura; el marcador vertical sigue señalando el handover entre ellas.
+
     `valor_normalizado` se asigna **por orden de primera aparición** y no por el valor del
-    identificador: así una celda ocupa siempre la misma altura en el eje Y aunque se cambien los
+    identificador: así un rótulo ocupa siempre la misma altura en el eje Y aunque se cambien los
     filtros, que es lo que permite comparar dos vistas de un vistazo.
     """
     _exigir_sesiones(filtros, repository)
@@ -453,32 +504,38 @@ def obtener_tramos_celda(filtros, eje: str = "celda_clave", repository=None) -> 
             actual = identidad
         grupos[-1].append(medicion)
 
-    # Orden de primera aparición: define la altura estable de cada celda.
+    pci_por_celda = _pci_por_celda(mediciones, clave_de_celda)
+
+    def rotulo(grupo: list) -> str:
+        if eje_valor == "psc_pci":
+            clave = clave_de_celda(grupo[0])
+            return etiqueta_pci_psc(grupo[0].tech, pci_por_celda.get(clave), grupo[0].cid)
+        return clave_de_celda(grupo[0])
+
+    # Orden de primera aparición: define la altura estable de cada rótulo.
     orden: dict[str, int] = {}
     for grupo in grupos:
-        clave = clave_de_celda(grupo[0])
-        orden.setdefault(clave, len(orden))
+        orden.setdefault(rotulo(grupo), len(orden))
 
-    total_celdas = max(len(orden), 1)
-    divisor = max(total_celdas - 1, 1)
+    total_alturas = max(len(orden), 1)
+    divisor = max(total_alturas - 1, 1)
 
     tramos = []
     for grupo in grupos:
         primera, ultima = grupo[0], grupo[-1]
         clave = clave_de_celda(primera)
-        etiqueta = (
-            str(primera.psc_pci) if eje_valor == "psc_pci" and primera.psc_pci is not None
-            else clave
-        )
+        etiqueta = rotulo(grupo)
         tramos.append(
             TramoCelda(
                 inicio=primera.timestamp_medicion,
                 fin=ultima.timestamp_medicion,
                 celda_clave=clave,
                 etiqueta=etiqueta,
+                sesion_id=getattr(primera, "sesion_id", None),
+                sesion_nombre=getattr(primera, "sesion_nombre", None),
                 cid=primera.cid,
                 node_id=primera.node_id,
-                psc_pci=primera.psc_pci,
+                psc_pci=pci_por_celda.get(clave),
                 tech=primera.tech,
                 arfcn=primera.arfcn,
                 n_mediciones=len(grupo),
@@ -486,12 +543,14 @@ def obtener_tramos_celda(filtros, eje: str = "celda_clave", repository=None) -> 
                     ultima.timestamp_medicion - primera.timestamp_medicion
                 ).total_seconds(),
                 valor_normalizado=(
-                    orden[clave] / divisor if total_celdas > 1 else 0.5
+                    orden[etiqueta] / divisor if total_alturas > 1 else 0.5
                 ),
             )
         )
 
-    return TramosCeldaOut(eje=eje_valor, tramos=tramos, celdas_distintas=len(orden))
+    # Celdas distintas de verdad (por clave), aunque varias compartan rótulo PCI/PSC.
+    celdas = {tramo.celda_clave for tramo in tramos}
+    return TramosCeldaOut(eje=eje_valor, tramos=tramos, celdas_distintas=len(celdas))
 
 
 def obtener_ventana_handover(
@@ -643,74 +702,271 @@ def obtener_resumen(filtros, repository=None) -> ResumenOut:
 _DURACION_INTERVALO_S = {"hora": 3600, "10min": 600, "5min": 300}
 
 
+@dataclass
+class _Visita:
+    """Una vuelta a una celda (o a un PCI/PSC): uno o varios tramos seguidos de la misma sesión."""
+
+    clave: str
+    inicio: datetime
+    fin: datetime
+    sesion_id: str | None
+    sesion_nombre: str | None
+    n_mediciones: int
+    duracion_s: float
+    tramos: list = field(default_factory=list)
+
+
+def _visitas(tramos: list, eje: str) -> list[_Visita]:
+    """Convierte los tramos en visitas según el identificador elegido.
+
+    - `celda_clave`: cada tramo es una visita a su celda.
+    - `psc_pci`: tramos **seguidos** con el mismo PCI/PSC son **una sola** visita. Pasar de la
+      celda de 700 MHz a la de 850 MHz de la misma antena, con el mismo PCI, no es «volver» a
+      ese PCI: el teléfono nunca lo dejó. Así el histograma cuenta lo mismo que se ve en la
+      secuencia de radiobases, donde esos tramos quedan a la misma altura.
+    """
+    visitas: list[_Visita] = []
+    for tramo in tramos:
+        clave = tramo.etiqueta if eje == "psc_pci" else tramo.celda_clave
+        anterior = visitas[-1] if visitas else None
+        if (
+            eje == "psc_pci"
+            and anterior is not None
+            and anterior.clave == clave
+            and anterior.sesion_id == tramo.sesion_id
+        ):
+            anterior.fin = tramo.fin
+            anterior.n_mediciones += tramo.n_mediciones
+            anterior.duracion_s += tramo.duracion_s
+            anterior.tramos.append(tramo)
+            continue
+
+        visitas.append(
+            _Visita(
+                clave=clave,
+                inicio=tramo.inicio,
+                fin=tramo.fin,
+                sesion_id=tramo.sesion_id,
+                sesion_nombre=tramo.sesion_nombre,
+                n_mediciones=tramo.n_mediciones,
+                duracion_s=tramo.duracion_s,
+                tramos=[tramo],
+            )
+        )
+    return visitas
+
+
+def _minutos_de_la_sesion_mas_larga(tramos_por_sesion: dict[str, list]) -> int:
+    """Minutos, redondeados hacia arriba, que dura la sesión más larga (mínimo 1)."""
+    duraciones = [
+        (max(t.fin for t in tramos) - min(t.inicio for t in tramos)).total_seconds()
+        for tramos in tramos_por_sesion.values()
+    ]
+    return max(1, math.ceil(max(duraciones, default=0) / 60))
+
+
+def _intervalos_por_sesion(tramos_por_sesion: dict[str, list], duracion_s: int) -> list[tuple]:
+    """Reparte los tramos en intervalos de `duracion_s` contados desde el inicio de cada sesión.
+
+    Cada sesión empieza su propio primer intervalo. Contar desde el primer instante de todas
+    juntas partiría por la mitad a una sesión que empezó a media hora de otra, y con sesiones de
+    días distintos los intervalos de la segunda no empezarían nunca en su comienzo.
+    """
+    grupos = []
+    for sesion_id, tramos in tramos_por_sesion.items():
+        origen = min(t.inicio for t in tramos)
+        por_indice: dict[int, list] = {}
+        for tramo in tramos:
+            indice = int((tramo.inicio - origen).total_seconds() // duracion_s)
+            por_indice.setdefault(indice, []).append(tramo)
+
+        for indice in sorted(por_indice):
+            grupos.append(
+                (
+                    origen + timedelta(seconds=indice * duracion_s),
+                    origen + timedelta(seconds=(indice + 1) * duracion_s),
+                    sesion_id,
+                    tramos[0].sesion_nombre,
+                    por_indice[indice],
+                )
+            )
+
+    # Orden cronológico: las sesiones una tras otra y, dentro de cada una, sus intervalos.
+    return sorted(grupos, key=lambda grupo: grupo[0])
+
+
 def obtener_celdas_repetidas(
-    filtros, intervalo: str = "total", top: int = 20, repository=None
+    filtros,
+    intervalo: str = "total",
+    top: int = 20,
+    repository=None,
+    minutos: int | None = None,
+    eje: str = "celda_clave",
 ) -> CeldasRepetidasOut:
     """Distribución de radiobases repetidas (HU-C2-008).
 
-    Una "visita" es un tramo: si el terminal vuelve a la misma celda más tarde, cuenta otra vez.
-    Es justo lo que revela los patrones de permanencia y las zonas de solapamiento.
+    Una "visita" es una permanencia: si el terminal vuelve más tarde, cuenta otra vez. Es justo lo
+    que revela los patrones de permanencia y las zonas de solapamiento.
+
+    `eje` decide qué se cuenta (`_visitas`): cada celda (`celda_clave`) o cada PCI/PSC
+    (`psc_pci`, el que usa la interfaz). Por PCI/PSC, las celdas que lo comparten suman en la
+    misma barra.
+
+    El intervalo se puede dar en `minutos` (lo que mueve el deslizador de la interfaz) o con uno
+    de los intervalos fijos de `intervalo`; `minutos` tiene prioridad. Sin ninguno de los dos se
+    analiza el total.
     """
     _exigir_sesiones(filtros, repository)
 
     intervalo_valor = _nombre(intervalo)
-    tramos = obtener_tramos_celda(filtros, repository=repository).tramos
+    eje_valor = _nombre(eje)
+    tramos = _visitas(
+        obtener_tramos_celda(filtros, eje=eje_valor, repository=repository).tramos, eje_valor
+    )
+
+    duracion_s = minutos * 60 if minutos else _DURACION_INTERVALO_S.get(intervalo_valor)
+    minutos_efectivos = duracion_s // 60 if duracion_s else None
 
     if not tramos:
-        return CeldasRepetidasOut(intervalo=intervalo_valor, top=top, bins=[], total_celdas=0)
+        return CeldasRepetidasOut(
+            intervalo=intervalo_valor,
+            minutos=minutos_efectivos,
+            eje=eje_valor,
+            top=top,
+            bins=[],
+            total_celdas=0,
+        )
 
-    if intervalo_valor == "total":
-        grupos = [(None, None, tramos)]
+    tramos_por_sesion: dict[str, list] = {}
+    for tramo in tramos:
+        tramos_por_sesion.setdefault(tramo.sesion_id, []).append(tramo)
+
+    if duracion_s is None:
+        grupos = [(None, None, None, None, tramos)]
     else:
-        duracion = _DURACION_INTERVALO_S[intervalo_valor]
-        origen = min(t.inicio for t in tramos)
-        por_bin: dict[int, list] = {}
-        for tramo in tramos:
-            indice = int((tramo.inicio - origen).total_seconds() // duracion)
-            por_bin.setdefault(indice, []).append(tramo)
-
-        from datetime import timedelta
-
-        grupos = [
-            (
-                origen + timedelta(seconds=indice * duracion),
-                origen + timedelta(seconds=(indice + 1) * duracion),
-                por_bin[indice],
-            )
-            for indice in sorted(por_bin)
-        ]
+        grupos = _intervalos_por_sesion(tramos_por_sesion, duracion_s)
 
     bins = []
-    todas_las_celdas: set[str] = set()
-    for inicio, fin, tramos_bin in grupos:
+    todas_las_claves: set[str] = set()
+    for inicio, fin, sesion_id, sesion_nombre, visitas_bin in grupos:
         acumulado: dict[str, dict] = {}
-        for tramo in tramos_bin:
-            todas_las_celdas.add(tramo.celda_clave)
+        for visita in visitas_bin:
+            todas_las_claves.add(visita.clave)
+            primera = visita.tramos[0]
             entrada = acumulado.setdefault(
-                tramo.celda_clave,
+                visita.clave,
                 {
-                    "celda_clave": tramo.celda_clave,
-                    "cid": tramo.cid,
-                    "node_id": tramo.node_id,
-                    "psc_pci": tramo.psc_pci,
-                    "tech": tramo.tech,
+                    "celda_clave": primera.celda_clave,
+                    "etiqueta": etiqueta_pci_psc(primera.tech, primera.psc_pci, primera.cid),
+                    "cid": primera.cid,
+                    "node_id": primera.node_id,
+                    "psc_pci": primera.psc_pci,
+                    "tech": primera.tech,
+                    "arfcn": primera.arfcn,
+                    "celdas_incluidas": [],
+                    "canales": [],
                     "n_visitas": 0,
                     "n_mediciones": 0,
                     "tiempo_total_s": 0.0,
                 },
             )
+            for tramo in visita.tramos:
+                if tramo.celda_clave not in entrada["celdas_incluidas"]:
+                    entrada["celdas_incluidas"].append(tramo.celda_clave)
+                if tramo.arfcn is not None and tramo.arfcn not in entrada["canales"]:
+                    entrada["canales"].append(tramo.arfcn)
             entrada["n_visitas"] += 1
-            entrada["n_mediciones"] += tramo.n_mediciones
-            entrada["tiempo_total_s"] += tramo.duracion_s
+            entrada["n_mediciones"] += visita.n_mediciones
+            entrada["tiempo_total_s"] += visita.duracion_s
 
         celdas = sorted(
             (CeldaRepetida(**datos) for datos in acumulado.values()),
-            key=lambda c: (-c.n_visitas, -c.tiempo_total_s, c.celda_clave),
+            key=lambda c: (-c.n_visitas, -c.tiempo_total_s, c.etiqueta, c.celda_clave),
         )[:top]
-        bins.append(BinIntervalo(inicio=inicio, fin=fin, celdas=celdas))
+        bins.append(
+            BinIntervalo(
+                inicio=inicio,
+                fin=fin,
+                sesion_id=sesion_id,
+                sesion_nombre=sesion_nombre,
+                celdas=celdas,
+            )
+        )
 
     return CeldasRepetidasOut(
-        intervalo=intervalo_valor, top=top, bins=bins, total_celdas=len(todas_las_celdas)
+        intervalo=intervalo_valor,
+        minutos=minutos_efectivos,
+        minutos_max=_minutos_de_la_sesion_mas_larga(tramos_por_sesion),
+        eje=eje_valor,
+        top=top,
+        bins=bins,
+        total_celdas=len(todas_las_claves),
+    )
+
+
+# ================================================================================================
+# Disponibilidad de datos — calendario y filtros
+# ================================================================================================
+
+#: Pausa, en minutos, a partir de la cual dos ratos de captura del mismo día se ofrecen como
+#: franjas horarias separadas. Se tolera un minuto suelto sin filas para no partir una franja por
+#: un corte breve de la aplicación de medición.
+PAUSA_ENTRE_FRANJAS_MIN = 2
+
+
+def agrupar_en_franjas(minutos: list[dt_time]) -> list[FranjaHoraria]:
+    """Junta los minutos con mediciones de un día en franjas continuas.
+
+    Ejemplo: 16:24, 16:25 … 16:45 y 18:02 … 18:10 dan dos franjas, 16:24–16:45 y 18:02–18:10.
+    """
+    franjas: list[list[int]] = []
+    for minuto in sorted({m.hour * 60 + m.minute for m in minutos}):
+        if franjas and minuto - franjas[-1][1] <= PAUSA_ENTRE_FRANJAS_MIN:
+            franjas[-1][1] = minuto
+        else:
+            franjas.append([minuto, minuto])
+
+    return [
+        FranjaHoraria(inicio=dt_time(a // 60, a % 60), fin=dt_time(b // 60, b % 60))
+        for a, b in franjas
+    ]
+
+
+def obtener_disponibilidad(filtros, repository) -> DisponibilidadOut:
+    """Días, franjas horarias y tecnologías con datos en las sesiones elegidas.
+
+    Todo se calcula en la zona horaria del usuario: un recorrido que en UTC cae a las 00:30 del
+    día siguiente, en Ecuador es de las 19:30 del día anterior, y es ese día el que el usuario
+    buscará en el calendario.
+    """
+    _exigir_sesiones(filtros, repository)
+
+    sesiones = _sesiones_de(filtros)
+    zona = getattr(filtros, "zona_horaria", None) or "UTC"
+
+    por_dia: dict = {}
+    for fila in repository.contar_mediciones_por_minuto(sesiones, zona):
+        dia = por_dia.setdefault(fila["fecha"], {"n_mediciones": 0, "minutos": []})
+        dia["n_mediciones"] += int(fila["n_mediciones"])
+        dia["minutos"].append(fila["minuto"])
+
+    handovers = {
+        fila["fecha"]: int(fila["n_handovers"])
+        for fila in repository.contar_handovers_por_dia(sesiones, zona)
+    }
+
+    return DisponibilidadOut(
+        zona_horaria=zona,
+        dias=[
+            DiaDisponible(
+                fecha=fecha,
+                n_mediciones=dia["n_mediciones"],
+                n_handovers=handovers.get(fecha, 0),
+                franjas=agrupar_en_franjas(dia["minutos"]),
+            )
+            for fecha, dia in sorted(por_dia.items())
+        ],
+        tecnologias=repository.listar_tecnologias(sesiones),
     )
 
 
@@ -729,7 +985,7 @@ def listar_handovers(filtros, page: int, page_size: int, orden: str, repository)
 
 
 def _fila_a_evento(fila: dict) -> EventoHandover:
-    """Traduce una fila de `v_vt_evento_detalle` al contrato de salida."""
+    """Traduce una fila de `eventos_handover` al contrato de salida."""
     return EventoHandover(
         id_evento=str(fila["id_evento"]),
         sesion_id=str(fila["sesion_id"]),

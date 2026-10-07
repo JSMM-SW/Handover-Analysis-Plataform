@@ -47,13 +47,12 @@ const DESLIZADOR_ZOOM = {
 /**
  * Eje Y de cada parámetro.
  *
- * RSRP/RSCP/RSSI son **potencias en dBm** (−140…−40) y RSRQ/SINR son **relaciones en dB**
+ * RSRP/RSSI son **potencias en dBm** (−140…−40) y RSRQ/RSSNR son **relaciones en dB**
  * (−20…+30). Compartir eje aplastaría las dos curvas contra los extremos y no se vería nada, así
  * que van a ejes distintos: 0 = izquierda (dBm), 1 = derecha (dB).
  */
 export const EJE_POR_PARAMETRO = {
   rsrp_dbm: 0,
-  rscp_dbm: 0,
   rssi_dbm: 0,
   rsrq_db: 1,
   rssnr_db: 1,
@@ -148,7 +147,7 @@ export function construirSeriesEcharts(respuesta, parametros = []) {
  * Construye los marcadores verticales de handover (`markLine`) — CA2 de HU-C2-002 y HU-C2-004.
  *
  * El marcador destacado (el evento seleccionado en la tabla) se pinta más grueso y en otro color
- * para que se localice de un vistazo tras el zoom automático.
+ * para que se localice de un vistazo sobre el recorrido completo.
  */
 export function construirMarcadoresHO(handovers = [], idDestacado = null) {
   if (!handovers.length) return null;
@@ -167,11 +166,10 @@ export function construirMarcadoresHO(handovers = [], idDestacado = null) {
         origen: ho.celda_origen?.clave,
         destino: ho.celda_destino?.clave,
         tipoEvento: ho.tipo_evento,
-        pingPong: ho.ping_pong,
         lineStyle: destacado
           ? {
               // El evento elegido en la tabla: otro color (frambuesa), más grueso y con sombra,
-              // para localizarlo de un vistazo tras el zoom automático.
+              // para localizarlo de un vistazo sin tener que hacer zoom.
               color: TEMA.marcadorHOSeleccionado,
               width: 2.6,
               type: 'solid',
@@ -194,16 +192,14 @@ export function construirMarcadoresHO(handovers = [], idDestacado = null) {
 
 /** Tooltip de un marcador de handover: celda origen → destino y la hora exacta (CA3 de HU-002). */
 function tooltipMarcador(parametro) {
-  const { origen, destino, tipoEvento, pingPong } = parametro.data ?? {};
+  const { origen, destino, tipoEvento } = parametro.data ?? {};
   const hora = formatearFechaHora(parametro.data?.xAxis);
 
   return [
     `<strong style="color:${TEMA.acentoFuerte}">Handover</strong>`,
     `<div style="margin:4px 0;color:${TEMA.textoSuave}">${hora}</div>`,
     `<div>${origen ?? '—'} → ${destino ?? '—'}</div>`,
-    `<div style="color:${TEMA.textoSuave}">${ETIQUETAS_TIPO_EVENTO[tipoEvento] ?? tipoEvento ?? ''}${
-      pingPong ? ' · ping-pong' : ''
-    }</div>`,
+    `<div style="color:${TEMA.textoSuave}">${ETIQUETAS_TIPO_EVENTO[tipoEvento] ?? tipoEvento ?? ''}</div>`,
   ].join('');
 }
 
@@ -297,7 +293,6 @@ export function useOpcionSecuenciaCeldas({
   handovers = [],
   mostrarMarcadores = true,
   idDestacado = null,
-  eje: ejeCeldas = 'celda_clave',
 }) {
   return useMemo(() => {
     const datos = [];
@@ -342,9 +337,9 @@ export function useOpcionSecuenciaCeldas({
 
           return [
             `<strong>${tramo.etiqueta}</strong>`,
-            `<div style="margin-top:4px">Celda: ${tramo.celda_clave}</div>`,
-            tramo.psc_pci != null ? `<div>PCI: ${tramo.psc_pci}</div>` : '',
-            tramo.tech ? `<div>Tecnología: ${tramo.tech}</div>` : '',
+            tramo.tech ? `<div style="margin-top:4px">Tecnología: ${tramo.tech}</div>` : '',
+            tramo.arfcn != null ? `<div>Canal: ${tramo.arfcn}</div>` : '',
+            `<div>Celda: ${tramo.celda_clave}</div>`,
             `<div>Permanencia: ${Math.round(tramo.duracion_s)} s · ${tramo.n_mediciones} mediciones</div>`,
             `<div style="color:${TEMA.textoSuave}">${formatearHora(tramo.inicio)} → ${formatearHora(tramo.fin)}</div>`,
           ]
@@ -357,31 +352,21 @@ export function useOpcionSecuenciaCeldas({
         type: 'value',
         min: -0.06,
         max: 1.06,
-        name: ejeCeldas === 'psc_pci' ? 'PCI' : 'Celda',
+        name: 'PCI/PSC',
         axisLabel: {
           fontSize: 10,
-          // El eje Y es una altura normalizada; se rotula con la celda que ocupa cada altura.
+          // Ancho fijo para que el eje X quede alineado con el de la línea de tiempo; un rótulo
+          // largo («GSM CID 11048») se trunca y se lee entero en el tooltip.
+          width: 46,
+          overflow: 'truncate',
+          ellipsis: '…',
+          // El eje Y es una altura normalizada; se rotula con el PCI/PSC que ocupa cada altura.
           formatter: (valor) => porValor.get(valor) ?? '',
         },
       }),
       series: [serie],
     };
-  }, [tramos, handovers, mostrarMarcadores, idDestacado, ejeCeldas]);
-}
-
-/**
- * Rango de zoom centrado en un evento, para el clic en una fila de la tabla (estructura V1 §3).
- *
- * Se abre una ventana de `factor` veces la ventana de detalle a cada lado: suficiente para ver el
- * antes y el después sin perder de vista el contexto.
- *
- * @returns {[string, string]} par de instantes ISO
- */
-export function rangoAlrededorDe(timestampEvento, ventanaSegundos = 5, factor = 6) {
-  const centro = new Date(timestampEvento).getTime();
-  const margen = ventanaSegundos * factor * 1000;
-
-  return [new Date(centro - margen).toISOString(), new Date(centro + margen).toISOString()];
+  }, [tramos, handovers, mostrarMarcadores, idDestacado]);
 }
 
 // ================================================================================================
@@ -529,9 +514,30 @@ export function useOpcionVentana({ datos, parametros = [] }) {
   }, [datos, parametros]);
 }
 
-/** Etiqueta de una celda en el histograma según el identificador elegido. */
-export function etiquetaCelda(celda, eje = 'celda_clave') {
-  return eje === 'psc_pci' && celda.psc_pci != null ? `PCI ${celda.psc_pci}` : celda.celda_clave;
+/**
+ * Rótulos de las barras del histograma: el PCI/PSC de cada barra («PCI 407», «PSC 97», o
+ * «GSM CID n» en GSM, que no tiene ninguno), tal como lo envía el backend.
+ *
+ * El histograma se pide agrupado por PCI/PSC, así que cada rótulo es único: las celdas que
+ * comparten PCI (la misma antena en varias bandas) suman en una sola barra.
+ *
+ * @param {import('../types/index.js').CeldaRepetida[]} celdas
+ * @returns {string[]} un rótulo por barra, en el mismo orden
+ */
+export function rotulosCeldas(celdas = []) {
+  return celdas.map((c) => c.etiqueta || c.celda_clave);
+}
+
+/** Línea del tooltip con lo que agrupa una barra: sus celdas y sus canales. */
+function detalleAgrupacion(celda) {
+  const canales = celda.canales?.length ? celda.canales : celda.arfcn != null ? [celda.arfcn] : [];
+  const nCeldas = celda.celdas_incluidas?.length ?? 1;
+  const partes = [
+    celda.tech,
+    nCeldas > 1 ? `${nCeldas} celdas con este PCI` : null,
+    canales.length ? `${canales.length > 1 ? 'canales' : 'canal'} ${canales.join(', ')}` : null,
+  ];
+  return partes.filter(Boolean).join(' · ');
 }
 
 /** Ancho máximo, en píxeles, de los rótulos de celda antes de truncarlos con «…». */
@@ -551,18 +557,21 @@ export function altoHistograma(nCeldas) {
  * Una «visita» es un tramo de permanencia: si el terminal vuelve a la misma celda más tarde,
  * cuenta otra vez. Es lo que revela los patrones de movilidad y las zonas de solapamiento.
  *
- * **Barras horizontales.** Los identificadores de celda son largos (`WCDMA:13163:30405`); en un
- * eje X había que rotarlos 45° y leerlos torciendo la cabeza. En horizontal se leen de corrido y,
- * si aun así no caben, se truncan con «…» y el nombre completo aparece al pasar el ratón por el
- * rótulo o por la barra.
+ * **Barras horizontales.** Los rótulos (`PCI 407`, `GSM CID 11048`) se leen de corrido; en un
+ * eje X había que rotarlos 45°. En horizontal se leen de corrido y, si aun así no
+ * caben, se truncan con «…» y el nombre completo aparece al pasar el ratón por el rótulo o la barra.
+ *
+ * @param {Object} args
+ * @param {import('../types/index.js').CeldaRepetida[]} args.celdas
+ * @param {string[]} args.rotulos  uno por celda (`rotulosCeldas`)
  */
-export function useOpcionCeldasRepetidas({ celdas = [], eje: ejeCeldas = 'celda_clave' }) {
+export function useOpcionCeldasRepetidas({ celdas = [], rotulos = [] }) {
   return useMemo(() => {
     if (!celdas.length) return null;
 
     return {
       animation: false,
-      grid: { left: 8, right: 36, top: 8, bottom: 30, containLabel: true },
+      grid: { left: 8, right: 36, top: 26, bottom: 30, containLabel: true },
       tooltip: {
         ...ESTILO_TOOLTIP,
         trigger: 'item',
@@ -571,11 +580,11 @@ export function useOpcionCeldasRepetidas({ celdas = [], eje: ejeCeldas = 'celda_
           const c = celdas[p.dataIndex];
           if (!c) return '';
           return [
-            `<strong>${etiquetaCelda(c, ejeCeldas)}</strong>`,
+            `<strong>${rotulos[p.dataIndex] ?? c.celda_clave}</strong>`,
             `<div style="margin-top:4px">Visitas: <strong>${c.n_visitas}</strong></div>`,
             `<div>Mediciones: ${c.n_mediciones}</div>`,
             `<div>Tiempo acumulado: ${Math.round(c.tiempo_total_s)} s</div>`,
-            c.tech ? `<div style="color:${TEMA.textoSuave}">${c.tech}</div>` : '',
+            `<div style="color:${TEMA.textoSuave}">${detalleAgrupacion(c)}</div>`,
           ]
             .filter(Boolean)
             .join('');
@@ -590,9 +599,13 @@ export function useOpcionCeldasRepetidas({ celdas = [], eje: ejeCeldas = 'celda_
       }),
       yAxis: eje({
         type: 'category',
+        // Con el eje invertido, el inicio queda arriba: el título va encima de los rótulos.
+        name: 'PCI/PSC',
+        nameLocation: 'start',
+        nameGap: 10,
         // La celda con más visitas arriba: se lee como un ranking.
         inverse: true,
-        data: celdas.map((c) => etiquetaCelda(c, ejeCeldas)),
+        data: rotulos,
         splitLine: { show: false },
         axisLine: { show: false },
         axisLabel: {
@@ -623,14 +636,14 @@ export function useOpcionCeldasRepetidas({ celdas = [], eje: ejeCeldas = 'celda_
         },
       ],
     };
-  }, [celdas, ejeCeldas]);
+  }, [celdas, rotulos]);
 }
 
 /**
  * Índice de la barra cuyo rótulo del eje Y ha recibido el ratón, o `-1` si el evento no viene
  * de un rótulo. Permite abrir el tooltip de la barra al pasar por su nombre truncado.
  */
-export function indiceDeRotulo(evento, celdas = [], ejeCeldas = 'celda_clave') {
+export function indiceDeRotulo(evento, rotulos = []) {
   if (evento?.componentType !== 'yAxis') return -1;
-  return celdas.findIndex((c) => etiquetaCelda(c, ejeCeldas) === evento.value);
+  return rotulos.indexOf(evento.value);
 }
