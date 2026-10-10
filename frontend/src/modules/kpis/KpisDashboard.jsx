@@ -10,6 +10,8 @@ import {
 } from '../../services/kpisService';
 import MultiSelectDropdown from './MultiSelectDropdown';
 import VentanaTemporalSelector from './VentanaTemporalSelector';
+import ResumenPanel from './ResumenPanel';
+
 
 import {
     ComposedChart, LineChart, PieChart, Bar, Line, Pie, Cell,
@@ -308,7 +310,7 @@ export default function KpisDashboard() {
         .flatMap((sesion) => [sesion.primera_medicion, sesion.ultima_medicion])
         .filter(Boolean);
     const anioActual = new Date().getFullYear();
-    const aniosDisponibles = fechasConDatos.length > 0
+        const aniosDisponibles = fechasConDatos.length > 0
         ? (() => {
             const anios = fechasConDatos.map((fecha) => Number(fecha.slice(0, 4)));
             const anioMin = Math.min(...anios);
@@ -317,7 +319,22 @@ export default function KpisDashboard() {
         })()
         : [anioActual];
 
+    /**
+     * Textos del panel de resumen (ver ResumenPanel.jsx) -- "Sesión N" de
+     * forma consistente con el selector y, más abajo, con el resumen del
+     * PDF (Paso 8 del plan de refactor: antes el PDF mostraba "#label" en
+     * vez del nombre).
+     */
+    const sesionesTexto = sesionLabels.length === 0
+        ? `Todas (${sesiones.length} sesiones)`
+        : sesiones
+            .filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)))
+            .map((sesion) => sessionName(sesion))
+            .join(', ');
+    const periodoTexto = `${startDate} a ${endDate}`;
+
     return (
+
 
         <div className="kpis-shell" ref={dashboardRef}>
             <header className="kpis-header">
@@ -383,7 +400,8 @@ export default function KpisDashboard() {
                     <span>Tecnología: {resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}</span>
                     <span>Franja horaria: {resumenSeleccion(franjas, ETIQUETAS_FRANJA)}</span>
                     <span>Periodicidad: {ETIQUETAS_PERIODO[periodo]}</span>
-                    <span>Sesión: {sesionLabels.length === 0 ? 'Todas' : sesionLabels.map((s) => `#${s}`).join(', ')}</span>
+                    <span>Sesión: {sesionesTexto}</span>
+
                 </div>
             </header>
 
@@ -403,8 +421,15 @@ export default function KpisDashboard() {
                 </div>
             )}
 
-            {!loading && !error && hasData && (
+                        {!loading && !error && hasData && (
                 <>
+                    <ResumenPanel
+                        sesionesTexto={sesionesTexto}
+                        periodoTexto={periodoTexto}
+                        tecnologiaTexto={resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}
+                        resumen={summaryData}
+                    />
+
                     <div className="kpis-grid">
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Total Handovers</h3>
@@ -431,7 +456,12 @@ export default function KpisDashboard() {
                                 <span className="kpis-stat-label">Handover Innecesarios</span>
                                 <span className="kpis-stat-value highlight-red">{formatearTasa(summaryData.tasa_innecesarios)}</span>
                             </div>
+                            <div className="kpis-stat">
+                                <span className="kpis-stat-label">Handover Post Degradados (PHD)</span>
+                                <span className="kpis-stat-value highlight-red">{formatearTasa(summaryData.tasa_phd)}</span>
+                            </div>
                         </div>
+
 
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Handover Exitosos</h3>

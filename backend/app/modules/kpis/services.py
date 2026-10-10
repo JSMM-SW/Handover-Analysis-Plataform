@@ -419,10 +419,16 @@ def calcular_resumen_kpis(
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     total_mediciones = repositorio.contar_mediciones(fecha_inicio, fecha_fin, tecnologia, franja, sesion_label)
+    conjunto_tecnologia = set(tecnologia) if tecnologia else None
+    celdas_distintas = len({
+        registro[0] for registro in secuencia
+        if conjunto_tecnologia is None or registro[7] in conjunto_tecnologia
+    })
     eventos_detectados, cambios_celda_no_observados = _detectar_eventos_handover(secuencia)
     eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
     eventos = _filtrar_por_franja(eventos, franja)
     total_ho = len(eventos)
+
     exitosos = sum(1 for evento in eventos if evento["clasificacion"] == EXITOSO)
     fallidos = sum(1 for evento in eventos if evento["clasificacion"] == FALLIDO)
     indeterminados = sum(1 for evento in eventos if evento["clasificacion"] == INDETERMINADO)
@@ -450,10 +456,13 @@ def calcular_resumen_kpis(
         tasa_exito=round(tasa_exito, 2) if tasa_exito is not None else None,
         tasa_phd=round(tasa_phd, 2) if tasa_phd is not None else None,
         tasa_innecesarios=round(tasa_innecesarios, 2) if tasa_innecesarios is not None else None,
+        uho_evaluables=uho_evaluables,
         ping_pongs=ping_pongs,
         tasa_hopp=round(tasa_hopp, 2) if tasa_hopp is not None else None,
         cambios_celda_no_observados=cambios_celda_no_observados,
+        celdas_distintas=celdas_distintas,
     )
+
 
 
 

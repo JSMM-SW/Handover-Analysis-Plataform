@@ -168,7 +168,25 @@ def test_resumen_calcula_conteos_y_tasas_del_escenario():
 
     assert resumen.tasa_hopp == 25.0  # 1 / 4
     assert resumen.tasa_innecesarios == 66.67  # 2 UHO / 3 evaluables
+    assert resumen.uho_evaluables == 3
     assert resumen.cambios_celda_no_observados == 0  # ningún corte tuvo cambio de celda
+    assert resumen.celdas_distintas == 4  # celdas 1, 2, 3, 4 del escenario
+
+
+def test_resumen_celdas_distintas_respeta_el_filtro_de_tecnologia():
+    """celdas_distintas solo cuenta celdas observadas en mediciones de la
+    tecnología seleccionada -- mismo criterio que total_mediciones."""
+    secuencia = [
+        _medicion(1, _hora(5, 8, 0, 0), rssi=-90, rsrq=-12, tecnologia=1),
+        _medicion(2, _hora(5, 8, 0, 5), rssi=-90, rsrq=-12, tecnologia=1),
+        _medicion(99, _hora(5, 9, 0, 0), rssi=-90, rsrq=-12, tecnologia=2),  # 3G, se excluye
+    ]
+    repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=3)
+
+    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, tecnologia=[1])
+
+    assert resumen.celdas_distintas == 2  # celdas 1 y 2 (LTE); la 99 (3G) no cuenta
+
 
 
 def test_resumen_sin_datos_devuelve_tasas_en_none_sin_dividir_por_cero():

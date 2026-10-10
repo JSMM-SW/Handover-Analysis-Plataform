@@ -104,11 +104,57 @@
     margin-top: 12px;
 }
 
+/* Panel de resumen del análisis (HU-006, Paso 8) -- siempre visible,
+   a diferencia de .kpis-filtros-resumen-pdf (que solo se muestra durante
+   la captura del PDF). */
+.kpis-resumen-panel {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+}
+
+.kpis-resumen-titulo {
+    margin: 0 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-texto-tenue);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.kpis-resumen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px 20px;
+}
+
+.kpis-resumen-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.kpis-resumen-label {
+    font-size: 11px;
+    color: var(--color-texto-tenue);
+}
+
+.kpis-resumen-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-texto);
+    overflow-wrap: break-word;
+}
+
 .kpis-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
 }
+
 
 .kpis-row-layout {
     display: grid;

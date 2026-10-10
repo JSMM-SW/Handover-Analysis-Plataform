@@ -70,15 +70,27 @@ class KpiSummaryResponse(BaseModel):
         "mismo denominador. null si no hay ningún handover clasificado."
     )
     tasa_innecesarios: float | None = Field(
+
         description="uho_eventos / uho_evaluables (%), según el criterio UHO: el salto no hacía "
         "falta porque la señal de la celda de ORIGEN ya era buena (RSSI >= -100 dBm y "
         "RSRQ >= -15 dB). Es independiente de PHD/tasa_exito -- responde si el salto era "
         "necesario, no si mejoró la señal. null si no hay ningún handover evaluable para UHO."
     )
+    uho_evaluables: int = Field(
+        description="Handovers evaluables para el criterio UHO (origen LTE con RSSI y RSRQ "
+        "disponibles) -- denominador de tasa_innecesarios. El numerador (uho_eventos) no se "
+        "expone por separado, solo la tasa; este conteo es para el panel de resumen."
+    )
     ping_pongs: int = Field(description="Handovers que formaron parte de un patrón A -> B -> A")
     tasa_hopp: float | None = Field(
         description="ping_pongs / total_handovers (%). null si total_handovers es 0."
     )
+    celdas_distintas: int = Field(
+        description="Número de celdas (cell_id) distintas observadas en las mediciones del "
+        "periodo, filtradas por tecnología si se seleccionó alguna (mismo criterio que "
+        "total_mediciones, pero sin franja ni la lógica de detección de handovers)."
+    )
+
 
     cambios_celda_no_observados: int = Field(
         description="Cortes de la secuencia por hueco de datos (más de 10 s entre mediciones "
