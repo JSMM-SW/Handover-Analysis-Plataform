@@ -35,9 +35,10 @@ class KpiSummaryResponse(BaseModel):
     fecha_fin: date
     total_mediciones: int = Field(description="Total de mediciones tomadas en el periodo")
     total_handovers: int = Field(description="Total de saltos de celda detectados en el periodo")
-    tasa_handover: float = Field(
+    tasa_handover: float | None = Field(
         description="total_handovers / total_mediciones (%). Qué tan seguido ocurre un "
-        "handover respecto al total de mediciones -- no es una tasa de éxito."
+        "handover respecto al total de mediciones -- no es una tasa de éxito. "
+        "null si total_mediciones es 0 (sin datos, no un 0% real)."
     )
     exitosos: int = Field(
         description="Handovers donde NO se cumplió el criterio PHD: rssi_destino > rssi_origen "
@@ -51,18 +52,26 @@ class KpiSummaryResponse(BaseModel):
         description="Handovers sin RSSI/RSRQ disponibles en ambos lados de la "
         "transición -- no se pueden clasificar como éxito ni fallo"
     )
-    tasa_exito: float = Field(
+    tasa_exito: float | None = Field(
         description="exitosos / (exitosos + fallidos) (%). Los indeterminados quedan fuera "
-        "del denominador a propósito, no hay evidencia para clasificarlos."
+        "del denominador a propósito, no hay evidencia para clasificarlos. "
+        "null si no hay ningún handover clasificado (sin datos, no un 0% real)."
     )
-    tasa_innecesarios: float = Field(
+    tasa_phd: float | None = Field(
+        description="fallidos / (exitosos + fallidos) (%) -- el complemento de tasa_exito, "
+        "mismo denominador. null si no hay ningún handover clasificado."
+    )
+    tasa_innecesarios: float | None = Field(
         description="uho_eventos / uho_evaluables (%), según el criterio UHO: el salto no hacía "
         "falta porque la señal de la celda de ORIGEN ya era buena (RSSI >= -100 dBm y "
         "RSRQ >= -15 dB). Es independiente de PHD/tasa_exito -- responde si el salto era "
-        "necesario, no si mejoró la señal."
+        "necesario, no si mejoró la señal. null si no hay ningún handover evaluable para UHO."
     )
     ping_pongs: int = Field(description="Handovers que formaron parte de un patrón A -> B -> A")
-    tasa_hopp: float = Field(description="ping_pongs / total_handovers (%)")
+    tasa_hopp: float | None = Field(
+        description="ping_pongs / total_handovers (%). null si total_handovers es 0."
+    )
+
     cambios_celda_no_observados: int = Field(
         description="Cortes de la secuencia por hueco de datos (más de 10 s entre mediciones "
         "de la misma sesión) donde la celda antes y después del hueco era distinta -- un "
@@ -119,4 +128,7 @@ class TrendResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
-    tasa_exito: float = Field(description="exitosos / (exitosos + fallidos) (%) de ese periodo")
+    tasa_exito: float | None = Field(
+        description="exitosos / (exitosos + fallidos) (%) de ese periodo. "
+        "null si ese periodo no tiene ningún handover clasificado."
+    )

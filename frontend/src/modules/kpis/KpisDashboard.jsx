@@ -76,7 +76,21 @@ function esperarRepintado() {
     });
 }
 
+/**
+ * Formatea una tasa (%) para mostrarla en una tarjeta. El backend devuelve
+ * `null` cuando el denominador de la tasa es 0 (Paso 6 del plan de
+ * refactor) -- "sin datos", no un 0% real -- así que no se puede mostrar
+ * directamente `{valor}%` o saldría literalmente "null%".
+ *
+ * @param {number | null | undefined} valor - la tasa ya calculada por el backend.
+ * @returns {string} "Sin datos" si `valor` es null/undefined, o "N%" si no.
+ */
+function formatearTasa(valor) {
+    return valor == null ? 'Sin datos' : `${valor}%`;
+}
+
 const ETIQUETAS_FRANJA = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noche' };
+
 const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS', '3': '2G' };
 const ETIQUETAS_PERIODO = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual', anual: 'Anual' };
 
@@ -338,10 +352,10 @@ export default function KpisDashboard() {
                             <p className="kpis-stat-sub">de {summaryData.total_mediciones} mediciones</p>
                         </div>
 
-                        <div className="kpis-card">
+                                                <div className="kpis-card">
                             <h3 className="kpis-card-title">Tasa de Handover</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large highlight-green">{summaryData.tasa_handover}%</span>
+                                <span className="kpis-stat-value large highlight-green">{formatearTasa(summaryData.tasa_handover)}</span>
                             </div>
                         </div>
 
@@ -349,21 +363,22 @@ export default function KpisDashboard() {
                             <h3 className="kpis-card-title">Riesgos de Movilidad</h3>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Ping-Pong (HOPP)</span>
-                                <span className="kpis-stat-value highlight-orange">{summaryData.tasa_hopp}%</span>
+                                <span className="kpis-stat-value highlight-orange">{formatearTasa(summaryData.tasa_hopp)}</span>
                             </div>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Handover Innecesarios</span>
-                                <span className="kpis-stat-value highlight-red">{summaryData.tasa_innecesarios}%</span>
+                                <span className="kpis-stat-value highlight-red">{formatearTasa(summaryData.tasa_innecesarios)}</span>
                             </div>
                         </div>
 
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Handover Exitosos</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{summaryData.tasa_exito}%</span>
+                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{formatearTasa(summaryData.tasa_exito)}</span>
                             </div>
                             <p className="kpis-stat-sub">{summaryData.exitosos} handovers exitosos</p>
                         </div>
+
                     </div>
 
                     <div className="kpis-row-layout">

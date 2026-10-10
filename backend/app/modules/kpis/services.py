@@ -399,12 +399,18 @@ def calcular_resumen_kpis(
 
     `tasa_handover` = total_ho / total_mediciones: qué tan seguido ocurre un
     handover respecto al total de mediciones tomadas (no es una tasa de
-    éxito). `tasa_exito` = exitosos / (exitosos + fallidos), según el
-    criterio PHD. `tasa_innecesarios` = uho_eventos / evaluables_uho, según
-    el criterio UHO -- independiente de PHD (ver docstring del módulo).
-    Los indeterminados (de PHD) y los no-evaluables-para-UHO quedan fuera
-    de sus respectivos denominadores a propósito -- no hay evidencia para
-    contarlos en ningún sentido, e incluirlos distorsionaría el porcentaje.
+    éxito). `tasa_exito` = exitosos / (exitosos + fallidos), `tasa_phd` es
+    su complemento (fallidos / (exitosos + fallidos), mismo denominador),
+    según el criterio PHD. `tasa_innecesarios` = uho_eventos /
+    evaluables_uho, según el criterio UHO -- independiente de PHD (ver
+    docstring del módulo). Los indeterminados (de PHD) y los
+    no-evaluables-para-UHO quedan fuera de sus respectivos denominadores a
+    propósito -- no hay evidencia para contarlos en ningún sentido, e
+    incluirlos distorsionaría el porcentaje.
+
+    Todas las tasas son `None` (Paso 6 del plan de refactor, oct 2026)
+    cuando su denominador es 0 -- "sin datos", no un 0% real. El frontend
+    debe mostrar "Sin datos" en vez de "0%" en ese caso.
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     total_mediciones = repositorio.contar_mediciones(fecha_inicio, fecha_fin, tecnologia, franja, sesion_label)
@@ -420,27 +426,30 @@ def calcular_resumen_kpis(
     uho_eventos = sum(1 for evento in eventos if evento["uho"] is True)
     uho_evaluables = sum(1 for evento in eventos if evento["uho"] is not None)
 
-    tasa_handover = (total_ho / total_mediciones * 100) if total_mediciones > 0 else 0.0
+    tasa_handover = (total_ho / total_mediciones * 100) if total_mediciones > 0 else None
     clasificados = exitosos + fallidos
-    tasa_exito = (exitosos / clasificados * 100) if clasificados > 0 else 0.0
-    tasa_hopp = (ping_pongs / total_ho * 100) if total_ho > 0 else 0.0
-    tasa_innecesarios = (uho_eventos / uho_evaluables * 100) if uho_evaluables > 0 else 0.0
+    tasa_exito = (exitosos / clasificados * 100) if clasificados > 0 else None
+    tasa_phd = (fallidos / clasificados * 100) if clasificados > 0 else None
+    tasa_hopp = (ping_pongs / total_ho * 100) if total_ho > 0 else None
+    tasa_innecesarios = (uho_eventos / uho_evaluables * 100) if uho_evaluables > 0 else None
 
     return KpiSummaryResponse(
         fecha_inicio=fecha_inicio,
         fecha_fin=fecha_fin,
         total_mediciones=total_mediciones,
         total_handovers=total_ho,
-        tasa_handover=round(tasa_handover, 2),
+        tasa_handover=round(tasa_handover, 2) if tasa_handover is not None else None,
         exitosos=exitosos,
         fallidos=fallidos,
         indeterminados=indeterminados,
-        tasa_exito=round(tasa_exito, 2),
-        tasa_innecesarios=round(tasa_innecesarios, 2),
+        tasa_exito=round(tasa_exito, 2) if tasa_exito is not None else None,
+        tasa_phd=round(tasa_phd, 2) if tasa_phd is not None else None,
+        tasa_innecesarios=round(tasa_innecesarios, 2) if tasa_innecesarios is not None else None,
         ping_pongs=ping_pongs,
-        tasa_hopp=round(tasa_hopp, 2),
+        tasa_hopp=round(tasa_hopp, 2) if tasa_hopp is not None else None,
         cambios_celda_no_observados=cambios_celda_no_observados,
     )
+
 
 
 def calcular_distribucion_horaria(
@@ -612,7 +621,7 @@ def calcular_tendencia(
         valores = grupos[clave]
         exitosos, fallidos = valores["exitosos"], valores["fallidos"]
         clasificados = exitosos + fallidos
-        tasa_exito = (exitosos / clasificados * 100) if clasificados > 0 else 0.0
+        tasa_exito = (exitosos / clasificados * 100) if clasificados > 0 else None
 
         resultado.append(
             TrendResponse(
@@ -623,7 +632,9 @@ def calcular_tendencia(
                 fallidos=fallidos,
                 indeterminados=valores["indeterminados"],
                 ping_pongs=valores["ping_pongs"],
-                tasa_exito=round(tasa_exito, 2),
+                tasa_exito=round(tasa_exito, 2) if tasa_exito is not None else None,
             )
         )
+
+
     return resultado

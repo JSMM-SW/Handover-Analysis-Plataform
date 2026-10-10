@@ -163,30 +163,35 @@ def test_resumen_calcula_conteos_y_tasas_del_escenario():
     assert resumen.fallidos == 1
     assert resumen.indeterminados == 2
     assert resumen.tasa_exito == 50.0  # 1 / (1 + 1): indeterminados fuera
+    assert resumen.tasa_phd == 50.0  # 1 / (1 + 1): complemento de tasa_exito
     assert resumen.ping_pongs == 1
+
     assert resumen.tasa_hopp == 25.0  # 1 / 4
     assert resumen.tasa_innecesarios == 66.67  # 2 UHO / 3 evaluables
     assert resumen.cambios_celda_no_observados == 0  # ningún corte tuvo cambio de celda
 
 
-def test_resumen_sin_datos_devuelve_ceros_sin_dividir_por_cero():
-    """Sin mediciones ni handovers todas las tasas valen 0 en vez de lanzar
-    ZeroDivisionError."""
+def test_resumen_sin_datos_devuelve_tasas_en_none_sin_dividir_por_cero():
+    """Sin mediciones ni handovers todas las tasas son None ("sin datos",
+    Paso 6) en vez de 0.0 o de lanzar ZeroDivisionError."""
     repositorio = RepositorioKpisFalso(secuencia=[], total_mediciones=0)
 
     resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio)
 
     assert resumen.total_handovers == 0
-    assert resumen.tasa_handover == 0.0
-    assert resumen.tasa_exito == 0.0
-    assert resumen.tasa_hopp == 0.0
-    assert resumen.tasa_innecesarios == 0.0
+    assert resumen.tasa_handover is None
+    assert resumen.tasa_exito is None
+    assert resumen.tasa_phd is None
+    assert resumen.tasa_hopp is None
+    assert resumen.tasa_innecesarios is None
     assert resumen.cambios_celda_no_observados == 0
 
 
-def test_resumen_solo_indeterminados_deja_tasa_exito_en_cero():
-    """Si ningún handover se pudo clasificar, el denominador de la tasa de
-    éxito es 0 y la tasa vale 0 (no se cuentan indeterminados)."""
+
+def test_resumen_solo_indeterminados_deja_tasas_en_none():
+    """Si ningún handover se pudo clasificar, el denominador de tasa_exito
+    y tasa_phd es 0 -> None (sin datos), no se cuentan los indeterminados
+    como si fueran un 0% real."""
     secuencia = [
         _medicion(1, _hora(5, 8, 0, 0), rssi=None, rsrq=None),
         _medicion(2, _hora(5, 8, 0, 5), rssi=None, rsrq=None),
@@ -197,8 +202,9 @@ def test_resumen_solo_indeterminados_deja_tasa_exito_en_cero():
 
     assert resumen.total_handovers == 1
     assert resumen.indeterminados == 1
-    assert resumen.tasa_exito == 0.0
-    assert resumen.tasa_innecesarios == 0.0
+    assert resumen.tasa_exito is None
+    assert resumen.tasa_phd is None
+    assert resumen.tasa_innecesarios is None
 
 
 def test_resumen_pasa_los_filtros_al_repositorio():
@@ -391,6 +397,23 @@ def test_tendencia_diaria_un_punto_por_dia_ordenado():
     primer_dia, segundo_dia = tendencia
     assert (primer_dia.exitosos, primer_dia.tasa_exito) == (1, 100.0)
     assert (segundo_dia.fallidos, segundo_dia.ping_pongs, segundo_dia.tasa_exito) == (1, 0, 0.0)
+
+
+def test_tendencia_periodo_solo_con_indeterminados_da_tasa_exito_none():
+    """Un periodo donde ningún handover se pudo clasificar (solo
+    indeterminados) da tasa_exito=None, no 0.0 -- "sin datos", no un 0%
+    real (Paso 6)."""
+    secuencia = [
+        _medicion(1, _hora(5, 8, 0, 0), rssi=None, rsrq=None),
+        _medicion(2, _hora(5, 8, 0, 5), rssi=None, rsrq=None),
+    ]
+    repositorio = RepositorioKpisFalso(secuencia=secuencia)
+
+    tendencia = calcular_tendencia(FECHA_INICIO, FECHA_FIN, repositorio, periodo="diario")
+
+    assert len(tendencia) == 1
+    assert tendencia[0].indeterminados == 1
+    assert tendencia[0].tasa_exito is None
 
 
 def test_tendencia_mensual_agrupa_todo_el_mes_en_un_punto():
