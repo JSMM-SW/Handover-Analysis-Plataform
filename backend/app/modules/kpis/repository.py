@@ -147,14 +147,20 @@ class KpisRepository:
         tecnologia: list[int] | None = None,
         sesion_label: list[int] | None = None,
     ) -> list[tuple]:
-        """Secuencia cronológica de mediciones del rango, con todos los
-        indicadores de señal necesarios para detectar handovers y
-        clasificarlos como exitosos/fallidos: cell_id, timestamp, rsrp_dbm,
-        rssi, rsrq, rssnr.
+        """Secuencia de mediciones del rango, con todos los indicadores de
+        señal necesarios para detectar handovers y clasificarlos:
+        (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
+        execution_id, tecnologia, report_index).
 
         `tecnologia`/`sesion_label` son listas opcionales (ver
         `contar_mediciones`). `franja` no se filtra aquí -- se aplica
         después de detectar los eventos, en services.py.
+
+        `execution_id`, `tecnologia` y `report_index` viajan en cada fila
+        para que `services.py` pueda: (a) agrupar la secuencia por sesión
+        antes de detectar handovers -- nunca se detecta un salto entre
+        mediciones de sesiones distintas --, y (b) desempatar mediciones
+        con el mismo `timestamp_medicion` por su orden de reporte original.
 
         Reemplaza a los antiguos `get_sequence_data_by_range`,
         `get_sequence_with_timestamps` y `get_full_sequence_data`: los tres
@@ -163,9 +169,11 @@ class KpisRepository:
         a mano; el costo de traer columnas que algún servicio no usa es
         despreciable frente a eso.
 
-        Ordenado por timestamp ascendente: ese orden es lo que le permite a
-        los servicios detectar una transición de celda comparando cada
-        registro contra el anterior.
+        Ordenado por (execution_id, timestamp_medicion, report_index): ese
+        orden agrupa automáticamente las mediciones de cada sesión de forma
+        contigua y cronológica, con desempate -- services.py solo necesita
+        detectar cuándo cambia el execution_id para saber que empezó una
+        sesión nueva, sin tener que agrupar él mismo.
         """
         consulta = self._db.query(
             HandoverRecord.cell_id,
@@ -174,6 +182,9 @@ class KpisRepository:
             HandoverRecord.rssi,
             HandoverRecord.rsrq,
             HandoverRecord.rssnr,
+            HandoverRecord.execution_id,
+            HandoverRecord.tecnologia,
+            HandoverRecord.report_index,
         ).filter(func.date(_en_hora_local(HandoverRecord.timestamp_medicion)).between(fecha_inicio, fecha_fin))
         if tecnologia:
             consulta = consulta.filter(HandoverRecord.tecnologia.in_(tecnologia))
@@ -181,5 +192,8 @@ class KpisRepository:
             consulta = consulta.filter(
                 HandoverRecord.execution_id.in_(self._resolver_execution_ids_por_sesiones(sesion_label))
             )
-        return consulta.order_by(HandoverRecord.timestamp_medicion.asc()).all()
-
+        return consulta.order_by(
+            HandoverRecord.execution_id.asc(),
+            HandoverRecord.timestamp_medicion.asc(),
+            HandoverRecord.report_index.asc(),
+        ).all()

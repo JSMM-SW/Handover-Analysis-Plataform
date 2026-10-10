@@ -63,6 +63,12 @@ class KpiSummaryResponse(BaseModel):
     )
     ping_pongs: int = Field(description="Handovers que formaron parte de un patrón A -> B -> A")
     tasa_hopp: float = Field(description="ping_pongs / total_handovers (%)")
+    cambios_celda_no_observados: int = Field(
+        description="Cortes de la secuencia por hueco de datos (más de 10 s entre mediciones "
+        "de la misma sesión) donde la celda antes y después del hueco era distinta -- un "
+        "cambio de celda que probablemente ocurrió pero no se pudo confirmar como handover "
+        "por falta de mediciones en el intervalo."
+    )
 
 
 class HourlyDistributionResponse(BaseModel):

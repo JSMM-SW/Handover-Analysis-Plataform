@@ -10,13 +10,24 @@ filtros, agrupaciones, armado de las respuestas Pydantic) sin conectarse
 a Supabase -- gracias al Repository Pattern, el servicio no sabe ni le
 importa de dónde vienen los datos.
 
-Las reglas puras (PHD, UHO, ping-pong, franjas) ya se prueban una por una
-en `test_kpis_reglas.py`; aquí se verifica que los servicios las combinan
-correctamente.
+Las reglas puras (PHD, UHO, ping-pong, franjas, sesiones/tramos) ya se
+prueban una por una en `test_kpis_reglas.py`; aquí se verifica que los
+servicios las combinan correctamente. El orden real por report_index (SQL)
+se prueba en `test_kpis_repository.py`.
+
+Nota sobre los tiempos de los escenarios (Paso 2, oct 2026): con el hueco
+máximo de HUECO_MAXIMO_SEGUNDOS=10, un ping-pong solo se detecta si el
+regreso ocurre dentro del mismo tramo (pocos segundos después del salto de
+ida), y cualquier par origen/destino separado por más de 10 s simplemente
+no se detecta como handover. Por eso los escenarios usan huecos de
+segundos entre mediciones -- no de minutos u horas como antes -- agregando
+una "medición fresca" justo antes de cada salto lejano en el tiempo para
+no generar un corte por hueco ahí donde no lo hay.
 """
 
 from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
+from uuid import uuid4
 
 from app.modules.kpis.services import (
     calcular_distribucion_dia_semana,
@@ -31,6 +42,7 @@ from app.modules.kpis.services import (
 
 FECHA_INICIO = date(2026, 5, 5)
 FECHA_FIN = date(2026, 5, 6)
+SESION_UNICA = uuid4()
 
 
 class RepositorioKpisFalso:
@@ -75,51 +87,55 @@ class RepositorioKpisFalso:
         return self.sesiones
 
 
-def _medicion(celda: int, instante: datetime, rssi: int | None, rsrq: int | None) -> tuple:
+def _medicion(
+    celda: int,
+    instante: datetime,
+    rssi: int | None,
+    rsrq: int | None,
+    sesion=None,
+    tecnologia: int = 1,
+) -> tuple:
     """Construye una medición con el formato de
     `KpisRepository.obtener_secuencia_completa`:
-    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr).
+    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
+    execution_id, tecnologia, report_index).
     """
-    return (celda, instante, None, rssi, rsrq, None)
+    return (celda, instante, None, rssi, rsrq, None, sesion or SESION_UNICA, tecnologia, None)
 
 
-def _hora(dia: int, hora: int, minuto: int = 0) -> datetime:
+def _hora(dia: int, hora: int, minuto: int = 0, segundo: int = 0) -> datetime:
     """Instante UTC de mayo de 2026 que, tras la conversión a hora local de
     Ecuador que hace `_detectar_eventos_handover` (resta 5 horas), cae
-    exactamente en `hora`:`minuto` del día `dia`.
-
-    Se le suman 5 horas al construir el UTC (en vez de las 0) para que los
-    escenarios de los tests se puedan seguir escribiendo en términos de
-    "qué hora era en Ecuador" -- `timedelta` resuelve solo el cruce de día
-    cuando `hora + 5 >= 24` (ej. las 21:00 locales nacen como la 01:00/02:00
-    UTC del día siguiente).
-    """
-    return datetime(2026, 5, dia, tzinfo=timezone.utc) + timedelta(hours=hora + 5, minutes=minuto)
+    exactamente en `hora`:`minuto`:`segundo` del día `dia`."""
+    return datetime(2026, 5, dia, tzinfo=timezone.utc) + timedelta(hours=hora + 5, minutes=minuto, seconds=segundo)
 
 
 def _secuencia_escenario() -> list[tuple]:
     """Secuencia del martes 05/05/2026 con un caso de cada categoría.
 
-    Recorrido de celdas: 1 -> 2 -> 1 -> 3 -> 4, que genera 4 handovers:
+    Recorrido de celdas: 1 -> 2 -> 1 -> 3 -> 4, que genera 4 handovers,
+    todos con su par origen/destino separado por pocos segundos (ver nota
+    del módulo). Los dos primeros (el ping-pong 1->2->1) quedan juntos
+    dentro de la hora 8; antes de v2 de este archivo (sin el hueco de 10s)
+    el segundo caía en la hora 13 -- ya no es posible mantenerlos tan
+    separados en el tiempo y seguir detectando el ping-pong, porque el
+    regreso tiene que estar en el mismo tramo que la ida.
 
-    | Hora  | Salto | PHD           | UHO (origen)       | Ping-pong |
-    |-------|-------|---------------|--------------------|-----------|
-    | 08:01 | 1->2  | exitoso       | True  (-95, -14)   | No        |
-    | 13:00 | 2->1  | fallido       | True  (-85, -12)   | Sí        |
-    | 20:00 | 1->3  | indeterminado | False (-105, -13)  | No        |
-    | 21:00 | 3->4  | indeterminado | None (sin datos)   | No        |
-
-    Las horas de la tabla son hora LOCAL de Ecuador -- `_hora()` ya se
-    encarga de construir el UTC correcto para que caigan ahí tras la
-    conversión del servicio.
+    | Hora local | Salto | PHD           | UHO (origen)       | Ping-pong |
+    |------------|-------|---------------|---------------------|-----------|
+    | 08:00:05   | 1->2  | exitoso       | True  (-95, -14)    | No        |
+    | 08:00:10   | 2->1  | fallido       | True  (-85, -12)    | Sí        |
+    | 20:00:00   | 1->3  | indeterminado | False (-105, -13)   | No        |
+    | 21:00:00   | 3->4  | indeterminado | None (sin datos)    | No        |
     """
     return [
-        _medicion(1, _hora(5, 8, 0), rssi=-95, rsrq=-14),
-        _medicion(2, _hora(5, 8, 1), rssi=-85, rsrq=-12),
-        _medicion(1, _hora(5, 13, 0), rssi=-105, rsrq=-13),
-        _medicion(3, _hora(5, 20, 0), rssi=None, rsrq=None),
-        _medicion(3, _hora(5, 20, 5), rssi=None, rsrq=None),
-        _medicion(4, _hora(5, 21, 0), rssi=-80, rsrq=-10),
+        _medicion(1, _hora(5, 8, 0, 0), rssi=-95, rsrq=-14),
+        _medicion(2, _hora(5, 8, 0, 5), rssi=-85, rsrq=-12),
+        _medicion(1, _hora(5, 8, 0, 10), rssi=-105, rsrq=-13),
+        _medicion(1, _hora(5, 19, 59, 55), rssi=-105, rsrq=-13),  # medición fresca, origen evento3
+        _medicion(3, _hora(5, 20, 0, 0), rssi=None, rsrq=None),
+        _medicion(3, _hora(5, 20, 59, 55), rssi=None, rsrq=None),  # medición fresca, origen evento4
+        _medicion(4, _hora(5, 21, 0, 0), rssi=-80, rsrq=-10),
     ]
 
 
@@ -145,6 +161,7 @@ def test_resumen_calcula_conteos_y_tasas_del_escenario():
     assert resumen.ping_pongs == 1
     assert resumen.tasa_hopp == 25.0  # 1 / 4
     assert resumen.tasa_innecesarios == 66.67  # 2 UHO / 3 evaluables
+    assert resumen.cambios_celda_no_observados == 0  # ningún corte tuvo cambio de celda
 
 
 def test_resumen_sin_datos_devuelve_ceros_sin_dividir_por_cero():
@@ -159,14 +176,15 @@ def test_resumen_sin_datos_devuelve_ceros_sin_dividir_por_cero():
     assert resumen.tasa_exito == 0.0
     assert resumen.tasa_hopp == 0.0
     assert resumen.tasa_innecesarios == 0.0
+    assert resumen.cambios_celda_no_observados == 0
 
 
 def test_resumen_solo_indeterminados_deja_tasa_exito_en_cero():
     """Si ningún handover se pudo clasificar, el denominador de la tasa de
     éxito es 0 y la tasa vale 0 (no se cuentan indeterminados)."""
     secuencia = [
-        _medicion(1, _hora(5, 8, 0), rssi=None, rsrq=None),
-        _medicion(2, _hora(5, 8, 1), rssi=None, rsrq=None),
+        _medicion(1, _hora(5, 8, 0, 0), rssi=None, rsrq=None),
+        _medicion(2, _hora(5, 8, 0, 5), rssi=None, rsrq=None),
     ]
     repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=2)
 
@@ -203,14 +221,15 @@ def test_resumen_con_franja_cuenta_solo_los_eventos_de_esa_franja():
 
 
 def test_resumen_franja_se_aplica_despues_de_detectar_no_antes():
-    """Caso que justifica filtrar DESPUÉS de detectar: el único cambio de
-    celda real ocurre en la mañana (08:00). Si se filtraran primero las
-    mediciones de la noche (05:00 en celda 1 y 19:30 en celda 2), parecerían
-    consecutivas y aparecería un handover nocturno falso."""
+    """Un handover que cruza el límite entre dos franjas (último registro
+    de origen a las 05:59:58 "noche", destino a las 06:00:03 "mañana")
+    solo se puede detectar si el par origen/destino se compara ANTES de
+    filtrar por franja. El handover sí se detecta (hueco de 5 s), pero su
+    timestamp (el del destino) cae en "mañana", así que el filtro
+    franja=noche lo excluye."""
     secuencia = [
-        _medicion(1, _hora(5, 5, 0), rssi=-90, rsrq=-12),
-        _medicion(2, _hora(5, 8, 0), rssi=-80, rsrq=-10),
-        _medicion(2, _hora(5, 19, 30), rssi=-80, rsrq=-10),
+        _medicion(1, _hora(5, 5, 59, 58), rssi=-90, rsrq=-12),
+        _medicion(2, _hora(5, 6, 0, 3), rssi=-80, rsrq=-10),
     ]
     repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=2)
 
@@ -225,16 +244,21 @@ def test_resumen_franja_se_aplica_despues_de_detectar_no_antes():
 
 
 def test_distribucion_horaria_devuelve_las_24_horas_con_su_desglose():
-    """Siempre se devuelven las 24 horas (las vacías con ceros) y cada
-    handover cae en la hora de su timestamp."""
+    """Siempre se devuelven las 24 horas (las vacías con ceros). Los dos
+    primeros eventos del escenario (exitoso y fallido+ping-pong) caen
+    juntos en la hora 8; los otros dos, indeterminados, en las horas 20 y
+    21."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
     distribucion = calcular_distribucion_horaria(FECHA_INICIO, FECHA_FIN, repositorio)
     por_hora = {item.hora: item for item in distribucion}
 
     assert [item.hora for item in distribucion] == list(range(24))
-    assert por_hora[8].total == 1 and por_hora[8].exitosos == 1
-    assert por_hora[13].total == 1 and por_hora[13].fallidos == 1 and por_hora[13].ping_pongs == 1
+    assert por_hora[8].total == 2
+    assert por_hora[8].exitosos == 1
+    assert por_hora[8].fallidos == 1
+    assert por_hora[8].ping_pongs == 1
+    assert por_hora[13].total == 0
     assert por_hora[20].indeterminados == 1
     assert por_hora[21].indeterminados == 1
     assert por_hora[0].total == 0
@@ -242,13 +266,14 @@ def test_distribucion_horaria_devuelve_las_24_horas_con_su_desglose():
 
 
 def test_distribucion_horaria_respeta_el_filtro_de_franja():
-    """Con franja 'manana' solo queda el handover de las 08:00."""
+    """Con franja 'manana' quedan los dos handovers de la hora 8 (el
+    exitoso y el fallido con ping-pong, ambos dentro de esa hora)."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
     distribucion = calcular_distribucion_horaria(FECHA_INICIO, FECHA_FIN, repositorio, franja=["manana"])
 
-    assert sum(item.total for item in distribucion) == 1
-    assert distribucion[8].total == 1
+    assert sum(item.total for item in distribucion) == 2
+    assert distribucion[8].total == 2
 
 
 # ---------------------------------------------------------------------------
@@ -258,15 +283,16 @@ def test_distribucion_horaria_respeta_el_filtro_de_franja():
 
 def test_distribucion_franja_devuelve_las_tres_franjas_en_orden():
     """Siempre devuelve mañana, tarde y noche en ese orden, con el
-    desglose de cada una."""
+    desglose de cada una. "Tarde" queda vacía: los dos handovers de la
+    mañana ocurren dentro de la misma hora 8."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
     distribucion = calcular_distribucion_franja_horaria(FECHA_INICIO, FECHA_FIN, repositorio)
 
     assert [item.franja for item in distribucion] == ["manana", "tarde", "noche"]
     manana, tarde, noche = distribucion
-    assert (manana.total, manana.exitosos) == (1, 1)
-    assert (tarde.total, tarde.fallidos, tarde.ping_pongs) == (1, 1, 1)
+    assert (manana.total, manana.exitosos, manana.fallidos, manana.ping_pongs) == (2, 1, 1, 1)
+    assert tarde.total == 0
     assert (noche.total, noche.indeterminados) == (2, 2)
 
 
@@ -300,12 +326,13 @@ def test_distribucion_dia_semana_devuelve_lunes_a_domingo():
 
 def test_distribucion_dia_semana_respeta_el_filtro_de_franja():
     """A diferencia de la distribución por franja, esta sí aplica el
-    filtro global de franja horaria."""
+    filtro global de franja horaria. Con 'manana' quedan los dos
+    handovers de la hora 8 (uno exitoso, uno fallido)."""
     repositorio = RepositorioKpisFalso(secuencia=_secuencia_escenario())
 
-    distribucion = calcular_distribucion_dia_semana(FECHA_INICIO, FECHA_FIN, repositorio, franja=["tarde"])
+    distribucion = calcular_distribucion_dia_semana(FECHA_INICIO, FECHA_FIN, repositorio, franja=["manana"])
 
-    assert distribucion[1].total == 1
+    assert distribucion[1].total == 2
     assert distribucion[1].fallidos == 1
 
 
@@ -315,12 +342,15 @@ def test_distribucion_dia_semana_respeta_el_filtro_de_franja():
 
 
 def _secuencia_dos_dias() -> list[tuple]:
-    """Un handover exitoso el 05/05 (1 -> 2) y uno fallido con ping-pong el
-    06/05 (2 -> 1)."""
+    """Un handover exitoso el 05/05 (1 -> 2) y uno fallido el 06/05
+    (2 -> 1), cada uno con su propio par origen/destino separado por
+    pocos segundos -- no pueden encadenarse como ping-pong entre sí (el
+    hueco entre ambos días supera por mucho los 10 s)."""
     return [
-        _medicion(1, _hora(5, 8, 0), rssi=-90, rsrq=-12),
-        _medicion(2, _hora(5, 8, 1), rssi=-80, rsrq=-10),
-        _medicion(1, _hora(6, 9, 0), rssi=-85, rsrq=-12),
+        _medicion(1, _hora(5, 8, 0, 0), rssi=-90, rsrq=-12),
+        _medicion(2, _hora(5, 8, 0, 5), rssi=-80, rsrq=-10),
+        _medicion(2, _hora(6, 9, 0, 0), rssi=-80, rsrq=-10),  # medición fresca, día 6
+        _medicion(1, _hora(6, 9, 0, 5), rssi=-85, rsrq=-12),
     ]
 
 
@@ -337,7 +367,7 @@ def test_tendencia_diaria_un_punto_por_dia_ordenado():
     ]
     primer_dia, segundo_dia = tendencia
     assert (primer_dia.exitosos, primer_dia.tasa_exito) == (1, 100.0)
-    assert (segundo_dia.fallidos, segundo_dia.ping_pongs, segundo_dia.tasa_exito) == (1, 1, 0.0)
+    assert (segundo_dia.fallidos, segundo_dia.ping_pongs, segundo_dia.tasa_exito) == (1, 0, 0.0)
 
 
 def test_tendencia_mensual_agrupa_todo_el_mes_en_un_punto():

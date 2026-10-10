@@ -1,20 +1,23 @@
 """
 Pruebas unitarias de las reglas de negocio puras del módulo de KPIs
-(`app.modules.kpis.services`): detección de handovers, criterio PHD
-(éxito/fallo/indeterminado), criterio UHO (handover innecesario),
-ping-pong, franjas horarias y claves/etiquetas de periodo.
+(`app.modules.kpis.services`): detección de handovers (por sesión y por
+tramos), criterio PHD (éxito/fallo/indeterminado), criterio UHO (handover
+innecesario), ping-pong, franjas horarias y claves/etiquetas de periodo.
 
 Todas las funciones probadas aquí son funciones puras: reciben tuplas o
 diccionarios y devuelven valores, sin base de datos ni FastAPI. Por eso
 no se necesita ningún repositorio falso en este archivo -- eso queda para
-`test_kpis_services.py`.
+`test_kpis_services.py`. Las pruebas que necesitan SQL real (orden por
+report_index) están en `test_kpis_repository.py`.
 
 Formato de cada medición (el mismo que devuelve
 `KpisRepository.obtener_secuencia_completa`):
-    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr)
+    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
+    execution_id, tecnologia, report_index)
 """
 
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -34,26 +37,46 @@ from app.modules.kpis.services import (
 
 
 INSTANTE_BASE = datetime(2026, 5, 5, 8, 0, 0, tzinfo=timezone.utc)
+SESION_A = uuid4()
+SESION_B = uuid4()
 
 
-def _medicion(celda: int, segundos: int = 0, rssi: int | None = -90, rsrq: int | None = -12) -> tuple:
+def _medicion(
+    celda: int,
+    segundos: int = 0,
+    rssi: int | None = -90,
+    rsrq: int | None = -12,
+    sesion=None,
+    tecnologia: int = 1,
+    report_index: int | None = None,
+) -> tuple:
     """Construye una medición con el formato de
     `KpisRepository.obtener_secuencia_completa`.
 
     `segundos` se suma a `INSTANTE_BASE` para ordenar cronológicamente las
     mediciones dentro de una prueba. RSRP y RSSNR se dejan en None porque
     ninguna regla de KPIs de handover los usa (PHD y UHO solo usan RSSI y
-    RSRQ).
+    RSRQ). `sesion` por defecto es SESION_A -- la mayoría de las pruebas no
+    les importa la sesión, solo las que prueban agrupación (ver más abajo).
     """
-    return (celda, INSTANTE_BASE + timedelta(seconds=segundos), None, rssi, rsrq, None)
+    return (
+        celda,
+        INSTANTE_BASE + timedelta(seconds=segundos),
+        None,
+        rssi,
+        rsrq,
+        None,
+        sesion or SESION_A,
+        tecnologia,
+        report_index,
+    )
 
 
 def _secuencia_de_celdas(*celdas: int) -> list[tuple]:
-    """Construye una secuencia cronológica (una medición por segundo) a
-    partir de una lista de celdas, con los mismos valores de señal en
-    todas. Útil cuando la prueba solo verifica la detección o el ping-pong,
-    no la clasificación PHD/UHO.
-    """
+    """Construye una secuencia cronológica (una medición por segundo, misma
+    sesión) a partir de una lista de celdas, con los mismos valores de
+    señal en todas. Útil cuando la prueba solo verifica la detección o el
+    ping-pong, no la clasificación PHD/UHO ni la agrupación por sesión."""
     return [_medicion(celda, segundos=indice) for indice, celda in enumerate(celdas)]
 
 
@@ -162,12 +185,15 @@ def test_uho_no_evaluable_si_falta_algun_valor(rssi, rsrq):
 
 def test_deteccion_secuencia_vacia_no_genera_eventos():
     """Sin mediciones no hay transiciones de celda."""
-    assert _detectar_eventos_handover([]) == []
+    eventos, cambios = _detectar_eventos_handover([])
+    assert eventos == []
+    assert cambios == 0
 
 
 def test_deteccion_sin_cambio_de_celda_no_genera_eventos():
     """Varias mediciones en la misma celda no son un handover."""
-    assert _detectar_eventos_handover(_secuencia_de_celdas(10, 10, 10)) == []
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(10, 10, 10))
+    assert eventos == []
 
 
 def test_deteccion_un_cambio_de_celda_genera_un_evento_anclado_en_el_destino():
@@ -175,7 +201,7 @@ def test_deteccion_un_cambio_de_celda_genera_un_evento_anclado_en_el_destino():
     timestamp de la PRIMERA medición en la celda de destino."""
     secuencia = _secuencia_de_celdas(10, 10, 20, 20)
 
-    eventos = _detectar_eventos_handover(secuencia)
+    eventos, _ = _detectar_eventos_handover(secuencia)
 
     assert len(eventos) == 1
     assert eventos[0]["celda"] == 20
@@ -192,7 +218,7 @@ def test_deteccion_clasifica_con_la_medicion_inmediatamente_anterior():
         _medicion(20, segundos=2, rssi=-80, rsrq=-10),
     ]
 
-    eventos = _detectar_eventos_handover(secuencia)
+    eventos, _ = _detectar_eventos_handover(secuencia)
 
     # Contra -70 dBm (última medición de origen) el RSSI empeoró -> fallido.
     # Si se usara -100 dBm (primera medición) saldría exitoso.
@@ -207,7 +233,7 @@ def test_deteccion_uho_se_evalua_solo_con_la_celda_de_origen():
         _medicion(20, segundos=1, rssi=-120, rsrq=-20),
     ]
 
-    eventos = _detectar_eventos_handover(secuencia)
+    eventos, _ = _detectar_eventos_handover(secuencia)
 
     assert eventos[0]["uho"] is True
     assert eventos[0]["clasificacion"] == FALLIDO  # UHO y PHD son independientes
@@ -216,21 +242,21 @@ def test_deteccion_uho_se_evalua_solo_con_la_celda_de_origen():
 def test_ping_pong_patron_a_b_a():
     """A -> B -> A: el segundo handover (vuelta a A) es ping-pong; el
     primero no."""
-    eventos = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 1))
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 1))
 
     assert [evento["ping_pong"] for evento in eventos] == [False, True]
 
 
 def test_ping_pong_no_se_marca_si_no_vuelve_a_la_celda_anterior():
     """A -> B -> C no es ping-pong."""
-    eventos = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 3))
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 3))
 
     assert [evento["ping_pong"] for evento in eventos] == [False, False]
 
 
 def test_ping_pong_oscilacion_continua():
     """A -> B -> A -> B: el segundo y el tercer handover son ping-pong."""
-    eventos = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 1, 2))
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 1, 2))
 
     assert [evento["ping_pong"] for evento in eventos] == [False, True, True]
 
@@ -238,9 +264,104 @@ def test_ping_pong_oscilacion_continua():
 def test_ping_pong_se_evalua_sobre_celdas_visitadas_no_sobre_mediciones():
     """Mediciones repetidas en la misma celda no rompen el patrón:
     A, A, B, B, B, A sigue siendo A -> B -> A."""
-    eventos = _detectar_eventos_handover(_secuencia_de_celdas(1, 1, 2, 2, 2, 1))
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 1, 2, 2, 2, 1))
 
     assert [evento["ping_pong"] for evento in eventos] == [False, True]
+
+
+# ---------------------------------------------------------------------------
+# Sesiones y tramos (Paso 2): _detectar_eventos_handover
+# ---------------------------------------------------------------------------
+
+
+def test_deteccion_no_cruza_entre_sesiones_distintas():
+    """Dos sesiones distintas nunca generan un handover entre ellas, aunque
+    terminen y empiecen en celdas diferentes y estén "pegadas" en el
+    tiempo -- cada sesión es una grabación independiente."""
+    secuencia = [
+        _medicion(10, segundos=0, sesion=SESION_A),
+        _medicion(20, segundos=1, sesion=SESION_A),
+        _medicion(99, segundos=2, sesion=SESION_B),
+        _medicion(88, segundos=3, sesion=SESION_B),
+    ]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert [evento["celda"] for evento in eventos] == [20, 88]
+    assert cambios == 0  # el corte es de sesión, no de hueco
+
+
+def test_deteccion_sesiones_solapadas_no_generan_handovers_cruzados():
+    """Dos sesiones que se grabaron en paralelo (sus mediciones se
+    intercalan en el tiempo) no se mezclan: la secuencia llega agrupada
+    por sesión (ver KpisRepository.obtener_secuencia_completa), así que
+    nunca se compara una medición de A contra una de B aunque por
+    timestamp real queden intercaladas."""
+    secuencia = [
+        _medicion(10, segundos=0, sesion=SESION_A),
+        _medicion(20, segundos=10, sesion=SESION_A),
+        _medicion(50, segundos=5, sesion=SESION_B),
+        _medicion(60, segundos=15, sesion=SESION_B),
+    ]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert {evento["celda"] for evento in eventos} == {20, 60}
+    assert cambios == 0
+
+
+def test_deteccion_corte_por_hueco_mayor_a_10_segundos_no_cuenta():
+    """Un hueco de 11 s entre mediciones consecutivas de la misma sesión
+    corta la secuencia: el cambio de celda no se cuenta como handover,
+    pero sí se registra como cambio de celda no observado."""
+    secuencia = [_medicion(10, segundos=0), _medicion(20, segundos=11)]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert eventos == []
+    assert cambios == 1
+
+
+def test_deteccion_hueco_de_exactamente_10_segundos_si_cuenta():
+    """El límite es estrictamente mayor a 10 s: un hueco de exactamente
+    10 s no corta la secuencia."""
+    secuencia = [_medicion(10, segundos=0), _medicion(20, segundos=10)]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert len(eventos) == 1
+    assert eventos[0]["celda"] == 20
+    assert cambios == 0
+
+
+def test_cambios_celda_no_observados_no_cuenta_sin_cambio_de_celda():
+    """Un hueco largo sin cambio de celda no suma a
+    cambios_celda_no_observados -- no hay evidencia de que algo se haya
+    perdido."""
+    secuencia = [_medicion(10, segundos=0), _medicion(10, segundos=20)]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert eventos == []
+    assert cambios == 0
+
+
+def test_ping_pong_no_se_encadena_a_traves_de_un_corte_por_hueco():
+    """A -> B, hueco de 11 s, B -> A: el patrón visual sigue siendo
+    A-B-A, pero como el segundo salto quedó en un tramo distinto (el
+    hueco lo cortó), ni siquiera se detecta como handover -- y por lo
+    tanto tampoco puede marcarse como ping-pong."""
+    secuencia = [
+        _medicion(1, segundos=0),
+        _medicion(2, segundos=1),
+        _medicion(1, segundos=12),  # 11 s después de la medición anterior
+    ]
+
+    eventos, cambios = _detectar_eventos_handover(secuencia)
+
+    assert len(eventos) == 1  # solo 1->2; el 2->1 quedó cortado por el hueco
+    assert eventos[0]["ping_pong"] is False
+    assert cambios == 1  # el corte sí tenía cambio de celda (2 -> 1)
 
 
 # ---------------------------------------------------------------------------

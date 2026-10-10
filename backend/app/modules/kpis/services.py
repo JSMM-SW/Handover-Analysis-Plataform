@@ -16,8 +16,7 @@ usuario: PHD es la fórmula de referencia, tener dos criterios de
 éxito/fallo en paralelo sería confuso e indefendible en la tesis.
 
 Solo se evalúa si RSSI y RSRQ están disponibles en AMBOS lados de la
-transición (registros de origen csv). Los handovers de origen xlsx (que
-solo traen RSRP, nunca RSSI/RSRQ) quedan "indeterminados": no hay respaldo
+transición. Si faltan, el handover queda "indeterminado": no hay respaldo
 de RSRP definido para PHD, decisión explícita del usuario.
 
 Criterio de UHO (Unnecessary Handover / Handover Innecesario):
@@ -30,6 +29,15 @@ de PHD: un mismo handover puede ser UHO y no estar degradado (PHD falso),
 o no ser UHO y sí estar degradado -- no son mutuamente excluyentes,
 responden preguntas distintas (¿hacía falta el salto? vs ¿el salto ayudó
 o perjudicó?).
+
+Agrupación por sesión y por tramos (Paso 2 del plan de refactor, oct 2026):
+la secuencia que entrega el repositorio mezcla todas las sesiones y
+tecnologías del rango de fechas. Un handover nunca se detecta entre
+mediciones de sesiones distintas (cada sesión es una grabación
+independiente), ni entre mediciones de la misma sesión separadas por un
+hueco de datos mayor a HUECO_MAXIMO_SEGUNDOS -- en ese hueco pudo pasar
+cualquier cosa (incluido un cambio de celda) sin quedar registrada. Ver
+`_dividir_en_tramos`.
 """
 
 from datetime import date
@@ -86,6 +94,12 @@ UHO_RSRQ_MIN_DB = -15
 # hora real en Ecuador.
 ZONA_HORARIA_ORIGEN = ZoneInfo("America/Guayaquil")
 
+# Si entre dos mediciones consecutivas de la MISMA sesión pasan más de
+# esto, se considera que hay un hueco de datos: la secuencia se corta en
+# dos tramos y no se detecta handover entre ellos (ni se encadena un
+# ping-pong a través del corte). Confirmado por el usuario.
+HUECO_MAXIMO_SEGUNDOS = 10
+
 
 _CONTADOR_VACIO = {"total": 0, "exitosos": 0, "fallidos": 0, "indeterminados": 0, "ping_pongs": 0}
 
@@ -132,13 +146,14 @@ def _clasificar_handover(registro_anterior: tuple, registro_actual: tuple) -> st
 
     Cada tupla tiene el formato que devuelve
     `KpisRepository.obtener_secuencia_completa`:
-    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr).
+    (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
+    execution_id, tecnologia, report_index).
     `registro_anterior` = celda de ORIGEN, `registro_actual` = celda de
     DESTINO -- ese orden importa para la fórmula PHD (rssi_destino vs
     rssi_origen, no al revés).
     """
-    _, _, _, rssi_origen, rsrq_origen, _ = registro_anterior
-    _, _, _, rssi_destino, rsrq_destino, _ = registro_actual
+    _, _, _, rssi_origen, rsrq_origen, _, _, _, _ = registro_anterior
+    _, _, _, rssi_destino, rsrq_destino, _, _, _, _ = registro_actual
 
     if rssi_origen is None or rssi_destino is None or rsrq_origen is None or rsrq_destino is None:
         return INDETERMINADO
@@ -154,36 +169,66 @@ def _es_uho(registro_origen: tuple) -> bool | None:
     la celda de ORIGEN de un handover -- antes de saltar, no importa a
     dónde saltó.
 
-    Devuelve None si RSSI/RSRQ de origen no están disponibles (ej. origen
-    xlsx): no se puede evaluar, no cuenta ni como UHO ni como "no UHO".
+    Devuelve None si RSSI/RSRQ de origen no están disponibles: no se puede
+    evaluar, no cuenta ni como UHO ni como "no UHO".
     """
-    _, _, _, rssi_origen, rsrq_origen, _ = registro_origen
+    _, _, _, rssi_origen, rsrq_origen, _, _, _, _ = registro_origen
     if rssi_origen is None or rsrq_origen is None:
         return None
     return rssi_origen >= UHO_RSSI_MIN_DBM and rsrq_origen >= UHO_RSRQ_MIN_DB
 
 
-def _detectar_eventos_handover(secuencia: list[tuple]) -> list[dict]:
-    """Recorre la secuencia cronológica de mediciones y arma la lista de
-    eventos de handover: cada transición de celda es un evento, con su
-    clasificación PHD (éxito/fallo/indeterminado), si es UHO (True/False/
-    None) y si formó parte de un patrón de ping-pong.
+def _dividir_en_tramos(secuencia: list[tuple]) -> tuple[list[list[tuple]], int]:
+    """Divide la secuencia (ya ordenada por sesión y tiempo, ver
+    `KpisRepository.obtener_secuencia_completa`) en tramos contiguos:
+    nunca se detecta un handover entre mediciones de sesiones distintas,
+    ni entre mediciones de la misma sesión separadas por un hueco de más
+    de HUECO_MAXIMO_SEGUNDOS -- en ese hueco pudo haber pasado cualquier
+    cosa (incluido un cambio de celda) sin quedar registrada.
 
-    Punto único de detección: `calcular_resumen_kpis`,
-    `calcular_distribucion_horaria`, `calcular_distribucion_franja_horaria`
-    y `calcular_tendencia` reutilizan esta lista en vez de cada uno volver a
-    recorrer la secuencia cruda con su propia copia de esta lógica.
+    Devuelve los tramos y, aparte, cuántos de los cortes POR HUECO (no
+    los de cambio de sesión) tenían una celda distinta antes y después:
+    son cambios de celda que probablemente ocurrieron pero no se pueden
+    contar como handover porque no hay mediciones de por medio que lo
+    confirmen.
+    """
+    if not secuencia:
+        return [], 0
+
+    tramos: list[list[tuple]] = [[secuencia[0]]]
+    cambios_celda_no_observados = 0
+
+    for anterior, actual in zip(secuencia, secuencia[1:]):
+        misma_sesion = actual[6] == anterior[6]
+        hueco_segundos = (actual[1] - anterior[1]).total_seconds() if misma_sesion else None
+
+        corta = not misma_sesion or hueco_segundos > HUECO_MAXIMO_SEGUNDOS
+        if corta:
+            if misma_sesion and actual[0] != anterior[0]:
+                cambios_celda_no_observados += 1
+            tramos.append([])
+        tramos[-1].append(actual)
+
+    return tramos, cambios_celda_no_observados
+
+
+def _detectar_eventos_en_tramo(tramo: list[tuple]) -> list[dict]:
+    """Detecta los eventos de handover dentro de UN tramo (ver
+    `_dividir_en_tramos`): mediciones consecutivas de la misma sesión, sin
+    huecos de datos de por medio. El ping-pong (A -> B -> A) solo se
+    encadena dentro del tramo -- nunca cruza un corte de sesión o de
+    hueco, porque `celdas_visitadas` arranca de cero en cada tramo.
     """
     eventos: list[dict] = []
-    if not secuencia:
+    if len(tramo) < 2:
         return eventos
 
-    celda_actual = secuencia[0][0]
+    celda_actual = tramo[0][0]
     celdas_visitadas = [celda_actual]
 
-    for indice in range(1, len(secuencia)):
-        registro_origen = secuencia[indice - 1]
-        registro_actual = secuencia[indice]
+    for indice in range(1, len(tramo)):
+        registro_origen = tramo[indice - 1]
+        registro_actual = tramo[indice]
         celda_nueva = registro_actual[0]
 
         if celda_nueva == celda_actual:
@@ -211,6 +256,31 @@ def _detectar_eventos_handover(secuencia: list[tuple]) -> list[dict]:
             eventos[indice - 1]["ping_pong"] = True
 
     return eventos
+
+
+def _detectar_eventos_handover(secuencia: list[tuple]) -> tuple[list[dict], int]:
+    """Recorre la secuencia de mediciones y arma la lista de eventos de
+    handover, agrupando primero por sesión y cortando en tramos donde haya
+    un hueco de datos mayor a HUECO_MAXIMO_SEGUNDOS (ver
+    `_dividir_en_tramos`).
+
+    Devuelve `(eventos, cambios_celda_no_observados)`: el segundo valor
+    cuenta los cortes por hueco (no los de cambio de sesión) donde la
+    celda antes y después del hueco era distinta.
+
+    Punto único de detección: `calcular_resumen_kpis`,
+    `calcular_distribucion_horaria`, `calcular_distribucion_franja_horaria`,
+    `calcular_distribucion_dia_semana` y `calcular_tendencia` reutilizan
+    esta lista en vez de cada uno volver a recorrer la secuencia cruda con
+    su propia copia de esta lógica.
+    """
+    tramos, cambios_celda_no_observados = _dividir_en_tramos(secuencia)
+
+    eventos: list[dict] = []
+    for tramo in tramos:
+        eventos.extend(_detectar_eventos_en_tramo(tramo))
+
+    return eventos, cambios_celda_no_observados
 
 
 def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str | int]) -> dict[str | int, dict]:
@@ -256,7 +326,8 @@ def calcular_resumen_kpis(
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
     total_mediciones = repositorio.contar_mediciones(fecha_inicio, fecha_fin, tecnologia, franja, sesion_label)
-    eventos = _filtrar_por_franja(_detectar_eventos_handover(secuencia), franja)
+    eventos_detectados, cambios_celda_no_observados = _detectar_eventos_handover(secuencia)
+    eventos = _filtrar_por_franja(eventos_detectados, franja)
     total_ho = len(eventos)
     exitosos = sum(1 for evento in eventos if evento["clasificacion"] == EXITOSO)
     fallidos = sum(1 for evento in eventos if evento["clasificacion"] == FALLIDO)
@@ -285,6 +356,7 @@ def calcular_resumen_kpis(
         tasa_innecesarios=round(tasa_innecesarios, 2),
         ping_pongs=ping_pongs,
         tasa_hopp=round(tasa_hopp, 2),
+        cambios_celda_no_observados=cambios_celda_no_observados,
     )
 
 
@@ -303,7 +375,8 @@ def calcular_distribucion_horaria(
     juntos en vez de un único valor agregado.
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
-    eventos = _filtrar_por_franja(_detectar_eventos_handover(secuencia), franja)
+    eventos_detectados, _ = _detectar_eventos_handover(secuencia)
+    eventos = _filtrar_por_franja(eventos_detectados, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: evento["timestamp"].hour)
 
     return [
@@ -351,7 +424,7 @@ def calcular_distribucion_franja_horaria(
     """Igual que `calcular_distribucion_horaria`, pero agrupado en 3 franjas
     en vez de 24 horas individuales."""
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
-    eventos = _detectar_eventos_handover(secuencia)
+    eventos, _ = _detectar_eventos_handover(secuencia)
     grupos = _agrupar_eventos(eventos, lambda evento: _franja_horaria(evento["timestamp"].hour))
 
     return [
@@ -386,7 +459,8 @@ def calcular_distribucion_dia_semana(
     conceptual en filtrar por ambas a la vez.
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
-    eventos = _filtrar_por_franja(_detectar_eventos_handover(secuencia), franja)
+    eventos_detectados, _ = _detectar_eventos_handover(secuencia)
+    eventos = _filtrar_por_franja(eventos_detectados, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _dia_semana(evento["timestamp"]))
 
     return [
@@ -442,7 +516,8 @@ def calcular_tendencia(
     `periodo` (diario/semanal/mensual/anual -- ver `PERIODOS_VALIDOS`).
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
-    eventos = _filtrar_por_franja(_detectar_eventos_handover(secuencia), franja)
+    eventos_detectados, _ = _detectar_eventos_handover(secuencia)
+    eventos = _filtrar_por_franja(eventos_detectados, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _clave_periodo(evento["timestamp"], periodo))
 
     resultado = []
