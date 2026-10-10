@@ -365,6 +365,53 @@ def test_ping_pong_no_se_encadena_a_traves_de_un_corte_por_hueco():
 
 
 # ---------------------------------------------------------------------------
+# Ventana de ping-pong (Paso 3): PING_PONG_VENTANA_SEGUNDOS = 60
+# ---------------------------------------------------------------------------
+
+
+def _secuencia_ping_pong(segundos_regreso: int) -> list[tuple]:
+    """Construye A -> B -> A con mediciones "puente" en B cada <=10 s (para
+    no disparar el corte por hueco del Paso 2), de modo que el regreso
+    ocurra exactamente a `segundos_regreso` segundos después de la ida
+    (que siempre ocurre al segundo 1)."""
+    secuencia = [_medicion(1, segundos=0), _medicion(2, segundos=1)]
+    segundo = 1
+    while segundo + 10 < 1 + segundos_regreso:
+        segundo += 10
+        secuencia.append(_medicion(2, segundos=segundo))
+    secuencia.append(_medicion(1, segundos=1 + segundos_regreso))
+    return secuencia
+
+
+def test_ping_pong_regreso_a_59_segundos_cuenta():
+    """El regreso a la celda original dentro de la ventana de 60 s sí
+    cuenta como ping-pong."""
+    eventos, _ = _detectar_eventos_handover(_secuencia_ping_pong(59))
+    assert [evento["ping_pong"] for evento in eventos] == [False, True]
+
+
+def test_ping_pong_regreso_a_60_segundos_cuenta():
+    """El límite es inclusivo: exactamente 60 s entre ida y regreso
+    todavía cuenta como ping-pong."""
+    eventos, _ = _detectar_eventos_handover(_secuencia_ping_pong(60))
+    assert [evento["ping_pong"] for evento in eventos] == [False, True]
+
+
+def test_ping_pong_regreso_a_61_segundos_no_cuenta():
+    """Más de 60 s entre ida y regreso ya no se considera ping-pong (es un
+    segundo cambio de celda independiente, no un rebote)."""
+    eventos, _ = _detectar_eventos_handover(_secuencia_ping_pong(61))
+    assert [evento["ping_pong"] for evento in eventos] == [False, False]
+
+
+def test_ping_pong_a_b_c_a_no_cuenta():
+    """A -> B -> C -> A nunca es ping-pong (no vuelve a la celda
+    INMEDIATAMENTE anterior), sin importar la ventana de tiempo."""
+    eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 3, 1))
+    assert [evento["ping_pong"] for evento in eventos] == [False, False, False]
+
+
+# ---------------------------------------------------------------------------
 # Franjas horarias: _franja_horaria y _filtrar_por_franja
 # ---------------------------------------------------------------------------
 

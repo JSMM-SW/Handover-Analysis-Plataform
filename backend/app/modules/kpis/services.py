@@ -38,6 +38,14 @@ independiente), ni entre mediciones de la misma sesión separadas por un
 hueco de datos mayor a HUECO_MAXIMO_SEGUNDOS -- en ese hueco pudo pasar
 cualquier cosa (incluido un cambio de celda) sin quedar registrada. Ver
 `_dividir_en_tramos`.
+
+Ventana de ping-pong (Paso 3 del plan de refactor, oct 2026): un patrón
+A -> B -> A solo cuenta como ping-pong si el regreso (B -> A) ocurre
+dentro de PING_PONG_VENTANA_SEGUNDOS desde la ida (A -> B); un regreso más
+tardío es un segundo cambio de celda independiente, no un rebote de señal.
+Fuente: V. Parraga-Villamar, P. Lupera-Morillo y F. Grijalva, "How
+efficient are handovers in mobile networks? A data-driven approach,"
+Electronics, vol. 14, art. 3208, 2025.
 """
 
 from datetime import date
@@ -99,6 +107,12 @@ ZONA_HORARIA_ORIGEN = ZoneInfo("America/Guayaquil")
 # dos tramos y no se detecta handover entre ellos (ni se encadena un
 # ping-pong a través del corte). Confirmado por el usuario.
 HUECO_MAXIMO_SEGUNDOS = 10
+
+# Ventana máxima entre la ida (A -> B) y el regreso (B -> A) para que un
+# patrón A -> B -> A cuente como ping-pong (ver docstring del módulo y la
+# cita bibliográfica). Un regreso más tardío es un segundo handover
+# independiente, no un rebote de señal.
+PING_PONG_VENTANA_SEGUNDOS = 60
 
 
 _CONTADOR_VACIO = {"total": 0, "exitosos": 0, "fallidos": 0, "indeterminados": 0, "ping_pongs": 0}
@@ -217,7 +231,9 @@ def _detectar_eventos_en_tramo(tramo: list[tuple]) -> list[dict]:
     `_dividir_en_tramos`): mediciones consecutivas de la misma sesión, sin
     huecos de datos de por medio. El ping-pong (A -> B -> A) solo se
     encadena dentro del tramo -- nunca cruza un corte de sesión o de
-    hueco, porque `celdas_visitadas` arranca de cero en cada tramo.
+    hueco, porque `celdas_visitadas` arranca de cero en cada tramo -- y
+    solo si el regreso ocurre dentro de PING_PONG_VENTANA_SEGUNDOS desde
+    la ida (ver docstring del módulo).
     """
     eventos: list[dict] = []
     if len(tramo) < 2:
@@ -248,12 +264,19 @@ def _detectar_eventos_en_tramo(tramo: list[tuple]) -> list[dict]:
         celda_actual = celda_nueva
 
     # Ping-pong = patrón A -> B -> A sobre las CELDAS VISITADAS (no sobre la
-    # secuencia cruda de mediciones). celdas_visitadas[0] es la celda de
-    # partida (no es un evento), así que celdas_visitadas[k] corresponde a
-    # eventos[k-1].
+    # secuencia cruda de mediciones), Y el regreso ocurre dentro de
+    # PING_PONG_VENTANA_SEGUNDOS desde la ida. celdas_visitadas[0] es la
+    # celda de partida (no es un evento), así que celdas_visitadas[k]
+    # corresponde a eventos[k-1]: el evento de ida es eventos[indice-2], el
+    # de regreso (el que se marca) es eventos[indice-1].
     for indice in range(2, len(celdas_visitadas)):
-        if celdas_visitadas[indice] == celdas_visitadas[indice - 2]:
-            eventos[indice - 1]["ping_pong"] = True
+        if celdas_visitadas[indice] != celdas_visitadas[indice - 2]:
+            continue
+        evento_ida = eventos[indice - 2]
+        evento_regreso = eventos[indice - 1]
+        segundos_regreso = (evento_regreso["timestamp"] - evento_ida["timestamp"]).total_seconds()
+        if segundos_regreso <= PING_PONG_VENTANA_SEGUNDOS:
+            evento_regreso["ping_pong"] = True
 
     return eventos
 
