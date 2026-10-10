@@ -1,8 +1,9 @@
 from datetime import date, datetime, timezone
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 from app.modules.kpis.repository import KpisRepository
@@ -21,13 +22,43 @@ def test_temporal_uses_strongest_as_rsrp_without_rssi_fallback():
     assert 'NULL::smallint AS rsrp_dbm' in sql
 
 
+def _timezone_sqlite(zona: str, valor: str) -> str:
+    """Emula la función `timezone(zona, timestamp)` de PostgreSQL para que
+    los tests unitarios puedan usar SQLite en memoria en vez de una base
+    real. `KpisRepository._en_hora_local()` usa `func.timezone(...)` (ver
+    repository.py) -- es válido en Postgres pero SQLite no la trae
+    integrada, así que hay que registrársela a mano sobre la conexión de
+    prueba.
+
+    SQLAlchemy guarda los timestamptz como texto ISO 8601 en SQLite; se
+    interpretan como UTC (igual que timestamptz en Postgres, que siempre
+    almacena en UTC) y se convierten a la zona pedida.
+    """
+    instante = datetime.fromisoformat(valor)
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=ZoneInfo("UTC"))
+    return instante.astimezone(ZoneInfo(zona)).isoformat(sep=" ")
+
+
+def _crear_motor_sqlite():
+    """Motor SQLite en memoria con la función `timezone` registrada, listo
+    para usarse con `KpisRepository` sin tocar Supabase."""
+    engine = create_engine('sqlite://')
+
+    @event.listens_for(engine, "connect")
+    def _registrar_timezone(conexion_dbapi, _registro):
+        conexion_dbapi.create_function("timezone", 2, _timezone_sqlite)
+
+    return engine
+
+
 @pytest.mark.parametrize('signals, average, critical, risk', [
     ([-120, -80, None], -100, 1, 50),
     ([None], None, None, None),
     ([], None, None, None),
 ])
 def test_daily_rsrp_uses_strongest_and_excludes_missing_values(signals, average, critical, risk):
-    engine = create_engine('sqlite://')
+    engine = _crear_motor_sqlite()
     HandoverRecord.__table__.create(engine)
     with Session(engine) as session:
         for signal in signals:
