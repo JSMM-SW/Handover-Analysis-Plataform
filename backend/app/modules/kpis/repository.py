@@ -123,6 +123,9 @@ class KpisRepository:
         Es el denominador de la tasa de handover (total_ho / total de
         mediciones). Los 3 filtros opcionales son listas: una selección
         vacía o None se trata como "todas" (sin filtro), no como "ninguna".
+        A diferencia de `obtener_secuencia_completa`, aquí sí tiene sentido
+        filtrar tecnología en SQL: este total es un conteo plano, no pasa
+        por la detección de handovers.
         """
         consulta = self._db.query(func.count(HandoverRecord.id_registro)).filter(
             func.date(_en_hora_local(HandoverRecord.timestamp_medicion)).between(fecha_inicio, fecha_fin)
@@ -144,7 +147,6 @@ class KpisRepository:
         self,
         fecha_inicio: date,
         fecha_fin: date,
-        tecnologia: list[int] | None = None,
         sesion_label: list[int] | None = None,
     ) -> list[tuple]:
         """Secuencia de mediciones del rango, con todos los indicadores de
@@ -152,15 +154,13 @@ class KpisRepository:
         (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
         execution_id, tecnologia, report_index).
 
-        `tecnologia`/`sesion_label` son listas opcionales (ver
-        `contar_mediciones`). `franja` no se filtra aquí -- se aplica
-        después de detectar los eventos, en services.py.
-
-        `execution_id`, `tecnologia` y `report_index` viajan en cada fila
-        para que `services.py` pueda: (a) agrupar la secuencia por sesión
-        antes de detectar handovers -- nunca se detecta un salto entre
-        mediciones de sesiones distintas --, y (b) desempatar mediciones
-        con el mismo `timestamp_medicion` por su orden de reporte original.
+        `sesion_label` es una lista opcional (ver `contar_mediciones`).
+        `tecnologia` y `franja` NO se filtran aquí -- se aplican después de
+        detectar los eventos, en services.py (Paso 4 del plan de refactor):
+        filtrar tecnología en SQL podría quitar la medición "puente" entre
+        dos mediciones de la tecnología buscada, haciendo que la detección
+        las vea como consecutivas y arme un handover que en la realidad no
+        ocurrió directamente.
 
         Reemplaza a los antiguos `get_sequence_data_by_range`,
         `get_sequence_with_timestamps` y `get_full_sequence_data`: los tres
@@ -186,8 +186,6 @@ class KpisRepository:
             HandoverRecord.tecnologia,
             HandoverRecord.report_index,
         ).filter(func.date(_en_hora_local(HandoverRecord.timestamp_medicion)).between(fecha_inicio, fecha_fin))
-        if tecnologia:
-            consulta = consulta.filter(HandoverRecord.tecnologia.in_(tecnologia))
         if sesion_label:
             consulta = consulta.filter(
                 HandoverRecord.execution_id.in_(self._resolver_execution_ids_por_sesiones(sesion_label))

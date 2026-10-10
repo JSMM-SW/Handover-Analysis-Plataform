@@ -10,10 +10,10 @@ filtros, agrupaciones, armado de las respuestas Pydantic) sin conectarse
 a Supabase -- gracias al Repository Pattern, el servicio no sabe ni le
 importa de dónde vienen los datos.
 
-Las reglas puras (PHD, UHO, ping-pong, franjas, sesiones/tramos) ya se
-prueban una por una en `test_kpis_reglas.py`; aquí se verifica que los
-servicios las combinan correctamente. El orden real por report_index (SQL)
-se prueba en `test_kpis_repository.py`.
+Las reglas puras (PHD, UHO, ping-pong, franjas, sesiones/tramos, filtro de
+tecnología) ya se prueban una por una en `test_kpis_reglas.py`; aquí se
+verifica que los servicios las combinan correctamente. El orden real por
+report_index (SQL) se prueba en `test_kpis_repository.py`.
 
 Nota sobre los tiempos de los escenarios (Paso 2, oct 2026): con el hueco
 máximo de HUECO_MAXIMO_SEGUNDOS=10, un ping-pong solo se detecta si el
@@ -23,6 +23,10 @@ no se detecta como handover. Por eso los escenarios usan huecos de
 segundos entre mediciones -- no de minutos u horas como antes -- agregando
 una "medición fresca" justo antes de cada salto lejano en el tiempo para
 no generar un corte por hueco ahí donde no lo hay.
+
+Nota sobre tecnología (Paso 4, oct 2026): `obtener_secuencia_completa` ya
+no recibe `tecnologia` -- el filtro se aplica después de detectar, dentro
+del servicio (ver `_filtrar_por_tecnologia` en services.py).
 """
 
 from datetime import date, datetime, timedelta, timezone
@@ -67,9 +71,10 @@ class RepositorioKpisFalso:
         self.sesiones = sesiones or []
         self.llamadas: dict[str, tuple] = {}
 
-    def obtener_secuencia_completa(self, fecha_inicio, fecha_fin, tecnologia=None, sesion_label=None):
-        """Imita `KpisRepository.obtener_secuencia_completa`."""
-        self.llamadas["obtener_secuencia_completa"] = (fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    def obtener_secuencia_completa(self, fecha_inicio, fecha_fin, sesion_label=None):
+        """Imita `KpisRepository.obtener_secuencia_completa` (ya no recibe
+        `tecnologia`, ver Paso 4)."""
+        self.llamadas["obtener_secuencia_completa"] = (fecha_inicio, fecha_fin, sesion_label)
         return self.secuencia
 
     def contar_mediciones(self, fecha_inicio, fecha_fin, tecnologia=None, franja=None, sesion_label=None):
@@ -197,14 +202,15 @@ def test_resumen_solo_indeterminados_deja_tasa_exito_en_cero():
 
 
 def test_resumen_pasa_los_filtros_al_repositorio():
-    """La franja horaria NO se pasa a la consulta de la secuencia (se
-    aplica después de detectar eventos), pero sí al conteo de mediciones.
-    Tecnología y sesión se pasan a ambas consultas."""
+    """La tecnología y la franja horaria NO se pasan a la consulta de la
+    secuencia (se aplican después de detectar eventos); la sesión sí se
+    pasa, porque filtrar por sesión en SQL no afecta la detección (ya es
+    por sesión). Tecnología y franja sí se pasan al conteo de mediciones."""
     repositorio = RepositorioKpisFalso()
 
     calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, tecnologia=[1], franja=["tarde"], sesion_label=[7])
 
-    assert repositorio.llamadas["obtener_secuencia_completa"] == (FECHA_INICIO, FECHA_FIN, [1], [7])
+    assert repositorio.llamadas["obtener_secuencia_completa"] == (FECHA_INICIO, FECHA_FIN, [7])
     assert repositorio.llamadas["contar_mediciones"] == (FECHA_INICIO, FECHA_FIN, [1], ["tarde"], [7])
 
 
@@ -234,6 +240,23 @@ def test_resumen_franja_se_aplica_despues_de_detectar_no_antes():
     repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=2)
 
     resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, franja=["noche"])
+
+    assert resumen.total_handovers == 0
+
+
+def test_resumen_tecnologia_filtra_despues_de_detectar():
+    """LTE(A) -> 3G(X) -> LTE(B): con tecnologia=[1] (solo LTE) no debe
+    aparecer un handover A->B falso -- los dos handovers reales (A->X,
+    X->B) se detectan sobre la secuencia completa y luego se descartan
+    porque ninguno tiene ambos extremos en LTE."""
+    secuencia = [
+        _medicion(10, _hora(5, 8, 0, 0), rssi=-90, rsrq=-12, tecnologia=1),
+        _medicion(20, _hora(5, 8, 0, 5), rssi=-90, rsrq=-12, tecnologia=2),
+        _medicion(30, _hora(5, 8, 0, 10), rssi=-90, rsrq=-12, tecnologia=1),
+    ]
+    repositorio = RepositorioKpisFalso(secuencia=secuencia, total_mediciones=3)
+
+    resumen = calcular_resumen_kpis(FECHA_INICIO, FECHA_FIN, repositorio, tecnologia=[1])
 
     assert resumen.total_handovers == 0
 

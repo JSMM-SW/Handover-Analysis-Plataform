@@ -46,6 +46,16 @@ tardío es un segundo cambio de celda independiente, no un rebote de señal.
 Fuente: V. Parraga-Villamar, P. Lupera-Morillo y F. Grijalva, "How
 efficient are handovers in mobile networks? A data-driven approach,"
 Electronics, vol. 14, art. 3208, 2025.
+
+Filtro de tecnología después de detectar (Paso 4 del plan de refactor, oct
+2026): la secuencia que entrega el repositorio ya no se filtra por
+tecnología en SQL -- se detecta sobre la secuencia COMPLETA de cada sesión
+(todas las tecnologías mezcladas) y luego se conserva un handover solo si
+la tecnología de origen Y la de destino están entre las seleccionadas. Ver
+`_filtrar_por_tecnologia`. Mismo motivo que la franja horaria (Paso 1):
+filtrar antes de detectar podría quitar una medición "puente" de otra
+tecnología y unir dos mediciones que en la realidad no eran consecutivas,
+generando un handover falso.
 """
 
 from datetime import date
@@ -257,6 +267,8 @@ def _detectar_eventos_en_tramo(tramo: list[tuple]) -> list[dict]:
                 "celda": celda_nueva,
                 "clasificacion": _clasificar_handover(registro_origen, registro_actual),
                 "uho": _es_uho(registro_origen),
+                "tecnologia_origen": registro_origen[7],
+                "tecnologia_destino": registro_actual[7],
                 "ping_pong": False,  # se completa en la pasada de abajo
             }
         )
@@ -327,6 +339,30 @@ def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str | 
 
 
 
+def _filtrar_por_tecnologia(eventos: list[dict], tecnologias: list[int] | None) -> list[dict]:
+    """Filtra una lista de eventos de handover ya detectados, quedándose
+    solo con los que tienen AMBOS extremos (tecnología de origen Y de
+    destino) dentro de la selección pedida. Una lista vacía o None se
+    trata como "todas" (sin filtro).
+
+    Se aplica DESPUÉS de `_detectar_eventos_handover`, nunca antes: la
+    secuencia que llega del repositorio ya no se filtra por tecnología en
+    SQL (ver `KpisRepository.obtener_secuencia_completa`) -- filtrarla
+    antes de detectar podría quitar una medición "puente" de otra
+    tecnología y unir dos mediciones que en la realidad no eran
+    consecutivas, generando un handover falso (mismo motivo que la franja
+    horaria).
+    """
+    if not tecnologias:
+        return eventos
+    conjunto = set(tecnologias)
+    return [
+        evento for evento in eventos
+        if evento["tecnologia_origen"] in conjunto and evento["tecnologia_destino"] in conjunto
+    ]
+
+
+
 def calcular_resumen_kpis(
     fecha_inicio: date,
     fecha_fin: date,
@@ -347,10 +383,11 @@ def calcular_resumen_kpis(
     de sus respectivos denominadores a propósito -- no hay evidencia para
     contarlos en ningún sentido, e incluirlos distorsionaría el porcentaje.
     """
-    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     total_mediciones = repositorio.contar_mediciones(fecha_inicio, fecha_fin, tecnologia, franja, sesion_label)
     eventos_detectados, cambios_celda_no_observados = _detectar_eventos_handover(secuencia)
-    eventos = _filtrar_por_franja(eventos_detectados, franja)
+    eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
+    eventos = _filtrar_por_franja(eventos, franja)
     total_ho = len(eventos)
     exitosos = sum(1 for evento in eventos if evento["clasificacion"] == EXITOSO)
     fallidos = sum(1 for evento in eventos if evento["clasificacion"] == FALLIDO)
@@ -397,9 +434,10 @@ def calcular_distribucion_horaria(
     el frontend pueda graficar exitosos/fallidos/ping-pong/indeterminados
     juntos en vez de un único valor agregado.
     """
-    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     eventos_detectados, _ = _detectar_eventos_handover(secuencia)
-    eventos = _filtrar_por_franja(eventos_detectados, franja)
+    eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
+    eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: evento["timestamp"].hour)
 
     return [
@@ -446,8 +484,9 @@ def calcular_distribucion_franja_horaria(
 
     """Igual que `calcular_distribucion_horaria`, pero agrupado en 3 franjas
     en vez de 24 horas individuales."""
-    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     eventos, _ = _detectar_eventos_handover(secuencia)
+    eventos = _filtrar_por_tecnologia(eventos, tecnologia)
     grupos = _agrupar_eventos(eventos, lambda evento: _franja_horaria(evento["timestamp"].hour))
 
     return [
@@ -481,9 +520,10 @@ def calcular_distribucion_dia_semana(
     semana es una dimensión distinta a hora del día, no hay conflicto
     conceptual en filtrar por ambas a la vez.
     """
-    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     eventos_detectados, _ = _detectar_eventos_handover(secuencia)
-    eventos = _filtrar_por_franja(eventos_detectados, franja)
+    eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
+    eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _dia_semana(evento["timestamp"]))
 
     return [
@@ -538,9 +578,10 @@ def calcular_tendencia(
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por
     `periodo` (diario/semanal/mensual/anual -- ver `PERIODOS_VALIDOS`).
     """
-    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, tecnologia, sesion_label)
+    secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     eventos_detectados, _ = _detectar_eventos_handover(secuencia)
-    eventos = _filtrar_por_franja(eventos_detectados, franja)
+    eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
+    eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _clave_periodo(evento["timestamp"], periodo))
 
     resultado = []

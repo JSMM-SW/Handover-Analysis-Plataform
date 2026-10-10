@@ -32,6 +32,7 @@ from app.modules.kpis.services import (
     _es_uho,
     _etiqueta_periodo,
     _filtrar_por_franja,
+    _filtrar_por_tecnologia,
     _franja_horaria,
 )
 
@@ -409,6 +410,48 @@ def test_ping_pong_a_b_c_a_no_cuenta():
     INMEDIATAMENTE anterior), sin importar la ventana de tiempo."""
     eventos, _ = _detectar_eventos_handover(_secuencia_de_celdas(1, 2, 3, 1))
     assert [evento["ping_pong"] for evento in eventos] == [False, False, False]
+
+
+# ---------------------------------------------------------------------------
+# Filtro de tecnología (Paso 4): _filtrar_por_tecnologia
+# ---------------------------------------------------------------------------
+
+
+def test_filtrar_por_tecnologia_sin_filtro_devuelve_todos():
+    """Sin selección de tecnología, la lista se devuelve sin filtrar."""
+    eventos = [{"tecnologia_origen": 1, "tecnologia_destino": 2}]
+    assert _filtrar_por_tecnologia(eventos, None) == eventos
+
+
+def test_filtrar_por_tecnologia_conserva_solo_si_ambos_extremos_estan_en_la_seleccion():
+    """Un evento solo se conserva si origen Y destino están en la
+    selección -- basta con que uno de los dos extremos quede fuera para
+    descartarlo."""
+    eventos = [
+        {"tecnologia_origen": 1, "tecnologia_destino": 1},  # ambos LTE -> queda
+        {"tecnologia_origen": 1, "tecnologia_destino": 2},  # destino 3G -> se descarta
+        {"tecnologia_origen": 2, "tecnologia_destino": 1},  # origen 3G -> se descarta
+    ]
+    filtrados = _filtrar_por_tecnologia(eventos, [1])
+    assert filtrados == [eventos[0]]
+
+
+def test_filtrar_por_tecnologia_no_genera_handover_falso_entre_no_consecutivos():
+    """LTE(A) -> 3G(X) -> LTE(B): si se filtrara la secuencia por
+    tecnología ANTES de detectar, la medición en 3G desaparecería y A y B
+    quedarían adyacentes, generando un handover LTE->LTE falso (A->B) que
+    nunca ocurrió. Filtrando DESPUÉS de detectar, los dos handovers reales
+    (A->X y X->B) se descartan porque ninguno tiene AMBOS extremos en
+    LTE -- correctamente, no queda ningún handover "solo LTE"."""
+    secuencia = [
+        _medicion(10, segundos=0, tecnologia=1),   # LTE
+        _medicion(20, segundos=1, tecnologia=2),   # 3G
+        _medicion(30, segundos=2, tecnologia=1),   # LTE
+    ]
+    eventos, _ = _detectar_eventos_handover(secuencia)
+    filtrados = _filtrar_por_tecnologia(eventos, [1])
+    assert len(eventos) == 2  # A->X y X->B sí se detectan
+    assert filtrados == []     # pero ninguno queda al filtrar "solo LTE"
 
 
 # ---------------------------------------------------------------------------
