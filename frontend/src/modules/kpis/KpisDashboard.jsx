@@ -84,7 +84,6 @@ const OPCIONES_TECNOLOGIA = [
     { value: '1', label: 'LTE / 4G' },
     { value: '2', label: '3G / UMTS' },
     { value: '3', label: '2G' },
-    { value: '0', label: 'Sin señal' },
 ];
 
 const OPCIONES_FRANJA = [

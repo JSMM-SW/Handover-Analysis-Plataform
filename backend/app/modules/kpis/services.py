@@ -30,6 +30,16 @@ o no ser UHO y sí estar degradado -- no son mutuamente excluyentes,
 responden preguntas distintas (¿hacía falta el salto? vs ¿el salto ayudó
 o perjudicó?).
 
+PHD y UHO solo entre mediciones LTE (Paso 5 del plan de refactor, oct
+2026): ambas fórmulas comparan indicadores de señal (RSSI, RSRQ) que no
+son comparables entre tecnologías distintas -- un RSSI de 3G no significa
+lo mismo que uno de LTE. PHD exige que origen Y destino sean LTE; UHO
+exige que el origen sea LTE. Si no, el handover queda "indeterminado"
+(PHD) o "no evaluable" (UHO), con el mismo tratamiento que si faltara
+RSSI/RSRQ. `total_handovers`/`tasa_handover` no se ven afectados -- todo
+handover se sigue contando ahí, esta restricción es solo para PHD/UHO.
+
+
 Agrupación por sesión y por tramos (Paso 2 del plan de refactor, oct 2026):
 la secuencia que entrega el repositorio mezcla todas las sesiones y
 tecnologías del rango de fechas. Un handover nunca se detecta entre
@@ -106,6 +116,11 @@ DIAS_SEMANA_ORDEN = tuple(range(7))  # 0=Lunes ... 6=Domingo, orden de datetime.
 UHO_RSSI_MIN_DBM = -100
 UHO_RSRQ_MIN_DB = -15
 
+# Mismo mapeo que ingesta/etl/normalizer.py: 1=LTE/4G, 2=3G, 3=2G. PHD y
+# UHO solo se evalúan entre mediciones LTE (ver docstring del módulo).
+TECNOLOGIA_LTE = 1
+
+
 # Mismo criterio que ingesta/etl/normalizer.py y kpis/repository.py: los
 # timestamps llegan en UTC, hay que convertirlos antes de clasificar por
 # hora/día/franja -- si no, todo queda desfasado 5 horas respecto a la
@@ -176,8 +191,12 @@ def _clasificar_handover(registro_anterior: tuple, registro_actual: tuple) -> st
     DESTINO -- ese orden importa para la fórmula PHD (rssi_destino vs
     rssi_origen, no al revés).
     """
-    _, _, _, rssi_origen, rsrq_origen, _, _, _, _ = registro_anterior
-    _, _, _, rssi_destino, rsrq_destino, _, _, _, _ = registro_actual
+    _, _, _, rssi_origen, rsrq_origen, _, _, tecnologia_origen, _ = registro_anterior
+    _, _, _, rssi_destino, rsrq_destino, _, _, tecnologia_destino, _ = registro_actual
+
+
+    if tecnologia_origen != TECNOLOGIA_LTE or tecnologia_destino != TECNOLOGIA_LTE:
+        return INDETERMINADO
 
     if rssi_origen is None or rssi_destino is None or rsrq_origen is None or rsrq_destino is None:
         return INDETERMINADO
@@ -193,13 +212,17 @@ def _es_uho(registro_origen: tuple) -> bool | None:
     la celda de ORIGEN de un handover -- antes de saltar, no importa a
     dónde saltó.
 
-    Devuelve None si RSSI/RSRQ de origen no están disponibles: no se puede
-    evaluar, no cuenta ni como UHO ni como "no UHO".
+    Devuelve None si el origen no es LTE o si le falta RSSI/RSRQ: no se
+    puede evaluar, no cuenta ni como UHO ni como "no UHO".
     """
-    _, _, _, rssi_origen, rsrq_origen, _, _, _, _ = registro_origen
+    _, _, _, rssi_origen, rsrq_origen, _, _, tecnologia_origen, _ = registro_origen
+
+    if tecnologia_origen != TECNOLOGIA_LTE:
+        return None
     if rssi_origen is None or rsrq_origen is None:
         return None
     return rssi_origen >= UHO_RSSI_MIN_DBM and rsrq_origen >= UHO_RSRQ_MIN_DB
+
 
 
 def _dividir_en_tramos(secuencia: list[tuple]) -> tuple[list[list[tuple]], int]:

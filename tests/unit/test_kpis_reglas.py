@@ -151,9 +151,28 @@ def test_phd_indeterminado_si_falta_algun_valor(rssi_origen, rsrq_origen, rssi_d
     assert _clasificar_handover(origen, destino) == INDETERMINADO
 
 
+def test_phd_indeterminado_si_destino_no_es_lte():
+    """PHD solo se evalúa entre mediciones LTE: si el destino es otra
+    tecnología, el handover queda indeterminado aunque haya RSSI/RSRQ
+    completos en ambos lados."""
+    origen = _medicion(1, rssi=-90, rsrq=-12, tecnologia=1)
+    destino = _medicion(2, rssi=-80, rsrq=-10, tecnologia=2)
+
+    assert _clasificar_handover(origen, destino) == INDETERMINADO
+
+
+def test_phd_indeterminado_si_origen_no_es_lte():
+    """Mismo criterio del lado del origen."""
+    origen = _medicion(1, rssi=-90, rsrq=-12, tecnologia=2)
+    destino = _medicion(2, rssi=-80, rsrq=-10, tecnologia=1)
+
+    assert _clasificar_handover(origen, destino) == INDETERMINADO
+
+
 # ---------------------------------------------------------------------------
 # Criterio UHO: _es_uho
 # ---------------------------------------------------------------------------
+
 
 
 def test_uho_verdadero_justo_en_los_umbrales():
@@ -179,8 +198,15 @@ def test_uho_no_evaluable_si_falta_algun_valor(rssi, rsrq):
     assert _es_uho(_medicion(1, rssi=rssi, rsrq=rsrq)) is None
 
 
+def test_uho_no_evaluable_si_origen_no_es_lte():
+    """UHO solo se evalúa si el origen es LTE, aunque tenga RSSI/RSRQ
+    completos."""
+    assert _es_uho(_medicion(1, rssi=-80, rsrq=-10, tecnologia=2)) is None
+
+
 # ---------------------------------------------------------------------------
 # Detección de eventos: _detectar_eventos_handover
+
 # ---------------------------------------------------------------------------
 
 
