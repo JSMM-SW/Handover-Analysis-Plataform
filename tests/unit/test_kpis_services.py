@@ -478,17 +478,30 @@ def test_metricas_dia_sin_rsrp_devuelve_nulos():
 
 
 def test_listar_sesiones_convierte_cada_ejecucion_en_respuesta():
-    """Cada ejecución del repositorio se convierte en un `SesionResponse`
-    conservando el orden."""
+    """Cada fila (ejecución, primera_medicion, ultima_medicion) del
+    repositorio se convierte en un `SesionResponse` conservando el orden.
+    Una sesión sin mediciones válidas (segunda fila) da None/None."""
     procesado = datetime(2026, 6, 23, 17, 0, tzinfo=timezone.utc)
-    ejecuciones = [
-        SimpleNamespace(sesion_label=2, filename="Session_43.csv", processing_date=procesado, records_valid=86000),
-        SimpleNamespace(sesion_label=1, filename="Session_12.csv", processing_date=procesado, records_valid=500),
+    primera = datetime(2026, 5, 5, 8, 0)
+    ultima = datetime(2026, 5, 5, 21, 0)
+    filas = [
+        (
+            SimpleNamespace(sesion_label=2, filename="Session_43.csv", processing_date=procesado, records_valid=86000),
+            primera,
+            ultima,
+        ),
+        (
+            SimpleNamespace(sesion_label=1, filename="Session_12.csv", processing_date=procesado, records_valid=500),
+            None,
+            None,
+        ),
     ]
-    repositorio = RepositorioKpisFalso(sesiones=ejecuciones)
+    repositorio = RepositorioKpisFalso(sesiones=filas)
 
     sesiones = listar_sesiones(repositorio)
 
     assert [sesion.sesion_label for sesion in sesiones] == [2, 1]
     assert sesiones[0].filename == "Session_43.csv"
     assert sesiones[0].records_valid == 86000
+    assert (sesiones[0].primera_medicion, sesiones[0].ultima_medicion) == (primera, ultima)
+    assert (sesiones[1].primera_medicion, sesiones[1].ultima_medicion) == (None, None)

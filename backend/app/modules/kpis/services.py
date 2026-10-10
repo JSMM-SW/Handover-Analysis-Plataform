@@ -165,17 +165,22 @@ def calcular_metricas_globales_dia(fecha: date, repositorio: KpisRepository) -> 
 
 def listar_sesiones(repositorio: KpisRepository) -> list[SesionResponse]:
     """Lista las sesiones (cargas de archivo) disponibles para poblar el
-    selector de sesión del frontend."""
-    ejecuciones = repositorio.listar_sesiones()
+    selector de sesión del frontend, con el rango de fechas que cada una
+    cubre (ver `KpisRepository.listar_sesiones`) -- así el frontend puede
+    ajustar la ventana temporal automáticamente al elegir una sesión."""
+    filas = repositorio.listar_sesiones()
     return [
         SesionResponse(
             sesion_label=ejecucion.sesion_label,
             filename=ejecucion.filename,
             processing_date=ejecucion.processing_date,
             records_valid=ejecucion.records_valid,
+            primera_medicion=primera_medicion,
+            ultima_medicion=ultima_medicion,
         )
-        for ejecucion in ejecuciones
+        for ejecucion, primera_medicion, ultima_medicion in filas
     ]
+
 
 
 

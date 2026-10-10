@@ -63,17 +63,30 @@ class KpisRepository:
                 "promedio": float(promedio) if promedio is not None else None, "criticos": criticos}
 
 
-    def listar_sesiones(self) -> list[EtlExecution]:
-        """Lista las sesiones (ejecuciones) completadas, para poblar el
-        selector de sesión del frontend -- más recientes primero. No
+    def listar_sesiones(self) -> list:
+        """Lista las sesiones (ejecuciones) completadas, con la fecha/hora de
+        su primera y última medición (en hora local de Ecuador) -- para
+        poblar el selector de sesión del frontend y permitirle ajustar la
+        ventana temporal automáticamente a lo que esa sesión realmente
+        cubre (Paso 7 del plan de refactor). Más recientes primero. No
         incluye ejecuciones fallidas: no tienen datos en handover_record.
+
+        Devuelve filas `(EtlExecution, primera_medicion, ultima_medicion)`
+        -- las dos últimas son `None` si la sesión no tiene ninguna
+        medición en handover_record (ej. un archivo procesado cuyas filas
+        se rechazaron todas en la validación).
         """
+        primera = func.min(_en_hora_local(HandoverRecord.timestamp_medicion)).label("primera_medicion")
+        ultima = func.max(_en_hora_local(HandoverRecord.timestamp_medicion)).label("ultima_medicion")
         return (
-            self._db.query(EtlExecution)
+            self._db.query(EtlExecution, primera, ultima)
+            .outerjoin(HandoverRecord, HandoverRecord.execution_id == EtlExecution.execution_id)
             .filter(EtlExecution.status == "completed")
+            .group_by(EtlExecution.execution_id)
             .order_by(EtlExecution.sesion_label.desc())
             .all()
         )
+
 
     def _resolver_execution_ids_por_sesiones(self, sesiones: list[int]) -> list[uuid.UUID]:
         """Traduce varios sesion_label (identificadores cortos y amigables) a

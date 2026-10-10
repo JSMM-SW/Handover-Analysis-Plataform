@@ -4,8 +4,6 @@ const MESES = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
 ];
-const ANIO_ACTUAL = new Date().getFullYear();
-const ANIOS_DISPONIBLES = Array.from({ length: 10 }, (_, i) => ANIO_ACTUAL - i);
 
 function anioDeFecha(fechaISO) {
     return Number(fechaISO.slice(0, 4));
@@ -65,8 +63,13 @@ function ultimoDiaDeSemanaISO(anio, semana) {
  * Mantiene su propio estado granular y se lo comunica al padre ya
  * convertido a fechas ISO (`onChange(inicio, fin)`) -- el padre sigue
  * trabajando solo con fechas, sin saber nada de esta conversión.
+ *
+ * `aniosDisponibles` lo calcula el padre (KpisDashboard) a partir de las
+ * fechas reales de las sesiones cargadas -- Paso 7 del plan de refactor:
+ * antes este componente mostraba "año actual y 9 anteriores" fijo, sin
+ * relación con los datos que realmente existen.
  */
-export default function VentanaTemporalSelector({ periodo, startDate, endDate, onChange }) {
+export default function VentanaTemporalSelector({ periodo, startDate, endDate, aniosDisponibles, onChange }) {
     const [anioInicio, setAnioInicio] = useState(() => anioDeFecha(startDate));
     const [mesInicio, setMesInicio] = useState(() => mesDeFecha(startDate));
     const [anioFin, setAnioFin] = useState(() => anioDeFecha(endDate));
@@ -102,14 +105,14 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, o
                     {MESES.map((nombre, indice) => <option key={nombre} value={indice + 1}>{nombre}</option>)}
                 </select>
                 <select className="kpis-input" value={anioInicio} onChange={(e) => setAnioInicio(Number(e.target.value))}>
-                    {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
                 </select>
                 <span className="kpis-date-separador">a</span>
                 <select className="kpis-input" value={mesFin} onChange={(e) => setMesFin(Number(e.target.value))}>
                     {MESES.map((nombre, indice) => <option key={nombre} value={indice + 1}>{nombre}</option>)}
                 </select>
                 <select className="kpis-input" value={anioFin} onChange={(e) => setAnioFin(Number(e.target.value))}>
-                    {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
                 </select>
             </div>
         );
@@ -119,11 +122,11 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, o
         return (
             <div className="kpis-date-inputs">
                 <select className="kpis-input" value={anioInicio} onChange={(e) => setAnioInicio(Number(e.target.value))}>
-                    {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
                 </select>
                 <span className="kpis-date-separador">a</span>
                 <select className="kpis-input" value={anioFin} onChange={(e) => setAnioFin(Number(e.target.value))}>
-                    {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
                 </select>
             </div>
         );
@@ -138,7 +141,7 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, o
                 ))}
             </select>
             <select className="kpis-input" value={anioInicio} onChange={(e) => setAnioInicio(Number(e.target.value))}>
-                {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
             </select>
             <span className="kpis-date-separador">a</span>
             <select className="kpis-input" value={semanaFin} onChange={(e) => setSemanaFin(Number(e.target.value))}>
@@ -147,7 +150,7 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, o
                 ))}
             </select>
             <select className="kpis-input" value={anioFin} onChange={(e) => setAnioFin(Number(e.target.value))}>
-                {ANIOS_DISPONIBLES.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
+                {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
             </select>
         </div>
     );

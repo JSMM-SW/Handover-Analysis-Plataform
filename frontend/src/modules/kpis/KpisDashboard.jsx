@@ -107,8 +107,9 @@ const OPCIONES_FRANJA = [
 ];
 
 export default function KpisDashboard() {
-    const [startDate, setStartDate] = useState('2026-05-01');
-    const [endDate, setEndDate] = useState('2026-05-24');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
     const [tecnologias, setTecnologias] = useState([]);
     const [periodo, setPeriodo] = useState('diario');
     const [franjas, setFranjas] = useState([]);
@@ -121,8 +122,9 @@ export default function KpisDashboard() {
     const [diaSemanaData, setDiaSemanaData] = useState([]);
 
     const [trendData, setTrendData] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+
 
     const dashboardRef = useRef(null);
 
@@ -179,15 +181,53 @@ export default function KpisDashboard() {
             }
         };
 
-        cargarDatos();
+                if (startDate && endDate) {
+            cargarDatos();
+        }
     }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
 
-    useEffect(() => {
+       useEffect(() => {
         fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
     }, []);
 
+    useEffect(() => {
+        /**
+         * Ajusta la ventana temporal a la primera y última medición de las
+         * sesiones elegidas (o de todas, si no hay ninguna seleccionada) --
+         * Paso 7 del plan de refactor. No depende de startDate/endDate, así
+         * que no pisa lo que el usuario edite manualmente después: solo se
+         * recalcula cuando cambia la selección de sesión o llega la lista
+         * de sesiones por primera vez.
+         */
+        if (sesiones.length === 0) return;
+
+        const relevantes = sesionLabels.length > 0
+            ? sesiones.filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)))
+            : sesiones;
+        const conFechas = relevantes.filter((sesion) => sesion.primera_medicion && sesion.ultima_medicion);
+        if (conFechas.length === 0) return;
+
+        const inicio = conFechas.reduce(
+            (minimo, sesion) => (sesion.primera_medicion < minimo ? sesion.primera_medicion : minimo),
+            conFechas[0].primera_medicion,
+        );
+                const fin = conFechas.reduce(
+            (maximo, sesion) => (sesion.ultima_medicion > maximo ? sesion.ultima_medicion : maximo),
+            conFechas[0].ultima_medicion,
+        );
+
+        // Mismo patrón que cargarDatos() más arriba: es estado derivado de
+        // una fuente externa (las sesiones ya cargadas), no un efecto
+        // secundario evitable.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setStartDate(inicio.slice(0, 10));
+        setEndDate(fin.slice(0, 10));
+    }, [sesionLabels, sesiones]);
+
+
     /**
      * Genera el PDF del dashboard, siempre con la apariencia del modo oscuro.
+
      *
      * Fuerza temporalmente `data-tema="oscuro"` en <html> para que tanto el
      * CSS como los colores de Recharts (vía `useColorDeTema`) se rendericen
@@ -253,25 +293,52 @@ export default function KpisDashboard() {
         label: `${sessionName(sesion)} (${sesion.records_valid} registros)`,
     }));
 
-    const resumenSeleccion = (seleccion, etiquetas, allLabel = 'Todas') => {
+        const resumenSeleccion = (seleccion, etiquetas, allLabel = 'Todas') => {
         if (seleccion.length === 0) return allLabel;
         return seleccion.map((valor) => etiquetas[valor] ?? valor).join(', ');
     };
 
+    /**
+     * Años que cubren las mediciones de TODAS las sesiones (sin filtrar por
+     * la selección actual, para que el selector siempre ofrezca el rango
+     * completo disponible) -- reemplaza el "año actual y 9 anteriores" fijo
+     * que usaba VentanaTemporalSelector antes (Paso 7 del plan de refactor).
+     */
+    const fechasConDatos = sesiones
+        .flatMap((sesion) => [sesion.primera_medicion, sesion.ultima_medicion])
+        .filter(Boolean);
+    const anioActual = new Date().getFullYear();
+    const aniosDisponibles = fechasConDatos.length > 0
+        ? (() => {
+            const anios = fechasConDatos.map((fecha) => Number(fecha.slice(0, 4)));
+            const anioMin = Math.min(...anios);
+            const anioMax = Math.max(...anios);
+            return Array.from({ length: anioMax - anioMin + 1 }, (_, i) => anioMax - i);
+        })()
+        : [anioActual];
+
     return (
+
         <div className="kpis-shell" ref={dashboardRef}>
             <header className="kpis-header">
                 <div className="kpis-title-group">
                     <h2 className="kpis-title">KPIs y Reportes de Handover</h2>
                     <p className="kpis-subtitle">Monitoreo y análisis del desempeño del proceso de handover en redes móviles</p>
                 </div>
-                <div className="kpis-controls">
+                                <div className="kpis-controls">
+                    <MultiSelectDropdown
+                        label="Sesión"
+                        options={opcionesSesion}
+                        selected={sesionLabels}
+                        onChange={setSesionLabels}
+                    />
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Ventana Temporal</span>
                         <VentanaTemporalSelector
                             periodo={periodo}
                             startDate={startDate}
                             endDate={endDate}
+                            aniosDisponibles={aniosDisponibles}
                             onChange={(nuevoInicio, nuevoFin) => {
                                 setStartDate(nuevoInicio);
                                 setEndDate(nuevoFin);
@@ -291,13 +358,8 @@ export default function KpisDashboard() {
                         selected={franjas}
                         onChange={setFranjas}
                     />
-                    <MultiSelectDropdown
-                        label="Sesión"
-                        options={opcionesSesion}
-                        selected={sesionLabels}
-                        onChange={setSesionLabels}
-                    />
                     <div className="kpis-date-filter">
+
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
                             <option value="diario">Diario</option>

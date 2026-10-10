@@ -22,7 +22,7 @@ def test_temporal_uses_strongest_as_rsrp_without_rssi_fallback():
     assert 'NULL::smallint AS rsrp_dbm' in sql
 
 
-def _timezone_sqlite(zona: str, valor: str) -> str:
+def _timezone_sqlite(zona: str, valor: str | None) -> str | None:
     """Emula la función `timezone(zona, timestamp)` de PostgreSQL para que
     los tests unitarios puedan usar SQLite en memoria en vez de una base
     real. `KpisRepository._en_hora_local()` usa `func.timezone(...)` (ver
@@ -32,12 +32,17 @@ def _timezone_sqlite(zona: str, valor: str) -> str:
 
     SQLAlchemy guarda los timestamptz como texto ISO 8601 en SQLite; se
     interpretan como UTC (igual que timestamptz en Postgres, que siempre
-    almacena en UTC) y se convierten a la zona pedida.
+    almacena en UTC) y se convierten a la zona pedida. `valor` puede ser
+    None (ej. un LEFT OUTER JOIN sin coincidencias) -- igual que Postgres,
+    timezone(zona, NULL) debe devolver NULL, no lanzar una excepción.
     """
+    if valor is None:
+        return None
     instante = datetime.fromisoformat(valor)
     if instante.tzinfo is None:
         instante = instante.replace(tzinfo=ZoneInfo("UTC"))
     return instante.astimezone(ZoneInfo(zona)).isoformat(sep=" ")
+
 
 
 def _crear_motor_sqlite():

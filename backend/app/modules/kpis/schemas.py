@@ -25,6 +25,14 @@ class SesionResponse(BaseModel):
     filename: str = Field(description="Nombre del archivo original que se cargó")
     processing_date: datetime = Field(description="Fecha y hora en que se procesó la carga")
     records_valid: int = Field(description="Registros válidos que aportó esta sesión a handover_record")
+    primera_medicion: datetime | None = Field(
+        description="Fecha/hora (local Ecuador) de la primera medición de esta sesión en "
+        "handover_record. null si la sesión no tiene ninguna medición válida."
+    )
+    ultima_medicion: datetime | None = Field(
+        description="Fecha/hora (local Ecuador) de la última medición de esta sesión en "
+        "handover_record. null si la sesión no tiene ninguna medición válida."
+    )
 
 
 class KpiSummaryResponse(BaseModel):
