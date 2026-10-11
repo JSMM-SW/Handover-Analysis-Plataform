@@ -11,6 +11,9 @@ import {
 import MultiSelectDropdown from './MultiSelectDropdown';
 import VentanaTemporalSelector from './VentanaTemporalSelector';
 import ResumenPanel from './ResumenPanel';
+import TablaPeriodos from './TablaPeriodos';
+import { formatearTasa } from '../../shared/formatearTasa';
+
 
 
 import {
@@ -79,19 +82,52 @@ function esperarRepintado() {
 }
 
 /**
- * Formatea una tasa (%) para mostrarla en una tarjeta. El backend devuelve
- * `null` cuando el denominador de la tasa es 0 (Paso 6 del plan de
- * refactor) -- "sin datos", no un 0% real -- así que no se puede mostrar
- * directamente `{valor}%` o saldría literalmente "null%".
+ * Contenido de tooltip para los gráficos de distribución (hora/franja/día
+
+ * de la semana): además de las series que ya dibuja Recharts (exitosos,
+ * fallidos, indeterminados, ping-pongs), agrega la línea "Mediciones
+ * registradas", que no es una serie graficada sino contexto de volumen de
+ * datos (Paso 9 del plan de refactor).
  *
- * @param {number | null | undefined} valor - la tasa ya calculada por el backend.
- * @returns {string} "Sin datos" si `valor` es null/undefined, o "N%" si no.
+ * Recibe los colores de superficie/borde/texto por parámetro (en vez de
+ * leerlos con el hook useColorDeTema) porque es una función común usada por
+ * los 3 gráficos, no un componente propio.
+ *
+ * @param {object} props - props estándar de un `content` de Recharts (`active`, `payload`, `label`).
+ * @param {string} colorSuperficie - color de fondo del tooltip, ya resuelto.
+ * @param {string} colorBorde - color del borde del tooltip, ya resuelto.
+ * @param {string} colorTexto - color del texto del tooltip, ya resuelto.
+ * @returns {JSX.Element | null} el tooltip, o null si no hay nada que mostrar.
  */
-function formatearTasa(valor) {
-    return valor == null ? 'Sin datos' : `${valor}%`;
+function renderTooltipConMediciones({ active, payload, label }, colorSuperficie, colorBorde, colorTexto) {
+    if (!active || !payload || payload.length === 0) return null;
+
+    const totalMediciones = payload[0].payload.total_mediciones;
+
+    return (
+        <div style={{
+            backgroundColor: colorSuperficie,
+            border: `1px solid ${colorBorde}`,
+            borderRadius: '6px',
+            padding: '8px 12px',
+            color: colorTexto,
+            fontSize: '13px',
+        }}>
+            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
+            {payload.map((entry) => (
+                <p key={entry.dataKey} style={{ margin: 0, color: entry.color }}>
+                    {entry.name}: {entry.value}
+                </p>
+            ))}
+            <p style={{ margin: '4px 0 0', paddingTop: '4px', borderTop: `1px solid ${colorBorde}` }}>
+                Mediciones registradas: {totalMediciones}
+            </p>
+        </div>
+    );
 }
 
 const ETIQUETAS_FRANJA = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noche' };
+
 
 const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS', '3': '2G' };
 const ETIQUETAS_PERIODO = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual', anual: 'Anual' };
@@ -136,8 +172,10 @@ export default function KpisDashboard() {
     const colorPingPong = useColorDeTema('--color-advertencia');
     const colorBorde = useColorDeTema('--color-borde');
     const colorTextoTenue = useColorDeTema('--color-texto-tenue');
-    const colorSuperficie = useColorDeTema('--color-superficie');
+        const colorSuperficie = useColorDeTema('--color-superficie');
     const colorTexto = useColorDeTema('--color-texto');
+    const colorPrimario = useColorDeTema('--color-primario');
+
 
     useEffect(() => {
         /**
@@ -507,7 +545,7 @@ export default function KpisDashboard() {
                                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                                     </PieChart>
                                 </ResponsiveContainer>
-                                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+                                                                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
                                     <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{summaryData.total_handovers}</span>
                                     <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total</span>
                                 </div>
@@ -515,16 +553,43 @@ export default function KpisDashboard() {
                         </div>
                     </div>
 
+                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
+                        <div className="kpis-card" style={{ margin: 0 }}>
+                            <h3 className="kpis-card-title">Mediciones Registradas ({periodo})</h3>
+                            <div style={{ height: '220px', width: '100%', marginTop: '20px' }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <ComposedChart data={trendData}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
+                                        <Bar dataKey="total_mediciones" fill={colorPrimario} name="Mediciones" radius={[4, 4, 0, 0]} />
+
+                                    </ComposedChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
+                        <div className="kpis-card" style={{ margin: 0 }}>
+                            <h3 className="kpis-card-title">Tabla de Periodos ({periodo})</h3>
+                            <TablaPeriodos datos={trendData} />
+                        </div>
+                    </div>
+
                     <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
+
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={hourlyData}>
+                                                                        <ComposedChart data={hourlyData}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
+                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
+
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
                                         <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
                                         <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
@@ -539,11 +604,12 @@ export default function KpisDashboard() {
                             <h3 className="kpis-card-title">Distribución por Franja Horaria</h3>
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={franjaData}>
+                                                                        <ComposedChart data={franjaData}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
+                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
+
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
                                         <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
                                         <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
@@ -559,11 +625,12 @@ export default function KpisDashboard() {
                             <h3 className="kpis-card-title">Distribución por Día de la Semana</h3>
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={diaSemanaData}>
+                                                                        <ComposedChart data={diaSemanaData}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
+                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
+
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
                                         <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
                                         <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />

@@ -295,3 +295,42 @@
     color: var(--color-texto-tenue);
     font-size: 13px;
 }
+
+/* Tabla de periodos (Paso 9 del plan de refactor): desglose completo de
+   /kpis/trend, con scroll horizontal propio porque tiene más columnas de
+   las que caben en el ancho de una tarjeta. */
+.kpis-tabla-periodos-wrapper {
+    overflow-x: auto;
+    margin-top: 16px;
+}
+
+.kpis-tabla-periodos {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.kpis-tabla-periodos th,
+.kpis-tabla-periodos td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--color-borde);
+}
+
+.kpis-tabla-periodos th {
+    color: var(--color-texto-tenue);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+    background: var(--color-superficie-hundida);
+}
+
+.kpis-tabla-periodos td {
+    color: var(--color-texto);
+}
+
+.kpis-tabla-periodos tbody tr:hover {
+    background: var(--color-superficie-hundida);
+}
