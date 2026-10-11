@@ -12,20 +12,28 @@
 export default function ResumenPanel({ sesionesTexto, periodoTexto, tecnologiaTexto, resumen }) {
     if (!resumen) return null;
 
-    const evaluablesPhd = resumen.exitosos + resumen.fallidos;
+        const evaluablesPhd = resumen.exitosos + resumen.fallidos;
+
+    // null en celdas_distintas/cambios_celda_no_observados significa que el
+    // resumen viene de un periodo seleccionado en "Evolución de KPIs"
+    // (Paso 10 del plan de refactor): /kpis/trend no calcula estos dos
+    // campos por periodo, solo /kpis/summary sobre el rango completo.
+    const celdasDistintasTexto = resumen.celdas_distintas ?? 'No disponible por periodo';
+    const cambiosNoObservadosTexto = resumen.cambios_celda_no_observados ?? 'No disponible por periodo';
 
     const filas = [
         { etiqueta: 'Sesiones analizadas', valor: sesionesTexto },
         { etiqueta: 'Período analizado', valor: periodoTexto },
         { etiqueta: 'Tecnologías', valor: tecnologiaTexto },
-        { etiqueta: 'Celdas distintas', valor: resumen.celdas_distintas },
+        { etiqueta: 'Celdas distintas', valor: celdasDistintasTexto },
         { etiqueta: 'Total de mediciones', valor: resumen.total_mediciones },
         { etiqueta: 'Total de handovers', valor: resumen.total_handovers },
         { etiqueta: 'Evaluables para PHD', valor: evaluablesPhd },
         { etiqueta: 'Evaluables para UHO', valor: resumen.uho_evaluables },
         { etiqueta: 'Indeterminados', valor: resumen.indeterminados },
-        { etiqueta: 'Cambios de celda no observados', valor: resumen.cambios_celda_no_observados },
+        { etiqueta: 'Cambios de celda no observados', valor: cambiosNoObservadosTexto },
     ];
+
 
     return (
         <section className="kpis-resumen-panel">

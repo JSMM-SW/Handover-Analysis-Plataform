@@ -334,3 +334,15 @@
 .kpis-tabla-periodos tbody tr:hover {
     background: var(--color-superficie-hundida);
 }
+
+/* Selección de periodo por clic en "Evolución de KPIs" (Paso 10 del plan
+   de refactor). */
+.kpis-chart-clickeable {
+    cursor: pointer;
+}
+
+.kpis-periodo-seleccionado-hint {
+    font-size: 12px;
+    color: var(--color-primario);
+    margin: 4px 0 0;
+}

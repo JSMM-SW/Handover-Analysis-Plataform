@@ -13,6 +13,8 @@ import VentanaTemporalSelector from './VentanaTemporalSelector';
 import ResumenPanel from './ResumenPanel';
 import TablaPeriodos from './TablaPeriodos';
 import { formatearTasa } from '../../shared/formatearTasa';
+import { construirResumenDesdePeriodo } from '../../shared/resumenPeriodo';
+
 
 
 
@@ -162,6 +164,7 @@ export default function KpisDashboard() {
     const [trendData, setTrendData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
 
 
     const dashboardRef = useRef(null);
@@ -221,10 +224,13 @@ export default function KpisDashboard() {
             }
         };
 
-                if (startDate && endDate) {
+                    if (startDate && endDate) {
             cargarDatos();
         }
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPeriodoSeleccionado(null);
     }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
+
 
        useEffect(() => {
         fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
@@ -320,15 +326,10 @@ export default function KpisDashboard() {
         }
     };
 
-    const hasData = summaryData && summaryData.total_handovers > 0;
-
-    const pieData = summaryData ? [
-        { name: 'Exitoso', value: summaryData.exitosos, color: colorExitoso },
-        { name: 'Fallido', value: summaryData.fallidos, color: colorFallido },
-        { name: 'Indeterminado', value: summaryData.indeterminados, color: colorIndeterminado },
-    ] : [];
+        const hasData = summaryData && summaryData.total_handovers > 0;
 
     const opcionesSesion = sesiones.map((sesion) => ({
+
         value: String(sesion.sesion_label),
         label: `${sessionName(sesion)} (${sesion.records_valid} registros)`,
     }));
@@ -369,9 +370,53 @@ export default function KpisDashboard() {
             .filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)))
             .map((sesion) => sessionName(sesion))
             .join(', ');
-    const periodoTexto = `${startDate} a ${endDate}`;
+        /**
+     * Punto de trendData que corresponde al periodo seleccionado con clic en
+     * el gráfico "Evolución de KPIs" (Paso 10 del plan de refactor), o null
+     * si no hay ninguno seleccionado.
+     */
+    const puntoSeleccionado = periodoSeleccionado
+        ? trendData.find((punto) => punto.periodo === periodoSeleccionado)
+        : null;
+
+    /**
+     * Resumen que alimenta las tarjetas, el donut y el panel: el del
+     * periodo seleccionado si hay uno, o el del rango completo (summaryData)
+     * si no. summaryData sigue siendo la fuente para `hasData` -- la
+     * selección de un periodo nunca oculta ni muestra el dashboard, solo
+     * cambia qué números se ven dentro de él.
+     */
+        const resumenMostrado = puntoSeleccionado
+        ? construirResumenDesdePeriodo(puntoSeleccionado)
+        : summaryData;
+
+    const pieData = resumenMostrado ? [
+        { name: 'Exitoso', value: resumenMostrado.exitosos, color: colorExitoso },
+        { name: 'Fallido', value: resumenMostrado.fallidos, color: colorFallido },
+        { name: 'Indeterminado', value: resumenMostrado.indeterminados, color: colorIndeterminado },
+    ] : [];
+
+    const periodoTexto = puntoSeleccionado
+
+        ? `${puntoSeleccionado.fecha_inicio} a ${puntoSeleccionado.fecha_fin} (periodo: ${puntoSeleccionado.etiqueta})`
+        : `${startDate} a ${endDate}`;
+
+    /**
+     * Alterna la selección de un periodo al hacer clic sobre un punto del
+     * gráfico "Evolución de KPIs": un clic en un punto nuevo lo selecciona,
+     * un clic sobre el mismo punto ya seleccionado lo deselecciona.
+     *
+     * @param {object} eventoRecharts - evento de clic que entrega Recharts,
+     * con `activePayload` (el/los punto(s) bajo el cursor).
+     */
+    const alternarSeleccionPeriodo = (eventoRecharts) => {
+        if (!eventoRecharts || !eventoRecharts.activePayload || eventoRecharts.activePayload.length === 0) return;
+        const puntoClic = eventoRecharts.activePayload[0].payload;
+        setPeriodoSeleccionado((actual) => (actual === puntoClic.periodo ? null : puntoClic.periodo));
+    };
 
     return (
+
 
 
         <div className="kpis-shell" ref={dashboardRef}>
@@ -461,26 +506,26 @@ export default function KpisDashboard() {
 
                         {!loading && !error && hasData && (
                 <>
-                    <ResumenPanel
+                                        <ResumenPanel
                         sesionesTexto={sesionesTexto}
                         periodoTexto={periodoTexto}
                         tecnologiaTexto={resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}
-                        resumen={summaryData}
+                        resumen={resumenMostrado}
                     />
 
                     <div className="kpis-grid">
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Total Handovers</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large">{summaryData.total_handovers}</span>
+                                <span className="kpis-stat-value large">{resumenMostrado.total_handovers}</span>
                             </div>
-                            <p className="kpis-stat-sub">de {summaryData.total_mediciones} mediciones</p>
+                            <p className="kpis-stat-sub">de {resumenMostrado.total_mediciones} mediciones</p>
                         </div>
 
                                                 <div className="kpis-card">
                             <h3 className="kpis-card-title">Tasa de Handover</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large highlight-green">{formatearTasa(summaryData.tasa_handover)}</span>
+                                <span className="kpis-stat-value large highlight-green">{formatearTasa(resumenMostrado.tasa_handover)}</span>
                             </div>
                         </div>
 
@@ -488,15 +533,15 @@ export default function KpisDashboard() {
                             <h3 className="kpis-card-title">Riesgos de Movilidad</h3>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Ping-Pong (HOPP)</span>
-                                <span className="kpis-stat-value highlight-orange">{formatearTasa(summaryData.tasa_hopp)}</span>
+                                <span className="kpis-stat-value highlight-orange">{formatearTasa(resumenMostrado.tasa_hopp)}</span>
                             </div>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Handover Innecesarios</span>
-                                <span className="kpis-stat-value highlight-red">{formatearTasa(summaryData.tasa_innecesarios)}</span>
+                                <span className="kpis-stat-value highlight-red">{formatearTasa(resumenMostrado.tasa_innecesarios)}</span>
                             </div>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Handover Post Degradados (PHD)</span>
-                                <span className="kpis-stat-value highlight-red">{formatearTasa(summaryData.tasa_phd)}</span>
+                                <span className="kpis-stat-value highlight-red">{formatearTasa(resumenMostrado.tasa_phd)}</span>
                             </div>
                         </div>
 
@@ -504,19 +549,25 @@ export default function KpisDashboard() {
                         <div className="kpis-card">
                             <h3 className="kpis-card-title">Handover Exitosos</h3>
                             <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{formatearTasa(summaryData.tasa_exito)}</span>
+                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{formatearTasa(resumenMostrado.tasa_exito)}</span>
                             </div>
-                            <p className="kpis-stat-sub">{summaryData.exitosos} handovers exitosos</p>
+                            <p className="kpis-stat-sub">{resumenMostrado.exitosos} handovers exitosos</p>
                         </div>
 
                     </div>
 
-                    <div className="kpis-row-layout">
+
+                                        <div className="kpis-row-layout">
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Evolución de KPIs ({periodo})</h3>
-                            <div style={{ height: '280px', width: '100%', marginTop: '20px' }}>
+                            {puntoSeleccionado && (
+                                <p className="kpis-periodo-seleccionado-hint">
+                                    Mostrando el periodo <strong>{puntoSeleccionado.etiqueta}</strong> -- clic de nuevo sobre el punto para ver todo el rango
+                                </p>
+                            )}
+                            <div className="kpis-chart-clickeable" style={{ height: '280px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={trendData}>
+                                    <LineChart data={trendData} onClick={alternarSeleccionPeriodo}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
@@ -530,6 +581,7 @@ export default function KpisDashboard() {
                                 </ResponsiveContainer>
                             </div>
                         </div>
+
 
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Distribución por Tipo de Evento</h3>
@@ -545,10 +597,11 @@ export default function KpisDashboard() {
                                         <Legend verticalAlign="bottom" height={36} iconType="circle" />
                                     </PieChart>
                                 </ResponsiveContainer>
-                                                                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{summaryData.total_handovers}</span>
+                                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
+                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{resumenMostrado.total_handovers}</span>
                                     <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total</span>
                                 </div>
+
                             </div>
                         </div>
                     </div>
