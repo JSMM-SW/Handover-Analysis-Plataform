@@ -14,8 +14,11 @@ import MultiSelectDropdown from './MultiSelectDropdown';
 import VentanaTemporalSelector from './VentanaTemporalSelector';
 import ResumenPanel from './ResumenPanel';
 import TablaPeriodos from './TablaPeriodos';
+import HistorialReportesModal from './HistorialReportesModal';
 import { formatearTasa } from '../../shared/formatearTasa';
 import { construirResumenDesdePeriodo } from '../../shared/resumenPeriodo';
+import { ETIQUETAS_FRANJA, ETIQUETAS_TECNOLOGIA, ETIQUETAS_PERIODO } from './etiquetas';
+
 
 
 
@@ -130,13 +133,9 @@ function renderTooltipConMediciones({ active, payload, label }, colorSuperficie,
     );
 }
 
-const ETIQUETAS_FRANJA = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noche' };
-
-
-const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS', '3': '2G' };
-const ETIQUETAS_PERIODO = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual', anual: 'Anual' };
-
 const OPCIONES_TECNOLOGIA = [
+
+
     { value: '1', label: 'LTE / 4G' },
     { value: '2', label: '3G / UMTS' },
     { value: '3', label: '2G' },
@@ -170,6 +169,8 @@ export default function KpisDashboard() {
     const [hourlyDataPeriodo, setHourlyDataPeriodo] = useState(null);
     const [franjaDataPeriodo, setFranjaDataPeriodo] = useState(null);
     const [loadingPeriodo, setLoadingPeriodo] = useState(false);
+    const [mostrarHistorial, setMostrarHistorial] = useState(false);
+
 
 
 
@@ -589,12 +590,20 @@ export default function KpisDashboard() {
                             <option value="anual">Anual</option>
                         </select>
                     </div>
-                    <div className="kpis-controls-action">
+                <div className="kpis-controls-action">
+                        <button className="kpis-btn-historial" onClick={() => setMostrarHistorial(true)}>
+                            Historial
+                        </button>
                         <button className="kpis-btn-export" onClick={exportToPDF} disabled={!hasData || loading}>
                             Exportar PDF
                         </button>
                     </div>
                 </div>
+
+                {mostrarHistorial && (
+                    <HistorialReportesModal onClose={() => setMostrarHistorial(false)} />
+                )}
+
 
                 {/* Solo visible durante la captura para el PDF (ver exportToPDF):
                     reemplaza a .kpis-controls, que html2canvas no captura bien

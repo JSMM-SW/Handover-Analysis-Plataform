@@ -373,3 +373,160 @@
     margin: 4px 0 0;
 }
 
+/* Botón "Historial" (Paso 13, HU-010) -- estilo secundario, al lado de
+   "Exportar PDF" pero sin su color de fondo lleno. */
+.kpis-btn-historial {
+    background: transparent;
+    border: 1px solid var(--color-borde);
+    color: var(--color-texto);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: var(--fuente-base);
+}
+
+.kpis-btn-historial:hover {
+    background: var(--color-superficie-hundida);
+}
+
+/* Modal del historial de reportes. */
+.kpis-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 20px;
+}
+
+
+.kpis-modal-panel {
+    background: var(--color-fondo);
+    border: 1px solid var(--color-borde);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 640px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 20px 24px;
+}
+
+.kpis-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.kpis-modal-titulo {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-texto);
+}
+
+.kpis-modal-cerrar {
+    background: transparent;
+    border: none;
+    color: var(--color-texto-tenue);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+}
+
+.kpis-modal-cerrar:hover {
+    color: var(--color-texto);
+}
+
+.kpis-modal-estado {
+    color: var(--color-texto-tenue);
+    font-size: 14px;
+    text-align: center;
+    padding: 24px 0;
+}
+
+.kpis-historial-lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.kpis-historial-item {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+
+.kpis-historial-item-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 6px;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--fuente-base);
+    text-align: left;
+}
+
+.kpis-historial-resultados {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 6px 16px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-borde);
+}
+
+.kpis-historial-resultado-item {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.kpis-historial-resultado-label {
+    font-size: 10px;
+    color: var(--color-texto-tenue);
+    text-transform: uppercase;
+}
+
+.kpis-historial-resultado-valor {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+
+.kpis-historial-archivo {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-texto);
+    overflow-wrap: anywhere;
+}
+
+.kpis-historial-fecha {
+    font-size: 11px;
+    color: var(--color-texto-tenue);
+    white-space: nowrap;
+}
+
+.kpis-historial-item-filtros {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    font-size: 12px;
+    color: var(--color-texto-tenue);
+}
