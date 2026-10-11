@@ -68,10 +68,12 @@ tecnología y unir dos mediciones que en la realidad no eran consecutivas,
 generando un handover falso.
 """
 
+import calendar
 from datetime import date
 from typing import Callable
 from zoneinfo import ZoneInfo
 from app.modules.kpis.repository import KpisRepository
+
 
 from app.modules.kpis.schemas import (
     DiaSemanaResponse,
@@ -140,7 +142,11 @@ HUECO_MAXIMO_SEGUNDOS = 10
 PING_PONG_VENTANA_SEGUNDOS = 60
 
 
-_CONTADOR_VACIO = {"total": 0, "exitosos": 0, "fallidos": 0, "indeterminados": 0, "ping_pongs": 0}
+_CONTADOR_VACIO = {
+    "total": 0, "exitosos": 0, "fallidos": 0, "indeterminados": 0, "ping_pongs": 0,
+    "uho_eventos": 0, "uho_evaluables": 0,
+}
+
 
 
 def calcular_metricas_globales_dia(fecha: date, repositorio: KpisRepository) -> SignalMetricsResponse:
@@ -352,8 +358,9 @@ def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str | 
     distribución horaria, franja horaria y tendencia por periodo -- lo único
     que cambia entre esas tres es cómo se agrupa, no cómo se cuenta.
 
-    No incluye UHO en el conteo -- hoy UHO solo se muestra en el resumen
-    (`calcular_resumen_kpis`), no está desglosado por hora/franja/periodo.
+    También acumula uho_eventos/uho_evaluables (Paso 9 del plan de
+    refactor) -- solo los usa `calcular_tendencia`, los demás endpoints
+    simplemente no los leen del bucket.
     """
     grupos: dict[str | int, dict] = {}
     for evento in eventos:
@@ -363,7 +370,12 @@ def _agrupar_eventos(eventos: list[dict], funcion_clave: Callable[[dict], str | 
         bucket[CLASIFICACION_A_CAMPO[evento["clasificacion"]]] += 1
         if evento["ping_pong"]:
             bucket["ping_pongs"] += 1
+        if evento["uho"] is True:
+            bucket["uho_eventos"] += 1
+        if evento["uho"] is not None:
+            bucket["uho_evaluables"] += 1
     return grupos
+
 
 
 
@@ -485,11 +497,19 @@ def calcular_distribucion_horaria(
     eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
     eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: evento["timestamp"].hour)
+    mediciones_por_hora = _contar_mediciones_por_clave(
+        secuencia, tecnologia, franja, lambda timestamp_local: timestamp_local.hour
+    )
 
     return [
-        HourlyDistributionResponse(hora=hora, **grupos.get(hora, _CONTADOR_VACIO))
+        HourlyDistributionResponse(
+            hora=hora,
+            **grupos.get(hora, _CONTADOR_VACIO),
+            total_mediciones=mediciones_por_hora.get(hora, 0),
+        )
         for hora in range(24)
     ]
+
 
 
 def _franja_horaria(hora: int) -> str:
@@ -534,11 +554,19 @@ def calcular_distribucion_franja_horaria(
     eventos, _ = _detectar_eventos_handover(secuencia)
     eventos = _filtrar_por_tecnologia(eventos, tecnologia)
     grupos = _agrupar_eventos(eventos, lambda evento: _franja_horaria(evento["timestamp"].hour))
+    mediciones_por_franja = _contar_mediciones_por_clave(
+        secuencia, tecnologia, None, lambda timestamp_local: _franja_horaria(timestamp_local.hour)
+    )
 
     return [
-        FranjaHorariaResponse(franja=franja, **grupos.get(franja, _CONTADOR_VACIO))
+        FranjaHorariaResponse(
+            franja=franja,
+            **grupos.get(franja, _CONTADOR_VACIO),
+            total_mediciones=mediciones_por_franja.get(franja, 0),
+        )
         for franja in FRANJAS_VALIDAS
     ]
+
 
 def _dia_semana(timestamp) -> int:
     """Día de la semana de un timestamp: 0=Lunes ... 6=Domingo
@@ -571,12 +599,19 @@ def calcular_distribucion_dia_semana(
     eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
     eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _dia_semana(evento["timestamp"]))
+    mediciones_por_dia = _contar_mediciones_por_clave(
+        secuencia, tecnologia, franja, lambda timestamp_local: _dia_semana(timestamp_local)
+    )
 
     return [
         DiaSemanaResponse(
-            dia=dia, etiqueta=DIAS_SEMANA_ETIQUETAS[dia], **grupos.get(dia, _CONTADOR_VACIO)
+            dia=dia,
+            etiqueta=DIAS_SEMANA_ETIQUETAS[dia],
+            **grupos.get(dia, _CONTADOR_VACIO),
+            total_mediciones=mediciones_por_dia.get(dia, 0),
         )
         for dia in DIAS_SEMANA_ORDEN
+
     ]
 
 
@@ -611,6 +646,57 @@ def _etiqueta_periodo(clave: str, periodo: str) -> str:
     return clave  # anual: la propia clave ya es el año
 
 
+def _limites_periodo(clave: str, periodo: str) -> tuple[date, date]:
+    """Calcula las fechas de inicio y fin que delimitan un periodo, a partir
+    de su clave de agrupación (ver `_clave_periodo`) -- para que la tabla
+    por periodo (Paso 9 del plan de refactor) pueda mostrar el rango exacto
+    de cada fila, no solo la etiqueta.
+    """
+    if periodo == "diario":
+        fecha = date.fromisoformat(clave)
+        return fecha, fecha
+    if periodo == "semanal":
+        anio, semana = (int(valor) for valor in clave.split("-W"))
+        return date.fromisocalendar(anio, semana, 1), date.fromisocalendar(anio, semana, 7)
+    if periodo == "mensual":
+        anio, mes = (int(valor) for valor in clave.split("-"))
+        ultimo_dia = calendar.monthrange(anio, mes)[1]
+        return date(anio, mes, 1), date(anio, mes, ultimo_dia)
+    anio = int(clave)  # anual
+    return date(anio, 1, 1), date(anio, 12, 31)
+
+
+def _contar_mediciones_por_clave(
+    secuencia: list[tuple],
+    tecnologia: list[int] | None,
+    franjas: list[str] | None,
+    funcion_clave: Callable[[object], str | int],
+) -> dict[str | int, int]:
+    """Cuenta mediciones CRUDAS (no eventos de handover) agrupadas por
+    `funcion_clave`, aplicada sobre el timestamp ya convertido a hora local.
+
+    A diferencia de `_agrupar_eventos` (que cuenta handovers detectados),
+    esto cuenta cada fila de la secuencia -- necesario para mostrar "cuántas
+    mediciones hay" junto a "cuántos handovers" en el tooltip de los
+    gráficos de distribución y en la tabla de tendencia (Paso 9 del plan de
+    refactor). Respeta los mismos filtros de tecnología y franja que ya se
+    aplican a los eventos, para que el número no contradiga lo que se ve en
+    el resto del gráfico/tabla.
+    """
+    conjunto_tecnologia = set(tecnologia) if tecnologia else None
+    conjunto_franjas = set(franjas) if franjas else None
+    conteos: dict[str | int, int] = {}
+    for registro in secuencia:
+        if conjunto_tecnologia is not None and registro[7] not in conjunto_tecnologia:
+            continue
+        timestamp_local = registro[1].astimezone(ZONA_HORARIA_ORIGEN)
+        if conjunto_franjas is not None and _franja_horaria(timestamp_local.hour) not in conjunto_franjas:
+            continue
+        clave = funcion_clave(timestamp_local)
+        conteos[clave] = conteos.get(clave, 0) + 1
+    return conteos
+
+
 def calcular_tendencia(
     fecha_inicio: date,
     fecha_fin: date,
@@ -623,12 +709,20 @@ def calcular_tendencia(
 
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por
     `periodo` (diario/semanal/mensual/anual -- ver `PERIODOS_VALIDOS`).
+
+    Cada punto trae, además de los conteos, las fechas que delimitan ese
+    periodo (`fecha_inicio`/`fecha_fin`, vía `_limites_periodo`) y el total
+    de mediciones de ese periodo (no solo de handovers) -- Paso 9 del plan
+    de refactor, pensado para la tabla por periodo del frontend.
     """
     secuencia = repositorio.obtener_secuencia_completa(fecha_inicio, fecha_fin, sesion_label)
     eventos_detectados, _ = _detectar_eventos_handover(secuencia)
     eventos = _filtrar_por_tecnologia(eventos_detectados, tecnologia)
     eventos = _filtrar_por_franja(eventos, franja)
     grupos = _agrupar_eventos(eventos, lambda evento: _clave_periodo(evento["timestamp"], periodo))
+    mediciones_por_periodo = _contar_mediciones_por_clave(
+        secuencia, tecnologia, franja, lambda timestamp_local: _clave_periodo(timestamp_local, periodo)
+    )
 
     resultado = []
     for clave in sorted(grupos):
@@ -636,19 +730,33 @@ def calcular_tendencia(
         exitosos, fallidos = valores["exitosos"], valores["fallidos"]
         clasificados = exitosos + fallidos
         tasa_exito = (exitosos / clasificados * 100) if clasificados > 0 else None
+        tasa_phd = (fallidos / clasificados * 100) if clasificados > 0 else None
+        total_ho_periodo = valores["total"]
+        tasa_hopp = (valores["ping_pongs"] / total_ho_periodo * 100) if total_ho_periodo > 0 else None
+        uho_evaluables = valores["uho_evaluables"]
+        tasa_innecesarios = (valores["uho_eventos"] / uho_evaluables * 100) if uho_evaluables > 0 else None
+        fecha_inicio_periodo, fecha_fin_periodo = _limites_periodo(clave, periodo)
 
         resultado.append(
             TrendResponse(
                 periodo=clave,
                 etiqueta=_etiqueta_periodo(clave, periodo),
-                total_handovers=valores["total"],
+                fecha_inicio=fecha_inicio_periodo,
+                fecha_fin=fecha_fin_periodo,
+                total_mediciones=mediciones_por_periodo.get(clave, 0),
+                total_handovers=total_ho_periodo,
                 exitosos=exitosos,
                 fallidos=fallidos,
                 indeterminados=valores["indeterminados"],
-                ping_pongs=valores["ping_pongs"],
                 tasa_exito=round(tasa_exito, 2) if tasa_exito is not None else None,
+                tasa_phd=round(tasa_phd, 2) if tasa_phd is not None else None,
+                ping_pongs=valores["ping_pongs"],
+                tasa_hopp=round(tasa_hopp, 2) if tasa_hopp is not None else None,
+                uho_evaluables=uho_evaluables,
+                uho=valores["uho_eventos"],
+                tasa_innecesarios=round(tasa_innecesarios, 2) if tasa_innecesarios is not None else None,
             )
         )
 
-
     return resultado
+

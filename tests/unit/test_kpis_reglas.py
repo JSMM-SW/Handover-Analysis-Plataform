@@ -16,7 +16,7 @@ Formato de cada medición (el mismo que devuelve
     execution_id, tecnologia, report_index)
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -34,7 +34,9 @@ from app.modules.kpis.services import (
     _filtrar_por_franja,
     _filtrar_por_tecnologia,
     _franja_horaria,
+    _limites_periodo,
 )
+
 
 
 INSTANTE_BASE = datetime(2026, 5, 5, 8, 0, 0, tzinfo=timezone.utc)
@@ -527,19 +529,25 @@ def test_filtrar_por_franja_conserva_solo_los_eventos_de_esa_franja():
 
 
 def test_agrupar_eventos_cuenta_cada_categoria_por_grupo():
-    """Cada grupo acumula total, exitosos, fallidos, indeterminados y
-    ping-pongs de forma independiente."""
+    """Cada grupo acumula total, exitosos, fallidos, indeterminados,
+    ping-pongs y UHO (Paso 9) de forma independiente."""
     eventos = [
-        {"grupo": "a", "clasificacion": EXITOSO, "ping_pong": False},
-        {"grupo": "a", "clasificacion": FALLIDO, "ping_pong": True},
-        {"grupo": "a", "clasificacion": INDETERMINADO, "ping_pong": False},
-        {"grupo": "b", "clasificacion": EXITOSO, "ping_pong": True},
+        {"grupo": "a", "clasificacion": EXITOSO, "ping_pong": False, "uho": True},
+        {"grupo": "a", "clasificacion": FALLIDO, "ping_pong": True, "uho": False},
+        {"grupo": "a", "clasificacion": INDETERMINADO, "ping_pong": False, "uho": None},
+        {"grupo": "b", "clasificacion": EXITOSO, "ping_pong": True, "uho": True},
     ]
 
     grupos = _agrupar_eventos(eventos, lambda evento: evento["grupo"])
 
-    assert grupos["a"] == {"total": 3, "exitosos": 1, "fallidos": 1, "indeterminados": 1, "ping_pongs": 1}
-    assert grupos["b"] == {"total": 1, "exitosos": 1, "fallidos": 0, "indeterminados": 0, "ping_pongs": 1}
+    assert grupos["a"] == {
+        "total": 3, "exitosos": 1, "fallidos": 1, "indeterminados": 1, "ping_pongs": 1,
+        "uho_eventos": 1, "uho_evaluables": 2,
+    }
+    assert grupos["b"] == {
+        "total": 1, "exitosos": 1, "fallidos": 0, "indeterminados": 0, "ping_pongs": 1,
+        "uho_eventos": 1, "uho_evaluables": 1,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -583,3 +591,22 @@ def test_etiqueta_periodo(clave, periodo, etiqueta_esperada):
     """La etiqueta legible del eje de la gráfica corresponde a cada clave
     técnica."""
     assert _etiqueta_periodo(clave, periodo) == etiqueta_esperada
+
+
+@pytest.mark.parametrize(
+    "clave, periodo, inicio_esperado, fin_esperado",
+    [
+        ("2026-05-05", "diario", date(2026, 5, 5), date(2026, 5, 5)),
+        # Semana ISO 19 de 2026: lunes 04/05 a domingo 10/05 (mismo criterio
+        # que _clave_periodo -- el 5 de mayo de 2026 es martes de esa semana).
+        ("2026-W19", "semanal", date(2026, 5, 4), date(2026, 5, 10)),
+        ("2026-05", "mensual", date(2026, 5, 1), date(2026, 5, 31)),
+        ("2026", "anual", date(2026, 1, 1), date(2026, 12, 31)),
+    ],
+)
+def test_limites_periodo(clave, periodo, inicio_esperado, fin_esperado):
+    """Las fechas de inicio y fin que delimitan cada periodo corresponden
+    al calendario real (lunes-domingo ISO, primer-último día del mes,
+    1 ene-31 dic), no solo a la clave técnica."""
+    assert _limites_periodo(clave, periodo) == (inicio_esperado, fin_esperado)
+

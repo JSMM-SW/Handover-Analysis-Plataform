@@ -110,6 +110,10 @@ class HourlyDistributionResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(
+        description="Total de mediciones (no handovers) tomadas en esa hora, para contexto en "
+        "el tooltip del gráfico (Paso 9 del plan de refactor)."
+    )
 
 
 class FranjaHorariaResponse(BaseModel):
@@ -122,6 +126,7 @@ class FranjaHorariaResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) de esa franja")
 
 
 class DiaSemanaResponse(BaseModel):
@@ -135,6 +140,8 @@ class DiaSemanaResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) de ese día de la semana")
+
 
 
 class TrendResponse(BaseModel):
@@ -143,12 +150,29 @@ class TrendResponse(BaseModel):
 
     periodo: str = Field(description="Clave de agrupación técnica, ordenable (ej. '2026-05-06', '2026-W19')")
     etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05/26', 'Sem 19/2026')")
+    fecha_inicio: date = Field(description="Primer día calendario de este periodo (ej. lunes de la semana ISO)")
+    fecha_fin: date = Field(description="Último día calendario de este periodo (ej. domingo de la semana ISO)")
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) tomadas en este periodo")
     total_handovers: int
     exitosos: int
     fallidos: int
     indeterminados: int
-    ping_pongs: int
     tasa_exito: float | None = Field(
         description="exitosos / (exitosos + fallidos) (%) de ese periodo. "
         "null si ese periodo no tiene ningún handover clasificado."
     )
+    tasa_phd: float | None = Field(
+        description="fallidos / (exitosos + fallidos) (%) de ese periodo -- complemento de "
+        "tasa_exito, mismo denominador. null si no hay ningún handover clasificado."
+    )
+    ping_pongs: int
+    tasa_hopp: float | None = Field(
+        description="ping_pongs / total_handovers (%) de ese periodo. null si total_handovers es 0."
+    )
+    uho_evaluables: int = Field(description="Handovers evaluables para UHO en este periodo")
+    uho: int = Field(description="Handovers innecesarios (UHO) en este periodo")
+    tasa_innecesarios: float | None = Field(
+        description="uho / uho_evaluables (%) de ese periodo. null si no hay ningún handover "
+        "evaluable para UHO."
+    )
+

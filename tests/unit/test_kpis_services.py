@@ -310,6 +310,13 @@ def test_distribucion_horaria_devuelve_las_24_horas_con_su_desglose():
     assert por_hora[21].indeterminados == 1
     assert por_hora[0].total == 0
     assert sum(item.total for item in distribucion) == 4
+    assert por_hora[8].total_mediciones == 3
+    assert por_hora[19].total_mediciones == 1
+    assert por_hora[20].total_mediciones == 2
+    assert por_hora[21].total_mediciones == 1
+    assert por_hora[13].total_mediciones == 0
+    assert sum(item.total_mediciones for item in distribucion) == 7
+
 
 
 def test_distribucion_horaria_respeta_el_filtro_de_franja():
@@ -341,6 +348,10 @@ def test_distribucion_franja_devuelve_las_tres_franjas_en_orden():
     assert (manana.total, manana.exitosos, manana.fallidos, manana.ping_pongs) == (2, 1, 1, 1)
     assert tarde.total == 0
     assert (noche.total, noche.indeterminados) == (2, 2)
+    assert manana.total_mediciones == 3
+    assert tarde.total_mediciones == 0
+    assert noche.total_mediciones == 4
+
 
 
 def test_distribucion_franja_sin_datos_devuelve_ceros():
@@ -369,6 +380,9 @@ def test_distribucion_dia_semana_devuelve_lunes_a_domingo():
     ]
     assert distribucion[1].total == 4
     assert sum(item.total for item in distribucion) == 4
+    assert distribucion[1].total_mediciones == 7
+    assert sum(item.total_mediciones for item in distribucion) == 7
+
 
 
 def test_distribucion_dia_semana_respeta_el_filtro_de_franja():
@@ -415,6 +429,19 @@ def test_tendencia_diaria_un_punto_por_dia_ordenado():
     primer_dia, segundo_dia = tendencia
     assert (primer_dia.exitosos, primer_dia.tasa_exito) == (1, 100.0)
     assert (segundo_dia.fallidos, segundo_dia.ping_pongs, segundo_dia.tasa_exito) == (1, 0, 0.0)
+
+    # Campos nuevos del Paso 9: límites del periodo, total de mediciones
+    # (no solo handovers), tasa_phd y UHO por periodo.
+    assert (primer_dia.fecha_inicio, primer_dia.fecha_fin) == (date(2026, 5, 5), date(2026, 5, 5))
+    assert primer_dia.total_mediciones == 2
+    assert primer_dia.tasa_phd == 0.0
+    assert primer_dia.tasa_hopp == 0.0
+    assert (primer_dia.uho, primer_dia.uho_evaluables, primer_dia.tasa_innecesarios) == (1, 1, 100.0)
+
+    assert (segundo_dia.fecha_inicio, segundo_dia.fecha_fin) == (date(2026, 5, 6), date(2026, 5, 6))
+    assert segundo_dia.total_mediciones == 2
+    assert segundo_dia.tasa_phd == 100.0
+
 
 
 def test_tendencia_periodo_solo_con_indeterminados_da_tasa_exito_none():
