@@ -679,14 +679,15 @@ export default function KpisDashboard() {
                             )}
                             <div className="kpis-chart-clickeable" style={{ height: '280px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={trendData} onClick={seleccionarPeriodo}>
+                                                                        <LineChart data={trendData} onClick={seleccionarPeriodo} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
 
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
                                         <Line type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
+
                                         <Line type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
                                         <Line type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
                                         <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
@@ -712,7 +713,8 @@ export default function KpisDashboard() {
                                 </ResponsiveContainer>
                                 <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
                                     <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{resumenMostrado.total_handovers}</span>
-                                    <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total</span>
+                                    <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total Handovers</span>
+
                                 </div>
 
                             </div>
@@ -722,18 +724,20 @@ export default function KpisDashboard() {
                     <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <h3 className="kpis-card-title">Mediciones Registradas ({periodo})</h3>
-                            <div style={{ height: '220px', width: '100%', marginTop: '20px' }}>
+                                                        <div style={{ height: '240px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={trendData}>
+                                    <ComposedChart data={trendData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
+                                        <Legend verticalAlign="top" height={30} iconType="circle" />
                                         <Bar dataKey="total_mediciones" fill={colorPrimario} name="Mediciones" radius={[4, 4, 0, 0]} />
 
                                     </ComposedChart>
                                 </ResponsiveContainer>
                             </div>
+
                         </div>
                     </div>
 
@@ -756,11 +760,12 @@ export default function KpisDashboard() {
                             )}
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                                                        <ComposedChart data={hourlyMostrado}>
+                                                                                                         <ComposedChart data={hourlyMostrado} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
 
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Hora del día', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+
                                         <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
 
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
@@ -784,11 +789,12 @@ export default function KpisDashboard() {
                             )}
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                                                        <ComposedChart data={franjaMostrado}>
+                                        <ComposedChart data={franjaMostrado} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
 
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Franja Horaria', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+
                                         <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
 
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
@@ -806,10 +812,11 @@ export default function KpisDashboard() {
                             <h3 className="kpis-card-title">Distribución por Día de la Semana</h3>
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                                                        <ComposedChart data={diaSemanaData}>
+                                        <ComposedChart data={diaSemanaData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
+                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Día de la Semana', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
+                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+
                                         <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
 
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
