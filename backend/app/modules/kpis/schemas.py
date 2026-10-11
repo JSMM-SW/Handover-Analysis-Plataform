@@ -1,8 +1,11 @@
 """Modelos de datos para las respuestas de los endpoints del módulo de KPIs."""
 from datetime import date, datetime
+from typing import Literal
+from uuid import UUID
 
 
 from pydantic import BaseModel, Field
+
     
 
 
@@ -176,3 +179,44 @@ class TrendResponse(BaseModel):
         "evaluable para UHO."
     )
 
+
+class GuardarReporteRequest(BaseModel):
+    """Body de POST /kpis/reportes: snapshot de un reporte de KPIs exportado a
+    PDF (HU-010, Paso 13 del plan de refactor). No incluye
+    `sesion_execution_id` ni `parametros_calculo` -- el backend los arma él
+    mismo (ver repository.py/services.py) para no duplicar en el frontend
+    datos que ya puede resolver o que ya tiene como constantes."""
+
+    nombre_archivo: str = Field(description="Nombre del PDF generado")
+    fecha_inicio: date
+    fecha_fin: date
+    tecnologia: list[int] = Field(default_factory=list, description="Vacío = todas")
+    franja: list[Literal["manana", "tarde", "noche"]] = Field(default_factory=list, description="Vacío = todas")
+    sesion_label: list[int] = Field(default_factory=list, description="Vacío = todas las sesiones")
+    periodicidad: Literal["diario", "semanal", "mensual", "anual"]
+    periodo_seleccionado: str | None = Field(
+        default=None, description="Clave del punto de /kpis/trend si había uno seleccionado (Paso 10)"
+    )
+    resultados: dict = Field(
+        description="Snapshot de tarjetas, panel de resumen y tabla por período tal como se exportaron"
+    )
+
+
+class ReporteHistorialResponse(BaseModel):
+    """Un elemento de la respuesta de GET /kpis/reportes."""
+
+    id: UUID
+    fecha_generacion: datetime
+    nombre_archivo: str
+    fecha_inicio: date
+    fecha_fin: date
+    tecnologia: list[int]
+    franja: list[str]
+    sesion_label: list[int]
+    periodicidad: str
+    periodo_seleccionado: str | None
+    resultados: dict
+    parametros_calculo: dict = Field(
+        description="Umbrales con los que se calculó (hueco_maximo_s, ping_pong_ventana_s, "
+        "uho_rssi_min_dbm, uho_rsrq_min_db), tal como estaban al generar el reporte"
+    )

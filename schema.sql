@@ -82,4 +82,40 @@ CREATE INDEX IF NOT EXISTS idx_handover_rejected_execution_id
     ON handover_record_rejected (execution_id);
 
 COMMENT ON COLUMN handover_record.rsrp IS 'RSRP from NetMonitor rssi_strongest, per user verification of this app; original dBm value.';
+
+-- Historial de reportes KPI exportados a PDF (HU-010, Paso 13 del plan de refactor).
+CREATE TABLE IF NOT EXISTS kpi_reporte_historial (
+    id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fecha_generacion      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    nombre_archivo        TEXT NOT NULL,                 -- nombre del PDF generado
+
+    -- Filtros aplicados al exportar. Arreglo vacío = "todas/todos".
+    fecha_inicio          DATE NOT NULL,
+    fecha_fin             DATE NOT NULL,
+    tecnologia            SMALLINT[] NOT NULL DEFAULT '{}',   -- {1,2,3} = LTE, 3G, 2G
+    franja                TEXT[]     NOT NULL DEFAULT '{}',   -- {'manana','tarde','noche'}
+    sesion_execution_id   UUID[]     NOT NULL DEFAULT '{}',   -- identificador estable de cada sesión
+    sesion_label          INTEGER[]  NOT NULL DEFAULT '{}',   -- solo para mostrar "Sesión N"
+    periodicidad          TEXT NOT NULL,
+    periodo_seleccionado  TEXT NULL,                          -- clave de /kpis/trend si había uno (Paso 10)
+
+    -- Copia de lo que mostraba el reporte y del criterio con que se calculó.
+    resultados            JSONB NOT NULL,   -- tarjetas, panel de resumen y tabla por período
+    parametros_calculo    JSONB NOT NULL,   -- ej. {"hueco_maximo_s":10,"ping_pong_ventana_s":60,
+                                            --      "uho_rssi_min_dbm":-100,"uho_rsrq_min_db":-15}
+
+    CONSTRAINT chk_kpi_reporte_rango_fechas
+        CHECK (fecha_fin >= fecha_inicio),
+    CONSTRAINT chk_kpi_reporte_periodicidad
+        CHECK (periodicidad IN ('diario', 'semanal', 'mensual', 'anual')),
+    CONSTRAINT chk_kpi_reporte_tecnologia
+        CHECK (tecnologia <@ ARRAY[1, 2, 3]::SMALLINT[]),
+    CONSTRAINT chk_kpi_reporte_franja
+        CHECK (franja <@ ARRAY['manana', 'tarde', 'noche']::TEXT[])
+);
+
+CREATE INDEX IF NOT EXISTS idx_kpi_reporte_historial_fecha_generacion
+    ON kpi_reporte_historial (fecha_generacion DESC);
+
 COMMIT;
+

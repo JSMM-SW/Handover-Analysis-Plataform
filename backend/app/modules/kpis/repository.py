@@ -9,7 +9,8 @@ from sqlalchemy import extract, func, or_
 
 from sqlalchemy.orm import Session
 
-from app.shared.db.models import EtlExecution, HandoverRecord
+from app.shared.db.models import EtlExecution, HandoverRecord, KpiReporteHistorial
+
 
 
 
@@ -208,3 +209,53 @@ class KpisRepository:
             HandoverRecord.timestamp_medicion.asc(),
             HandoverRecord.report_index.asc(),
         ).all()
+
+    def guardar_reporte_historial(
+        self,
+        *,
+        nombre_archivo: str,
+        fecha_inicio: date,
+        fecha_fin: date,
+        tecnologia: list[int],
+        franja: list[str],
+        sesion_label: list[int],
+        periodicidad: str,
+        periodo_seleccionado: str | None,
+        resultados: dict,
+        parametros_calculo: dict,
+    ) -> KpiReporteHistorial:
+        """Guarda una entrada del historial de reportes KPI exportados a PDF
+        (HU-010, Paso 13 del plan de refactor).
+
+        Resuelve `sesion_label` a `sesion_execution_id` (identificador
+        estable de cada sesión) reusando `_resolver_execution_ids_por_sesiones`
+        -- el llamador (services.py) nunca necesita conocer los execution_id
+        reales, solo las etiquetas cortas que ya maneja el resto del módulo.
+        """
+        reporte = KpiReporteHistorial(
+            nombre_archivo=nombre_archivo,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            tecnologia=tecnologia,
+            franja=franja,
+            sesion_execution_id=self._resolver_execution_ids_por_sesiones(sesion_label) if sesion_label else [],
+            sesion_label=sesion_label,
+            periodicidad=periodicidad,
+            periodo_seleccionado=periodo_seleccionado,
+            resultados=resultados,
+            parametros_calculo=parametros_calculo,
+        )
+        self._db.add(reporte)
+        self._db.commit()
+        self._db.refresh(reporte)
+        return reporte
+
+    def listar_historial_reportes(self, limit: int = 50) -> list[KpiReporteHistorial]:
+        """Lista las entradas del historial de reportes KPI, más recientes primero."""
+        return (
+            self._db.query(KpiReporteHistorial)
+            .order_by(KpiReporteHistorial.fecha_generacion.desc())
+            .limit(limit)
+            .all()
+        )
+

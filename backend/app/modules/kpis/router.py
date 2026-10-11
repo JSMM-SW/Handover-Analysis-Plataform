@@ -16,8 +16,10 @@ from app.modules.kpis.repository import KpisRepository
 from app.modules.kpis.schemas import (
     DiaSemanaResponse,
     FranjaHorariaResponse,
+    GuardarReporteRequest,
     HourlyDistributionResponse,
     KpiSummaryResponse,
+    ReporteHistorialResponse,
     SesionResponse,
     SignalMetricsResponse,
     TrendResponse,
@@ -29,8 +31,11 @@ from app.modules.kpis.services import (
     calcular_metricas_globales_dia,
     calcular_resumen_kpis,
     calcular_tendencia,
+    guardar_reporte,
+    listar_historial_reportes,
     listar_sesiones,
 )
+
 
 router = APIRouter(prefix="/kpis", tags=["Análisis de Desempeño"])
 
@@ -123,3 +128,18 @@ def obtener_tendencia(
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por `periodo`."""
     repositorio = KpisRepository(db)
     return calcular_tendencia(start_date, end_date, repositorio, periodo, tecnologia, franja, sesion_label)
+
+
+@router.post("/reportes", response_model=ReporteHistorialResponse, status_code=201)
+def guardar_reporte_kpi(datos: GuardarReporteRequest, db: Session = Depends(get_db)):
+    """Guarda una entrada del historial de reportes KPI exportados a PDF (HU-010, Paso 13 del plan de refactor)."""
+    repositorio = KpisRepository(db)
+    return guardar_reporte(repositorio, datos)
+
+
+@router.get("/reportes", response_model=list[ReporteHistorialResponse])
+def obtener_historial_reportes(limit: int = Query(default=50, le=200), db: Session = Depends(get_db)):
+    """Lista el historial de reportes KPI guardados, más recientes primero."""
+    repositorio = KpisRepository(db)
+    return listar_historial_reportes(repositorio, limit)
+

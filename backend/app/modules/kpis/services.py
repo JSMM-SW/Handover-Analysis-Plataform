@@ -78,8 +78,10 @@ from app.modules.kpis.repository import KpisRepository
 from app.modules.kpis.schemas import (
     DiaSemanaResponse,
     FranjaHorariaResponse,
+    GuardarReporteRequest,
     HourlyDistributionResponse,
     KpiSummaryResponse,
+    ReporteHistorialResponse,
     SesionResponse,
     SignalMetricsResponse,
     TrendResponse,
@@ -186,6 +188,60 @@ def listar_sesiones(repositorio: KpisRepository) -> list[SesionResponse]:
         )
         for ejecucion, primera_medicion, ultima_medicion in filas
     ]
+
+
+def guardar_reporte(repositorio: KpisRepository, datos: GuardarReporteRequest) -> ReporteHistorialResponse:
+    """Guarda una entrada del historial de reportes KPI (HU-010, Paso 13 del
+    plan de refactor), llamada desde POST /kpis/reportes cada vez que el
+    frontend exporta un PDF.
+
+    `parametros_calculo` se arma aquí a partir de las constantes de este
+    módulo, no lo manda el frontend -- así nunca puede desincronizarse de
+    los umbrales con los que realmente se calculó (ver UHO_RSSI_MIN_DBM,
+    UHO_RSRQ_MIN_DB, HUECO_MAXIMO_SEGUNDOS, PING_PONG_VENTANA_SEGUNDOS)."""
+    parametros_calculo = {
+        "hueco_maximo_s": HUECO_MAXIMO_SEGUNDOS,
+        "ping_pong_ventana_s": PING_PONG_VENTANA_SEGUNDOS,
+        "uho_rssi_min_dbm": UHO_RSSI_MIN_DBM,
+        "uho_rsrq_min_db": UHO_RSRQ_MIN_DB,
+    }
+    reporte = repositorio.guardar_reporte_historial(
+        nombre_archivo=datos.nombre_archivo,
+        fecha_inicio=datos.fecha_inicio,
+        fecha_fin=datos.fecha_fin,
+        tecnologia=datos.tecnologia,
+        franja=datos.franja,
+        sesion_label=datos.sesion_label,
+        periodicidad=datos.periodicidad,
+        periodo_seleccionado=datos.periodo_seleccionado,
+        resultados=datos.resultados,
+        parametros_calculo=parametros_calculo,
+    )
+    return _reporte_a_response(reporte)
+
+
+def listar_historial_reportes(repositorio: KpisRepository, limit: int = 50) -> list[ReporteHistorialResponse]:
+    """Lista el historial de reportes KPI guardados, más recientes primero."""
+    return [_reporte_a_response(reporte) for reporte in repositorio.listar_historial_reportes(limit)]
+
+
+def _reporte_a_response(reporte) -> ReporteHistorialResponse:
+    """Convierte una fila ORM `KpiReporteHistorial` a su schema de respuesta."""
+    return ReporteHistorialResponse(
+        id=reporte.id,
+        fecha_generacion=reporte.fecha_generacion,
+        nombre_archivo=reporte.nombre_archivo,
+        fecha_inicio=reporte.fecha_inicio,
+        fecha_fin=reporte.fecha_fin,
+        tecnologia=reporte.tecnologia,
+        franja=reporte.franja,
+        sesion_label=reporte.sesion_label,
+        periodicidad=reporte.periodicidad,
+        periodo_seleccionado=reporte.periodo_seleccionado,
+        resultados=reporte.resultados,
+        parametros_calculo=reporte.parametros_calculo,
+    )
+
 
 
 
