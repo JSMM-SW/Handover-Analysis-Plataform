@@ -333,15 +333,17 @@ export default function KpisDashboard() {
     }, [sesionLabels, sesiones]);
 
 
-    /**
-     * Genera el PDF del dashboard, siempre con la apariencia del modo oscuro.
-
+        /**
+     * Genera el PDF del dashboard con la apariencia del tema que el usuario
+     * tiene activo en ese momento (claro u oscuro) -- a diferencia de antes
+     * (Paso 11 del plan de refactor), ya no fuerza el tema oscuro durante la
+     * captura.
      *
-     * Fuerza temporalmente `data-tema="oscuro"` en <html> para que tanto el
-     * CSS como los colores de Recharts (vía `useColorDeTema`) se rendericen
-     * en oscuro, captura con html2canvas y luego restaura el tema que tenía
-     * el usuario. Se modifica el atributo directamente (no el estado de
-     * App.jsx) para no persistir el cambio en localStorage.
+     * Si el dashboard no cabe en una sola página A4, se reparte en varias:
+     * se captura una sola imagen larga con html2canvas y se va pegando esa
+     * misma imagen en cada página con un corrimiento vertical negativo, para
+     * que cada una muestre la porción que le corresponde (jsPDF recorta
+     * automáticamente lo que sobra fuera de los límites de la página).
      *
      * @returns {Promise<void>}
      */
@@ -350,7 +352,6 @@ export default function KpisDashboard() {
         if (!element) return;
 
         const raiz = document.documentElement;
-        const temaAnterior = raiz.dataset.tema;
         const controles = element.querySelector('.kpis-controls');
         const resumenFiltros = element.querySelector('.kpis-filtros-resumen-pdf');
 
@@ -359,34 +360,44 @@ export default function KpisDashboard() {
         // reemplazamos por texto plano solo durante la captura.
         controles.style.display = 'none';
         resumenFiltros.style.display = 'flex';
-        raiz.dataset.tema = 'oscuro';
 
         try {
             await esperarRepintado();
 
-            // Se lee aquí (y no del hook) porque el valor del hook es el del
-            // render anterior al cambio de tema.
-            const fondoOscuro = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
+            const fondoActual = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
 
             const canvas = await html2canvas(element, {
-                backgroundColor: fondoOscuro,
+                backgroundColor: fondoActual,
                 scale: 2,
             });
 
             const imgData = canvas.toDataURL('image/png');
 
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+            const anchoPdf = pdf.internal.pageSize.getWidth();
+            const altoPagina = pdf.internal.pageSize.getHeight();
+            const altoImagen = (canvas.height * anchoPdf) / canvas.width;
 
-            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            let alturaRestante = altoImagen;
+            let posicionY = 0;
+
+            pdf.addImage(imgData, 'PNG', 0, posicionY, anchoPdf, altoImagen);
+            alturaRestante -= altoPagina;
+
+            while (alturaRestante > 0) {
+                posicionY = alturaRestante - altoImagen;
+                pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, posicionY, anchoPdf, altoImagen);
+                alturaRestante -= altoPagina;
+            }
+
             pdf.save(`Reporte_Handovers_${startDate}_al_${endDate}.pdf`);
         } finally {
-            raiz.dataset.tema = temaAnterior;
             controles.style.display = 'flex';
             resumenFiltros.style.display = 'none';
         }
     };
+
 
         const hasData = summaryData && summaryData.total_handovers > 0;
 
@@ -568,14 +579,18 @@ export default function KpisDashboard() {
                 {/* Solo visible durante la captura para el PDF (ver exportToPDF):
                     reemplaza a .kpis-controls, que html2canvas no captura bien
                     por tener <select>/<input type="date"> nativos. */}
-                <div className="kpis-filtros-resumen-pdf" style={{ display: 'none' }}>
+                                <div className="kpis-filtros-resumen-pdf" style={{ display: 'none' }}>
                     <span>Periodo: {startDate} a {endDate}</span>
                     <span>Tecnología: {resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}</span>
                     <span>Franja horaria: {resumenSeleccion(franjas, ETIQUETAS_FRANJA)}</span>
                     <span>Periodicidad: {ETIQUETAS_PERIODO[periodo]}</span>
                     <span>Sesión: {sesionesTexto}</span>
+                    {puntoSeleccionado && (
+                        <span>Periodo seleccionado: {puntoSeleccionado.etiqueta} ({puntoSeleccionado.fecha_inicio} a {puntoSeleccionado.fecha_fin})</span>
+                    )}
 
                 </div>
+
             </header>
 
             {loading && (
