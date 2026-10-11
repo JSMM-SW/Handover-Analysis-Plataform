@@ -16,6 +16,7 @@ from sqlalchemy import (
     BigInteger,
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -25,7 +26,8 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
+
 from sqlalchemy.orm import relationship
 
 from app.shared.db.database import Base
@@ -177,3 +179,41 @@ class HandoverRecordRejected(Base):
     )
 
     execution = relationship("EtlExecution", back_populates="rejected_records")
+
+
+class KpiReporteHistorial(Base):
+
+    """Historial de reportes KPI exportados a PDF (HU-010, Paso 13 del plan de refactor)."""
+
+    __tablename__ = "kpi_reporte_historial"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    fecha_generacion = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    nombre_archivo = Column(Text, nullable=False)
+
+    fecha_inicio = Column(Date, nullable=False)
+    fecha_fin = Column(Date, nullable=False)
+    tecnologia = Column(ARRAY(SmallInteger), nullable=False, default=list)
+    franja = Column(ARRAY(Text), nullable=False, default=list)
+    sesion_execution_id = Column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
+    sesion_label = Column(ARRAY(Integer), nullable=False, default=list)
+    periodicidad = Column(Text, nullable=False)
+    periodo_seleccionado = Column(Text)
+
+    resultados = Column(JSONB, nullable=False)
+    parametros_calculo = Column(JSONB, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("fecha_fin >= fecha_inicio", name="chk_kpi_reporte_rango_fechas"),
+        CheckConstraint(
+            "periodicidad IN ('diario','semanal','mensual','anual')",
+            name="chk_kpi_reporte_periodicidad",
+        ),
+        CheckConstraint("tecnologia <@ ARRAY[1, 2, 3]::SMALLINT[]", name="chk_kpi_reporte_tecnologia"),
+        CheckConstraint(
+            "franja <@ ARRAY['manana', 'tarde', 'noche']::TEXT[]", name="chk_kpi_reporte_franja"
+        ),
+    )
+

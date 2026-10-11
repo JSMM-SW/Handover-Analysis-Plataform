@@ -16,6 +16,7 @@ const PIPELINE_STEPS = [
     { key: "done", label: "Procesamiento completado" },
 ];
 
+/** Ícono de visto (paso completado). */
 function IconCheck() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -24,6 +25,7 @@ function IconCheck() {
     );
 }
 
+/** Ícono de equis (paso fallido). */
 function IconCross() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -33,6 +35,7 @@ function IconCross() {
     );
 }
 
+/** Ícono de subida (zona para arrastrar archivos). */
 function IconUpload() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -42,6 +45,7 @@ function IconUpload() {
     );
 }
 
+/** Ícono de alerta (mensaje de error). */
 function IconAlert() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -52,6 +56,7 @@ function IconAlert() {
     );
 }
 
+/** Ícono de descarga (botón del dataset limpio). */
 function IconDownload() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -61,21 +66,47 @@ function IconDownload() {
     );
 }
 
+/**
+ * Convierte un tamaño en bytes a un texto legible (B, KB o MB).
+ *
+ * @param {number} bytes - tamaño del archivo en bytes.
+ * @returns {string} tamaño formateado, ej. "12.4 KB".
+ */
 function formatBytes(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+/**
+ * Genera un identificador único para un archivo seleccionado.
+ *
+ * @param {File} file - archivo elegido por el usuario.
+ * @param {number} index - posición del archivo dentro de la selección.
+ * @returns {string} identificador único.
+ */
 function makeId(file, index) {
     return `${file.name}-${file.size}-${Date.now()}-${index}`;
 }
 
+/**
+ * Indica si el archivo tiene una extensión soportada (.csv).
+ *
+ * @param {File} file - archivo elegido por el usuario.
+ * @returns {boolean} true si el archivo es .csv.
+ */
 function isSupportedFile(file) {
     const name = file.name.toLowerCase();
     return name.endsWith(".csv");
 }
 
+/**
+ * Crea el estado inicial de un archivo en la lista de procesamiento.
+ *
+ * @param {File} file - archivo elegido por el usuario.
+ * @param {number} index - posición del archivo dentro de la selección.
+ * @returns {object} estado inicial del archivo (sin procesar).
+ */
 function newItem(file, index) {
     return {
         id: makeId(file, index),
@@ -88,6 +119,11 @@ function newItem(file, index) {
     };
 }
 
+/**
+ * Página del módulo de ingesta: permite seleccionar uno o varios CSV,
+ * subirlos y ejecutar el pipeline ETL, mostrando el progreso y el
+ * resultado de cada archivo.
+ */
 export default function IngestaPage() {
     const [items, setItems] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
@@ -95,31 +131,61 @@ export default function IngestaPage() {
 
     const isProcessingAny = items.some((item) => item.isProcessing);
 
+    /**
+     * Actualiza parcialmente el estado de un archivo de la lista.
+     *
+     * @param {string} id - identificador del archivo.
+     * @param {object|Function} patch - cambios a aplicar, o función que los
+     *   calcula a partir del estado actual del archivo.
+     */
     const updateItem = (id, patch) => {
         setItems((prev) =>
             prev.map((item) => (item.id === id ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) } : item))
         );
     };
 
+    /**
+     * Reemplaza la selección actual por los archivos .csv recibidos.
+     *
+     * @param {FileList} fileList - archivos del input o del drag & drop.
+     */
     const addFiles = (fileList) => {
         const files = Array.from(fileList).filter(isSupportedFile);
         if (files.length === 0) return;
         setItems(files.map((file, index) => newItem(file, index)));
     };
 
+    /**
+     * Maneja la selección de archivos desde el input.
+     *
+     * @param {Event} e - evento change del input de archivos.
+     */
     const handleFileInput = (e) => addFiles(e.target.files);
 
+    /**
+     * Maneja los archivos soltados sobre la zona de carga.
+     *
+     * @param {DragEvent} e - evento drop.
+     */
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
         addFiles(e.dataTransfer.files);
     };
 
+    /** Limpia la selección y reinicia el input de archivos. */
     const clearAll = () => {
         setItems([]);
         if (inputRef.current) inputRef.current.value = "";
     };
 
+    /**
+     * Sube el archivo al backend (POST /ingestion/upload).
+     *
+     * @param {File} file - archivo a subir.
+     * @returns {Promise<object>} metadatos del archivo almacenado.
+     * @throws {Error} si el backend rechaza el archivo.
+     */
     const uploadFile = async (file) => {
         const formData = new FormData();
         formData.append("files", file);
@@ -139,6 +205,13 @@ export default function IngestaPage() {
         return item.upload;
     };
 
+    /**
+     * Ejecuta el pipeline ETL sobre un archivo ya subido (POST /ingestion/process).
+     *
+     * @param {object} uploadData - metadatos devueltos por uploadFile.
+     * @returns {Promise<object>} resultado de la ejecución del pipeline.
+     * @throws {Error} si el procesamiento falla.
+     */
     const processFile = async (uploadData) => {
         const response = await fetch(`${API_BASE}/ingestion/process`, {
             method: "POST",
@@ -155,6 +228,13 @@ export default function IngestaPage() {
         return data;
     };
 
+    /**
+     * Sube y procesa un archivo, marcando cada paso del pipeline a medida
+     * que avanza y registrando el paso en el que falló, si falla.
+     *
+     * @param {string} id - identificador del archivo en la lista.
+     * @param {File} file - archivo a procesar.
+     */
     const processItem = async (id, file) => {
         updateItem(id, {
             isProcessing: true,
@@ -198,6 +278,7 @@ export default function IngestaPage() {
         }
     };
 
+    /** Procesa todos los archivos que aún no tienen resultado. */
     const handleProcessAll = () => {
         items.forEach((item) => {
             if (!item.isProcessing && !item.result) {
@@ -210,8 +291,7 @@ export default function IngestaPage() {
         <div className="ingesta-page">
             <div className="ingesta-shell">
                 <header className="ingesta-header">
-                    <span className="ingesta-eyebrow">Módulo de ingesta</span>
-                    <h1 className="ingesta-title">Carga de datos de handover</h1>
+                    <h2 className="ingesta-title">Carga de datos de handover</h2>
                     <p className="ingesta-subtitle">
                         Sube uno o varios archivos CSV con mediciones de handover para
                         validarlos, limpiarlos y estructurarlos como dataset listo para análisis.
@@ -219,7 +299,7 @@ export default function IngestaPage() {
                 </header>
 
                 <section className="ingesta-card">
-                    <h2 className="ingesta-card-title">Archivos</h2>
+                    <h3 className="ingesta-card-title">Archivos</h3>
                     <p className="ingesta-card-hint">Formatos soportados: .csv — puedes seleccionar varios a la vez</p>
 
                     <label
@@ -252,34 +332,24 @@ export default function IngestaPage() {
                         )}
                     </label>
 
-                    <button
-                        className="ingesta-btn"
-                        onClick={handleProcessAll}
-                        disabled={items.length === 0 || isProcessingAny}
-                    >
-                        {isProcessingAny && <span className="ingesta-spinner" />}
-                        {isProcessingAny
-                            ? "Procesando…"
-                            : `Procesar archivo${items.length > 1 ? "s" : ""}`}
-                    </button>
-
-                    {items.length > 0 && !isProcessingAny && (
+                    <div className="ingesta-actions">
                         <button
-                            type="button"
-                            onClick={clearAll}
-                            style={{
-                                marginTop: 10,
-                                background: "none",
-                                border: "none",
-                                color: "var(--color-text-faint)",
-                                fontSize: 12.5,
-                                cursor: "pointer",
-                                padding: 0,
-                            }}
+                            className="ingesta-btn"
+                            onClick={handleProcessAll}
+                            disabled={items.length === 0 || isProcessingAny}
                         >
-                            Quitar selección
+                            {isProcessingAny && <span className="ingesta-spinner" />}
+                            {isProcessingAny
+                                ? "Procesando…"
+                                : `Procesar archivo${items.length > 1 ? "s" : ""}`}
                         </button>
-                    )}
+
+                        {items.length > 0 && !isProcessingAny && (
+                            <button type="button" className="ingesta-btn-link" onClick={clearAll}>
+                                Quitar selección
+                            </button>
+                        )}
+                    </div>
                 </section>
 
                 {items.map((item) => (
@@ -290,6 +360,12 @@ export default function IngestaPage() {
     );
 }
 
+/**
+ * Tarjeta con el progreso y el resultado del procesamiento de un archivo.
+ *
+ * @param {object} props
+ * @param {object} props.item - estado del archivo (ver newItem).
+ */
 function FileResultCard({ item }) {
     const { file, completedSteps, failedStep, result, error } = item;
     const hasStarted = completedSteps.length > 0 || failedStep;
@@ -304,7 +380,7 @@ function FileResultCard({ item }) {
     return (
         <section className="ingesta-card">
             <div className="ingesta-result-header">
-                <h2 className="ingesta-card-title">{file.name}</h2>
+                <h3 className="ingesta-file-name">{file.name}</h3>
                 <span className="ingesta-dropzone-hint">{formatBytes(file.size)}</span>
             </div>
 
@@ -327,7 +403,7 @@ function FileResultCard({ item }) {
             )}
 
             {error && (
-                <div className="ingesta-alert is-error" style={{ marginTop: 16 }}>
+                <div className="ingesta-alert is-error">
                     <span className="ingesta-alert-icon"><IconAlert /></span>
                     <div>
                         <p className="ingesta-alert-title">No se pudo completar el procesamiento</p>
@@ -337,7 +413,7 @@ function FileResultCard({ item }) {
             )}
 
             {result && (
-                <div style={{ marginTop: 16 }}>
+                <div className="ingesta-result">
                     <div className="ingesta-result-header">
                         <span className={`ingesta-status-pill ${result.status === "completed" ? "is-completed" : "is-failed"}`}>
                             {result.status === "completed" ? "Completado" : "Con errores"}
@@ -345,7 +421,6 @@ function FileResultCard({ item }) {
                         {result.status === "completed" && (
                             <a
                                 className="ingesta-btn"
-                                style={{ width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 13 }}
                                 href={`${API_BASE}/ingestion/export?execution_id=${result.execution_id}`}
                             >
                                 <IconDownload />
@@ -377,7 +452,7 @@ function FileResultCard({ item }) {
                     </div>
 
                     <div className="ingesta-section">
-                        <h3 className="ingesta-section-title">Advertencias</h3>
+                        <h4 className="ingesta-section-title">Advertencias</h4>
                         {result.warnings.length === 0 ? (
                             <p className="ingesta-note is-empty">Sin advertencias</p>
                         ) : (
@@ -390,15 +465,13 @@ function FileResultCard({ item }) {
                     </div>
 
                     <div className="ingesta-section">
-                        <h3 className="ingesta-section-title">Errores</h3>
+                        <h4 className="ingesta-section-title">Errores</h4>
                         {result.errors.length === 0 ? (
                             <p className="ingesta-note is-empty">Sin errores</p>
                         ) : (
                             <ul className="ingesta-note-list">
                                 {result.errors.map((err) => (
-                                    <li key={err} className="ingesta-note is-warning" style={{ color: "var(--color-error)", background: "var(--color-error-soft)" }}>
-                                        {err}
-                                    </li>
+                                    <li key={err} className="ingesta-note is-error">{err}</li>
                                 ))}
                             </ul>
                         )}

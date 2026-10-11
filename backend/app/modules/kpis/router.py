@@ -1,7 +1,14 @@
+"""
+Endpoints del módulo de KPIs. Cada uno arma su `KpisRepository`, delega el
+cálculo a `kpis/services.py` y devuelve el modelo de respuesta -- no hay
+lógica de negocio aquí, solo el cableado HTTP (mismo patrón que
+`ingesta/router.py`).
+"""
+
 from datetime import date
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.shared.db.database import get_db
@@ -9,8 +16,10 @@ from app.modules.kpis.repository import KpisRepository
 from app.modules.kpis.schemas import (
     DiaSemanaResponse,
     FranjaHorariaResponse,
+    GuardarReporteRequest,
     HourlyDistributionResponse,
     KpiSummaryResponse,
+    ReporteHistorialResponse,
     SesionResponse,
     SignalMetricsResponse,
     TrendResponse,
@@ -22,9 +31,10 @@ from app.modules.kpis.services import (
     calcular_metricas_globales_dia,
     calcular_resumen_kpis,
     calcular_tendencia,
+    guardar_reporte,
+    listar_historial_reportes,
     listar_sesiones,
 )
-
 
 
 router = APIRouter(prefix="/kpis", tags=["Análisis de Desempeño"])
@@ -48,16 +58,17 @@ def obtener_sesiones(db: Session = Depends(get_db)):
 def obtener_resumen_kpis(
     start_date: date,
     end_date: date,
-    tecnologia: int | None = None,
-    franja: Literal["manana", "tarde", "noche"] | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = Query(default=None),
+    franja: list[Literal["manana", "tarde", "noche"]] | None = Query(default=None),
+    sesion_label: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Resumen agregado de KPIs de handover para un rango de fechas.
 
-    `tecnologia` es opcional: 0=sin señal, 1=LTE/4G, 2=3G/UMTS. `franja` es
-    opcional: 'manana' (06-11:59), 'tarde' (12-18:59) o 'noche' (19-05:59).
-    `sesion_label` es opcional: restringe a una sola carga de archivo.
+    `tecnologia`, `franja` y `sesion_label` son filtros multi-selección
+    (repetir el parámetro, ej. `?tecnologia=1&tecnologia=2`). Sin
+    especificarlos, o con una selección vacía, se incluyen todos los
+    valores.
     """
     repositorio = KpisRepository(db)
     return calcular_resumen_kpis(start_date, end_date, repositorio, tecnologia, franja, sesion_label)
@@ -67,9 +78,9 @@ def obtener_resumen_kpis(
 def obtener_distribucion_horaria(
     start_date: date,
     end_date: date,
-    tecnologia: int | None = None,
-    franja: Literal["manana", "tarde", "noche"] | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = Query(default=None),
+    franja: list[Literal["manana", "tarde", "noche"]] | None = Query(default=None),
+    sesion_label: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Distribución de handovers por hora del día (0-23), desglosada por categoría."""
@@ -81,8 +92,8 @@ def obtener_distribucion_horaria(
 def obtener_distribucion_franja_horaria(
     start_date: date,
     end_date: date,
-    tecnologia: int | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = Query(default=None),
+    sesion_label: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Igual que /hourly, pero agrupado en 3 franjas (mañana/tarde/noche) en vez de 24 horas."""
@@ -94,9 +105,9 @@ def obtener_distribucion_franja_horaria(
 def obtener_distribucion_dia_semana(
     start_date: date,
     end_date: date,
-    tecnologia: int | None = None,
-    franja: Literal["manana", "tarde", "noche"] | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = Query(default=None),
+    franja: list[Literal["manana", "tarde", "noche"]] | None = Query(default=None),
+    sesion_label: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Distribución de handovers por día de la semana (Lunes a Domingo), desglosada por categoría."""
@@ -109,11 +120,26 @@ def obtener_tendencia(
     start_date: date,
     end_date: date,
     periodo: Literal["diario", "semanal", "mensual", "anual"] = "diario",
-    tecnologia: int | None = None,
-    franja: Literal["manana", "tarde", "noche"] | None = None,
-    sesion_label: int | None = None,
+    tecnologia: list[int] | None = Query(default=None),
+    franja: list[Literal["manana", "tarde", "noche"]] | None = Query(default=None),
+    sesion_label: list[int] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por `periodo`."""
     repositorio = KpisRepository(db)
     return calcular_tendencia(start_date, end_date, repositorio, periodo, tecnologia, franja, sesion_label)
+
+
+@router.post("/reportes", response_model=ReporteHistorialResponse, status_code=201)
+def guardar_reporte_kpi(datos: GuardarReporteRequest, db: Session = Depends(get_db)):
+    """Guarda una entrada del historial de reportes KPI exportados a PDF (HU-010, Paso 13 del plan de refactor)."""
+    repositorio = KpisRepository(db)
+    return guardar_reporte(repositorio, datos)
+
+
+@router.get("/reportes", response_model=list[ReporteHistorialResponse])
+def obtener_historial_reportes(limit: int = Query(default=50, le=200), db: Session = Depends(get_db)):
+    """Lista el historial de reportes KPI guardados, más recientes primero."""
+    repositorio = KpisRepository(db)
+    return listar_historial_reportes(repositorio, limit)
+

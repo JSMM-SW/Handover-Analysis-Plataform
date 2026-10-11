@@ -1,8 +1,9 @@
 /*
- * Estilos del Módulo 2 — sistema visual de paleta pastel (docs/11-sistema-visual.md).
+ * Estilos del Módulo 2 — Visualización temporal.
  *
- * CSS plano y prefijado con `vt-`, siguiendo lo que ya hace el módulo de ingesta: el proyecto no
- * usa ninguna librería de UI.
+ * CSS plano y prefijado con `vt-`. Comparte el sistema visual del resto de la plataforma: todos los
+ * tokens `--vt-*` apuntan a las variables globales de `src/index.css`, así que el módulo sigue el
+ * interruptor claro/oscuro de App.jsx igual que Ingesta, KPIs y Geoespacial.
  *
  * Índice
  *   1. Tokens
@@ -23,71 +24,67 @@
 /* ============================================================================ 1. Tokens */
 
 /*
- * El `index.css` del proyecto declara `color-scheme: light dark`, así que en un sistema con tema
- * oscuro el fondo y el texto se invierten. El módulo declara su propia superficie clara, igual que
- * hace `.ingesta-page`: es la convención del repositorio y mantiene legibles las gráficas, que se
- * capturan para la memoria.
+ * Los tokens del módulo se conservan (las reglas de abajo los usan en cientos de sitios), pero ya
+ * no tienen valores propios: son alias de las variables globales del tema. Cambiar de tema en
+ * App.jsx cambia `data-tema` en <html> y, con él, todos estos valores.
  *
- * Los colores que usan las gráficas están duplicados en `utils/temaVisual.js` (el canvas de
- * ECharts no lee variables CSS). Si se cambia uno, se cambia en los dos sitios.
+ * Las gráficas de ECharts (canvas) no leen CSS: `utils/temaVisual.js` resuelve las mismas
+ * variables globales en JavaScript.
  */
 .vt-pagina {
-  /* Superficies — blanco con matiz azul, nunca blanco puro de fondo */
-  --vt-fondo: #f2f7fa;
-  --vt-claro: #f7fbfd;
-  --vt-superficie: #ffffff;
-  --vt-hundido: #e9f1f6;
-  --vt-borde: #dce7ef;
-  --vt-borde-fuerte: #c7d6e2;
+  /* Superficies */
+  --vt-fondo: var(--color-fondo);
+  --vt-claro: var(--color-superficie-hundida);
+  --vt-superficie: var(--color-superficie);
+  --vt-hundido: var(--color-superficie-hundida);
+  --vt-borde: var(--color-borde);
+  --vt-borde-fuerte: color-mix(in srgb, var(--color-borde) 60%, var(--color-texto-tenue));
 
   /* Texto */
-  --vt-texto: #2e3a45;
-  --vt-texto-suave: #5b6873;
-  --vt-texto-tenue: #97a6b2;
+  --vt-texto: var(--color-texto);
+  --vt-texto-suave: var(--color-texto-tenue);
+  --vt-texto-tenue: var(--color-texto-debil);
 
-  /* Acento azul pastel: estados activos, selección, enlaces */
-  --vt-acento: #7fb5da;
-  --vt-acento-fuerte: #2e6c9a;
-  --vt-acento-hover: #255a82;
-  --vt-acento-borde: #bfdcef;
-  --vt-acento-tenue: #e5f1fa;
+  /* Acento: el mismo azul primario de los demás módulos */
+  --vt-acento: var(--color-primario);
+  --vt-acento-fuerte: var(--color-primario);
+  --vt-acento-hover: var(--color-primario-hover);
+  --vt-acento-borde: color-mix(in srgb, var(--color-primario) 35%, var(--color-superficie));
+  --vt-acento-tenue: var(--color-primario-suave);
 
-  /* Verde pastel: acciones principales */
-  --vt-verde: #a8ddbd;
-  --vt-verde-hover: #92d3ac;
-  --vt-verde-texto: #1e5234;
-  --vt-verde-tenue: #e3f4ea;
+  /* Tono extra del módulo (tarjeta y etiqueta inter-RAT); se aclara en oscuro, ver abajo */
+  --vt-lavanda: #6d5bb8;
 
   /* Semánticos */
-  --vt-mejora: #3f7a4f;
-  --vt-empeora: #a6452f;
+  --vt-mejora: var(--color-exito);
+  --vt-empeora: var(--color-error);
 
-  /* Forma y profundidad */
-  --vt-radio: 14px;
-  --vt-radio-control: 10px;
-  --vt-sombra: 0 1px 2px rgba(46, 58, 69, 0.04), 0 2px 10px rgba(46, 58, 69, 0.04);
-  --vt-sombra-elevada: 0 8px 28px rgba(46, 58, 69, 0.1);
-  --vt-anillo: 0 0 0 3px rgba(127, 181, 218, 0.4);
+  /* Forma y profundidad (mismos radios que .kpis-card / .kpis-input) */
+  --vt-radio: 12px;
+  --vt-radio-control: 6px;
+  --vt-sombra: none;
+  --vt-sombra-elevada: var(--sombra-md);
+  --vt-anillo: 0 0 0 3px color-mix(in srgb, var(--color-primario) 35%, transparent);
 
   /* Movimiento */
   --vt-transicion: 160ms cubic-bezier(0.2, 0.7, 0.3, 1);
 
   --vt-mono: ui-monospace, "Cascadia Code", Consolas, monospace;
 
-  /* Controles nativos (casillas, calendario, reloj) en claro aunque el sistema use tema oscuro. */
-  color-scheme: light;
-
   min-height: 100vh;
-  padding: 28px 24px 72px;
+  padding: 30px;
   background: var(--vt-fondo);
   color: var(--vt-texto);
-  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto,
-    "Helvetica Neue", sans-serif;
+  font-family: var(--fuente-base);
   font-size: 15px;
   line-height: 1.5;
   text-align: left;
   letter-spacing: 0;
   -webkit-font-smoothing: antialiased;
+}
+
+:root[data-tema="oscuro"] .vt-pagina {
+  --vt-lavanda: #a99bdb;
 }
 
 .vt-pagina *,
@@ -100,12 +97,14 @@
  * El contenido se centra sin que el fondo deje de cubrir todo el ancho. Se enumeran los bloques en
  * lugar de usar `> :not(...)`: ese selector pesa más que la regla que convierte la configuración
  * en panel lateral en móvil y le impediría soltarse del centrado.
+ *
+ * 1140px = 1200px de los demás módulos menos sus 30px de relleno a cada lado.
  */
 .vt-pagina__cabecera,
 .vt-panel-config,
 .vt-contenido,
 .vt-bienvenida {
-  max-width: 1320px;
+  max-width: 1140px;
   margin-inline: auto;
 }
 
@@ -123,38 +122,31 @@
 
 /* ============================================================================ 2. Página */
 
+/* Cabecera: mismo formato que .kpis-header */
 .vt-pagina__cabecera {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
+  padding-bottom: 20px;
   margin-bottom: 24px;
+  border-bottom: 1px solid var(--vt-borde);
   flex-wrap: wrap;
 }
 
-.vt-pagina__antetitulo {
-  margin: 0 0 6px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--vt-acento-fuerte);
-}
-
-.vt-pagina .vt-pagina__titulo h1 {
-  margin: 0 0 6px;
-  font-size: 1.75rem;
+.vt-pagina .vt-pagina__titulo h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
   line-height: 1.2;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-weight: 700;
   color: var(--vt-texto);
 }
 
-.vt-pagina__titulo p:last-child {
+.vt-pagina__titulo p {
   margin: 0;
   max-width: 64ch;
   color: var(--vt-texto-suave);
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
 .vt-pagina__acciones {
@@ -178,7 +170,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  padding: 9px 16px;
+  padding: 8px 16px;
   border-radius: var(--vt-radio-control);
   border: 1px solid transparent;
   font: inherit;
@@ -191,16 +183,7 @@
     background-color var(--vt-transicion),
     border-color var(--vt-transicion),
     color var(--vt-transicion),
-    box-shadow var(--vt-transicion),
-    transform var(--vt-transicion);
-}
-
-.vt-boton:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.vt-boton:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
+    box-shadow var(--vt-transicion);
 }
 
 .vt-boton:disabled {
@@ -208,17 +191,16 @@
   cursor: not-allowed;
 }
 
-/* Verde pastel con texto verde oscuro: ≈ 5,7:1, legible sin un fondo intenso. */
+/* Botón principal: mismo azul y texto blanco que .kpis-btn-export / .ingesta-btn */
 .vt-boton--primario {
-  background: var(--vt-verde);
-  color: var(--vt-verde-texto);
-  border-color: #93d0ab;
-  box-shadow: 0 1px 2px rgba(30, 82, 52, 0.12);
+  background: var(--color-primario);
+  color: white;
+  border-color: var(--color-primario);
 }
 
 .vt-boton--primario:hover:not(:disabled) {
-  background: var(--vt-verde-hover);
-  box-shadow: 0 4px 14px rgba(30, 82, 52, 0.16);
+  background: var(--color-primario-hover);
+  border-color: var(--color-primario-hover);
 }
 
 .vt-boton--secundario {
@@ -242,7 +224,6 @@
 
 .vt-boton--texto:hover:not(:disabled) {
   background: var(--vt-acento-tenue);
-  transform: none;
 }
 
 .vt-boton--fantasma {
@@ -253,7 +234,6 @@
 .vt-boton--fantasma:hover:not(:disabled) {
   background: var(--vt-hundido);
   color: var(--vt-texto);
-  transform: none;
 }
 
 .vt-boton--pequeno {
@@ -293,7 +273,7 @@
 .vt-campo {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -301,12 +281,14 @@
   flex: 1 1 320px;
 }
 
+/* Mismo formato que .kpis-date-label */
 .vt-campo__etiqueta {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.78rem;
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
   color: var(--vt-texto-suave);
 }
 
@@ -320,16 +302,17 @@
   color: var(--vt-texto-tenue);
 }
 
+/* Mismo formato que .kpis-input */
 .vt-input,
 .vt-select {
-  min-height: 38px;
-  padding: 7px 11px;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 1px solid var(--vt-borde);
   border-radius: var(--vt-radio-control);
-  background: var(--vt-superficie);
+  background: var(--color-superficie-hundida);
   color: var(--vt-texto);
   font: inherit;
-  font-size: 0.875rem;
+  font-size: 13px;
   transition: border-color var(--vt-transicion), box-shadow var(--vt-transicion);
   min-width: 0;
 }
@@ -379,8 +362,8 @@
 .vt-select {
   appearance: none;
   padding-right: 34px;
-  /* Flecha propia en gris azulado: la del sistema desentona con la paleta. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6873' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  /* Flecha propia en gris medio: se lee igual sobre fondo claro y oscuro. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa2b1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   cursor: pointer;
@@ -431,7 +414,7 @@
   flex-direction: column;
   max-height: 340px;
   border: 1px solid var(--vt-borde);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--vt-superficie);
   box-shadow: var(--vt-sombra-elevada);
   animation: vt-aparecer 140ms ease-out;
@@ -444,7 +427,7 @@
   gap: 8px;
   min-height: 42px;
   padding: 6px 8px 6px 14px;
-  border-bottom: 1px solid var(--vt-hundido);
+  border-bottom: 1px solid var(--vt-borde);
   font-size: 0.78rem;
   color: var(--vt-texto-suave);
 }
@@ -463,7 +446,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background-color var(--vt-transicion);
 }
@@ -525,7 +508,7 @@
   max-width: calc(100vw - 32px);
   padding: 10px 12px 12px;
   border: 1px solid var(--vt-borde);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--vt-superficie);
   box-shadow: var(--vt-sombra-elevada);
   animation: vt-aparecer 140ms ease-out;
@@ -572,7 +555,7 @@
   aspect-ratio: 1;
   max-width: 36px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--vt-texto-tenue);
   font: inherit;
@@ -609,7 +592,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #4f9e6f;
+  background: var(--color-exito);
   vertical-align: middle;
 }
 
@@ -642,8 +625,8 @@
 }
 
 /*
- * Pista con la parte recorrida en azul y una bolita blanca con borde: se arrastra con el ratón o
- * con el dedo, y con las flechas del teclado avanza de minuto en minuto.
+ * Pista con la parte recorrida en azul y una bolita con borde: se arrastra con el ratón o con el
+ * dedo, y con las flechas del teclado avanza de minuto en minuto.
  */
 .vt-deslizador__control {
   --vt-progreso: 100%;
@@ -690,7 +673,7 @@
   border: 2px solid var(--vt-acento-fuerte);
   border-radius: 50%;
   background: var(--vt-superficie);
-  box-shadow: 0 1px 3px rgba(46, 58, 69, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   appearance: none;
   transition: transform var(--vt-transicion);
 }
@@ -701,7 +684,7 @@
   border: 2px solid var(--vt-acento-fuerte);
   border-radius: 50%;
   background: var(--vt-superficie);
-  box-shadow: 0 1px 3px rgba(46, 58, 69, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .vt-deslizador__control:active::-webkit-slider-thumb {
@@ -737,6 +720,7 @@
   padding: 3px;
   border-radius: var(--vt-radio-control);
   background: var(--vt-hundido);
+  border: 1px solid var(--vt-borde);
 }
 
 .vt-segmento {
@@ -744,10 +728,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 30px;
+  min-height: 28px;
   padding: 4px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   color: var(--vt-texto-suave);
   font: inherit;
@@ -770,7 +754,6 @@
   background: var(--vt-superficie);
   color: var(--vt-acento-fuerte);
   border-color: var(--vt-acento-borde);
-  box-shadow: 0 1px 3px rgba(46, 58, 69, 0.08);
 }
 
 /* Variante de selección múltiple: las casillas nativas quedan ocultas, el foco se ve en el segmento. */
@@ -790,7 +773,7 @@ fieldset:disabled .vt-segmento {
   gap: 8px;
   padding: 4px 6px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   background: transparent;
   color: var(--vt-texto-suave);
   font: inherit;
@@ -816,7 +799,7 @@ fieldset:disabled .vt-segmento {
   height: 14px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 2px rgba(46, 58, 69, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform var(--vt-transicion);
 }
 
@@ -825,7 +808,7 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-interruptor--activo .vt-interruptor__pista {
-  background: #6fc195;
+  background: var(--color-primario);
 }
 
 .vt-interruptor--activo .vt-interruptor__bola {
@@ -887,6 +870,7 @@ fieldset:disabled .vt-segmento {
   font-size: 0.66rem;
   font-weight: 700;
   line-height: 1;
+  text-transform: none;
   cursor: help;
   transition:
     background-color var(--vt-transicion),
@@ -912,7 +896,7 @@ fieldset:disabled .vt-segmento {
   max-width: min(280px, 78vw);
   padding: 10px 12px;
   border: 1px solid var(--vt-borde);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--vt-superficie);
   box-shadow: var(--vt-sombra-elevada);
   color: var(--vt-texto);
@@ -954,11 +938,12 @@ fieldset:disabled .vt-segmento {
   margin-bottom: 24px;
 }
 
+/* Tarjeta: mismo formato que .kpis-card */
 .vt-config {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 20px 22px;
+  padding: 20px;
   border: 1px solid var(--vt-borde);
   border-radius: var(--vt-radio);
   background: var(--vt-superficie);
@@ -979,17 +964,20 @@ fieldset:disabled .vt-segmento {
   width: 36px;
   height: 36px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--vt-acento-tenue);
   color: var(--vt-acento-fuerte);
 }
 
+/* Mismo formato que .kpis-card-title */
 .vt-pagina .vt-config__titulo {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.3;
-  color: var(--vt-texto);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--vt-texto-suave);
 }
 
 .vt-config__subtitulo {
@@ -1006,7 +994,7 @@ fieldset:disabled .vt-segmento {
   margin: 0;
   padding: 14px 0 4px;
   border: none;
-  border-top: 1px solid var(--vt-hundido);
+  border-top: 1px solid var(--vt-borde);
   min-width: 0;
 }
 
@@ -1019,6 +1007,7 @@ fieldset:disabled .vt-segmento {
   margin-top: 2px;
   border-radius: 50%;
   background: var(--vt-hundido);
+  border: 1px solid var(--vt-borde);
   color: var(--vt-texto-suave);
   font-size: 0.75rem;
   font-weight: 700;
@@ -1099,10 +1088,11 @@ fieldset:disabled .vt-segmento {
 
 /* ============================================================================ 6. Avisos y estados */
 
+/* Colores semánticos globales: mismos que .ingesta-alert / .ingesta-note / .geo-error */
 .vt-aviso {
   margin: 10px 0 0;
   padding: 9px 13px;
-  border-radius: var(--vt-radio-control);
+  border-radius: 8px;
   border: 1px solid transparent;
   font-size: 0.84rem;
   animation: vt-aparecer 180ms ease-out;
@@ -1114,9 +1104,9 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-aviso--error {
-  background: #fbeae5;
-  color: #8e3b2a;
-  border-color: #f0cfc5;
+  background: var(--color-error-suave);
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 
 .vt-aviso--info {
@@ -1126,17 +1116,18 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-aviso--ok {
-  background: #eaf1e6;
-  color: #3f6339;
-  border-color: #d2e2cb;
+  background: var(--color-exito-suave);
+  color: var(--color-exito);
+  border-color: color-mix(in srgb, var(--color-exito) 30%, transparent);
 }
 
 .vt-aviso--sin-datos {
-  background: #fbf3e4;
-  color: #775a20;
-  border-color: #efddba;
+  background: var(--color-advertencia-suave);
+  color: var(--color-advertencia);
+  border-color: color-mix(in srgb, var(--color-advertencia) 30%, transparent);
 }
 
+/* Mismo formato que .kpis-empty-state */
 .vt-estado {
   display: flex;
   flex-direction: column;
@@ -1144,9 +1135,9 @@ fieldset:disabled .vt-segmento {
   justify-content: center;
   gap: 8px;
   padding: 24px;
-  border-radius: var(--vt-radio-control);
-  border: 1px dashed var(--vt-borde-fuerte);
-  background: var(--vt-claro);
+  border-radius: var(--vt-radio);
+  border: 1px dashed var(--vt-borde);
+  background: var(--vt-superficie);
   color: var(--vt-texto-suave);
   font-size: 0.875rem;
   text-align: center;
@@ -1158,9 +1149,9 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-estado--error {
-  border-color: #f0cfc5;
-  background: #fdf4f1;
-  color: #8e3b2a;
+  border-color: color-mix(in srgb, var(--color-error) 40%, transparent);
+  background: var(--color-error-suave);
+  color: var(--color-error);
 }
 
 .vt-estado__detalle {
@@ -1168,11 +1159,12 @@ fieldset:disabled .vt-segmento {
   max-width: 52ch;
 }
 
+/* Mismo formato que .kpis-spinner */
 .vt-spinner {
   width: 20px;
   height: 20px;
-  border: 2px solid var(--vt-acento-borde);
-  border-top-color: var(--vt-acento-fuerte);
+  border: 2px solid var(--vt-borde);
+  border-top-color: var(--color-primario);
   border-radius: 50%;
   animation: vt-girar 0.8s linear infinite;
 }
@@ -1182,11 +1174,11 @@ fieldset:disabled .vt-segmento {
   display: block;
   width: 72px;
   height: 1.9rem;
-  border-radius: 8px;
+  border-radius: 6px;
   background: linear-gradient(
     90deg,
     var(--vt-hundido) 25%,
-    var(--vt-claro) 50%,
+    var(--vt-borde) 50%,
     var(--vt-hundido) 75%
   );
   background-size: 200% 100%;
@@ -1200,7 +1192,7 @@ fieldset:disabled .vt-segmento {
   flex-direction: column;
   align-items: flex-start;
   gap: 12px;
-  padding: 32px;
+  padding: 24px;
   border: 1px solid var(--vt-borde);
   border-radius: var(--vt-radio);
   background: var(--vt-superficie);
@@ -1209,8 +1201,8 @@ fieldset:disabled .vt-segmento {
 
 .vt-pagina .vt-bienvenida__titulo {
   margin: 0;
-  font-size: 1.15rem;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--vt-texto);
 }
 
@@ -1234,8 +1226,9 @@ fieldset:disabled .vt-segmento {
   align-items: flex-start;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 12px;
-  background: var(--vt-claro);
+  border-radius: 10px;
+  border: 1px solid var(--vt-borde);
+  background: var(--vt-hundido);
   font-size: 0.875rem;
 }
 
@@ -1258,12 +1251,13 @@ fieldset:disabled .vt-segmento {
 .vt-contenido {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
+/* Tarjeta de sección: mismo formato que .kpis-card */
 .vt-seccion {
   min-width: 0;
-  padding: 20px 22px;
+  padding: 20px;
   border: 1px solid var(--vt-borde);
   border-radius: var(--vt-radio);
   background: var(--vt-superficie);
@@ -1275,18 +1269,21 @@ fieldset:disabled .vt-segmento {
   margin-bottom: 14px;
 }
 
+/* Mismo formato que .kpis-card-title */
 .vt-pagina .vt-seccion__titulo {
   display: flex;
   align-items: center;
   margin: 0;
-  font-size: 1rem;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.3;
-  color: var(--vt-texto);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--vt-texto-suave);
 }
 
 .vt-seccion__ayuda {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   max-width: 78ch;
   font-size: 0.83rem;
   color: var(--vt-texto-suave);
@@ -1294,36 +1291,38 @@ fieldset:disabled .vt-segmento {
 
 /* ------------------------------------------------- Sesión en las gráficas */
 
+/* Barra de filtro: mismo formato que .kpis-controls */
 .vt-enfoque {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 14px;
-  padding: 12px 16px;
-  border: 1px solid var(--vt-acento-borde);
-  border-radius: var(--vt-radio);
-  background: var(--vt-acento-tenue);
+  padding: 10px 16px;
+  border: 1px solid var(--vt-borde);
+  border-radius: 10px;
+  background: var(--vt-superficie);
   animation: vt-aparecer 240ms ease-out;
 }
 
+/* Mismo formato que .kpis-date-label */
 .vt-enfoque__titulo {
   display: inline-flex;
   align-items: center;
-  font-size: 0.84rem;
-  font-weight: 650;
-  color: var(--vt-texto);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vt-texto-suave);
 }
 
 .vt-enfoque__opciones {
   flex-wrap: wrap;
-  background: var(--vt-superficie);
 }
 
 .vt-enfoque__aviso {
   flex-basis: 100%;
   margin: 0;
   font-size: 0.8rem;
-  color: var(--vt-texto-suave);
+  color: var(--color-advertencia);
 }
 
 /* ------------------------------------------------- Tarjetas de resumen */
@@ -1331,30 +1330,27 @@ fieldset:disabled .vt-segmento {
 .vt-tarjetas {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
+  gap: 20px;
 }
 
+/* Mismo formato que .kpis-card */
 .vt-tarjeta {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
-  padding: 16px 18px;
+  padding: 20px;
   border: 1px solid var(--vt-borde);
   border-radius: var(--vt-radio);
   background: var(--vt-superficie);
   box-shadow: var(--vt-sombra);
   animation: vt-aparecer 240ms ease-out;
-  transition: box-shadow var(--vt-transicion), transform var(--vt-transicion);
-}
-
-.vt-tarjeta:hover {
-  box-shadow: var(--vt-sombra-elevada);
 }
 
 /*
- * Cada tarjeta tiene su propio tono pastel (borde superior e icono) para
- * reconocerla de un vistazo. El tono se declara con tres variables que heredan los hijos.
+ * Cada tarjeta tiene su propio tono (borde superior e icono) para reconocerla de un vistazo.
+ * Los tonos salen de las variables semánticas globales, así que cambian con el tema; el tono
+ * tenue se mezcla con la superficie para que funcione igual en claro y en oscuro.
  */
 .vt-tarjeta {
   --vt-tono: var(--vt-acento);
@@ -1362,14 +1358,23 @@ fieldset:disabled .vt-segmento {
   --vt-tono-fuerte: var(--vt-acento-fuerte);
 
   border-top: 3px solid var(--vt-tono);
-  padding-top: 14px;
+  padding-top: 18px;
 }
 
-.vt-tarjeta--azul { --vt-tono: #7fb5da; --vt-tono-tenue: #e5f1fa; --vt-tono-fuerte: #2e6c9a; }
-.vt-tarjeta--verde { --vt-tono: #7fcb9f; --vt-tono-tenue: #e3f4ea; --vt-tono-fuerte: #2f7a50; }
-.vt-tarjeta--lavanda { --vt-tono: #a99bdb; --vt-tono-tenue: #eeebfa; --vt-tono-fuerte: #5a4a9c; }
-.vt-tarjeta--aqua { --vt-tono: #6cc3c6; --vt-tono-tenue: #e0f4f4; --vt-tono-fuerte: #22787b; }
-.vt-tarjeta--ambar { --vt-tono: #e9c46a; --vt-tono-tenue: #fbf3dc; --vt-tono-fuerte: #86661a; }
+.vt-tarjeta--azul { --vt-tono: var(--color-primario); }
+.vt-tarjeta--verde { --vt-tono: var(--color-exito); }
+.vt-tarjeta--lavanda { --vt-tono: var(--vt-lavanda); }
+.vt-tarjeta--aqua { --vt-tono: var(--color-acento); }
+.vt-tarjeta--ambar { --vt-tono: var(--color-advertencia); }
+
+.vt-tarjeta--azul,
+.vt-tarjeta--verde,
+.vt-tarjeta--lavanda,
+.vt-tarjeta--aqua,
+.vt-tarjeta--ambar {
+  --vt-tono-tenue: color-mix(in srgb, var(--vt-tono) 15%, var(--vt-superficie));
+  --vt-tono-fuerte: var(--vt-tono);
+}
 
 .vt-tarjeta__cabecera {
   display: flex;
@@ -1385,14 +1390,17 @@ fieldset:disabled .vt-segmento {
   width: 30px;
   height: 30px;
   flex-shrink: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--vt-tono-tenue);
   color: var(--vt-tono-fuerte);
 }
 
+/* Mismo formato que .kpis-card-title */
 .vt-tarjeta__titulo {
-  font-size: 0.82rem;
+  font-size: 12px;
   font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--vt-texto-suave);
   white-space: nowrap;
   overflow: hidden;
@@ -1406,11 +1414,11 @@ fieldset:disabled .vt-segmento {
   min-width: 0;
 }
 
+/* Mismo formato que .kpis-stat-value.large */
 .vt-tarjeta__valor {
-  font-size: 1.75rem;
-  font-weight: 650;
+  font-size: 28px;
+  font-weight: 700;
   line-height: 1.1;
-  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
   color: var(--vt-texto);
 }
@@ -1420,6 +1428,9 @@ fieldset:disabled .vt-segmento {
   color: var(--vt-texto-suave);
   overflow-wrap: break-word;
 }
+
+
+
 
 /* ============================================================================ 8. Gráficas */
 
@@ -1487,21 +1498,24 @@ fieldset:disabled .vt-segmento {
 
 /* ------------------------------------------------- Barra de herramientas */
 
+/* Mismo formato que .kpis-controls */
 .vt-barra-herramientas {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 8px 10px;
-  padding: 8px 10px;
-  border-radius: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--vt-borde);
+  border-radius: 10px;
   background: var(--vt-claro);
 }
 
 .vt-barra-herramientas__etiqueta {
   display: inline-flex;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
   color: var(--vt-texto-suave);
 }
 
@@ -1614,23 +1628,26 @@ fieldset:disabled .vt-segmento {
   text-align: left;
 }
 
+/* Encabezados: mismo formato que las etiquetas de KPIs */
 .vt-tabla th {
   padding: 8px 12px;
   border-bottom: 1px solid var(--vt-borde);
   background: var(--vt-claro);
   text-align: left;
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
   color: var(--vt-texto-suave);
   white-space: nowrap;
 }
 
 .vt-tabla th:first-child {
-  border-top-left-radius: 10px;
+  border-top-left-radius: 6px;
 }
 
 .vt-tabla th:last-child {
-  border-top-right-radius: 10px;
+  border-top-right-radius: 6px;
 }
 
 .vt-tabla__th--ordenable {
@@ -1650,7 +1667,7 @@ fieldset:disabled .vt-segmento {
 
 .vt-tabla td {
   padding: 10px 12px;
-  border-bottom: 1px solid var(--vt-hundido);
+  border-bottom: 1px solid var(--vt-borde);
   vertical-align: middle;
 }
 
@@ -1659,15 +1676,12 @@ fieldset:disabled .vt-segmento {
   white-space: nowrap;
 }
 
-/*
- * El color se fija explícitamente. Antes se heredaba, y con el tema oscuro del sistema el texto
- * salía claro sobre el fondo claro del `code`.
- */
+/* El color se fija explícitamente para que no herede un color pensado para otro fondo. */
 .vt-tabla td code,
 .vt-detalle__ruta code {
   padding: 2px 7px;
   border: 1px solid var(--vt-borde);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--vt-claro);
   color: var(--vt-texto);
   font-family: var(--vt-mono);
@@ -1757,13 +1771,30 @@ fieldset:disabled .vt-segmento {
   white-space: nowrap;
 }
 
+/*
+ * Tipos de evento: cada uno declara su tono y una regla común deriva fondo y borde mezclándolo
+ * con la superficie, para que se lean igual en claro y en oscuro.
+ */
 .vt-etiqueta--intra_frecuencia,
-.vt-tipo-corto--intra_frecuencia { background: #eaf0e6; color: #46643f; border-color: #d6e3cf; }
+.vt-tipo-corto--intra_frecuencia { --vt-tono-etiqueta: var(--color-exito); }
 .vt-etiqueta--inter_frecuencia,
-.vt-tipo-corto--inter_frecuencia { background: #f7eddb; color: #6f521a; border-color: #ecdcb9; }
+.vt-tipo-corto--inter_frecuencia { --vt-tono-etiqueta: var(--color-advertencia); }
 .vt-etiqueta--inter_rat,
-.vt-tipo-corto--inter_rat { background: #f0e7f0; color: #654a6a; border-color: #e1d2e2; }
-.vt-etiqueta--baja { background: #f4ecdf; color: #66543a; border-color: #e6d8c1; }
+.vt-tipo-corto--inter_rat { --vt-tono-etiqueta: var(--vt-lavanda); }
+.vt-etiqueta--baja { --vt-tono-etiqueta: var(--color-texto-tenue); }
+
+.vt-etiqueta--intra_frecuencia,
+.vt-tipo-corto--intra_frecuencia,
+.vt-etiqueta--inter_frecuencia,
+.vt-tipo-corto--inter_frecuencia,
+.vt-etiqueta--inter_rat,
+.vt-tipo-corto--inter_rat,
+.vt-etiqueta--baja {
+  background: color-mix(in srgb, var(--vt-tono-etiqueta) 14%, var(--vt-superficie));
+  color: var(--vt-tono-etiqueta);
+  border-color: color-mix(in srgb, var(--vt-tono-etiqueta) 30%, transparent);
+}
+
 .vt-etiqueta--desconocido,
 .vt-tipo-corto--desconocido { background: var(--vt-hundido); color: var(--vt-texto-suave); border-color: var(--vt-borde); }
 
@@ -1824,7 +1855,7 @@ fieldset:disabled .vt-segmento {
   width: 100%;
   padding: 8px 10px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 6px;
   background: transparent;
   color: var(--vt-texto);
   font: inherit;
@@ -1916,7 +1947,8 @@ fieldset:disabled .vt-segmento {
   gap: 16px;
   flex-wrap: wrap;
   padding: 14px 16px;
-  border-radius: 12px;
+  border: 1px solid var(--vt-borde);
+  border-radius: 10px;
   background: var(--vt-claro);
 }
 
@@ -1928,9 +1960,9 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-detalle__numero {
-  font-size: 0.75rem;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--vt-acento-fuerte);
 }
@@ -1997,6 +2029,7 @@ fieldset:disabled .vt-segmento {
   border-radius: 3px;
 }
 
+/* Color de dato (marcador del handover elegido), igual en ambos temas. */
 .vt-leyenda-zonas__linea {
   width: 2px;
   height: 14px;
@@ -2017,23 +2050,26 @@ fieldset:disabled .vt-segmento {
   min-width: 0;
 }
 
-/* El detalle vive dentro de la misma sección que la tabla, separado por una línea suave. */
+/* El detalle vive dentro de la misma sección que la tabla, separado por una línea. */
 .vt-eventos__detalle {
   padding-top: 18px;
-  border-top: 1px solid var(--vt-hundido);
+  border-top: 1px solid var(--vt-borde);
   animation: vt-aparecer 220ms ease-out;
 }
 
+/* Mismo formato que .kpis-card-title */
 .vt-pagina .vt-eventos__subtitulo {
   display: flex;
   align-items: center;
   margin: 0 0 12px;
-  font-size: 0.92rem;
-  font-weight: 650;
-  color: var(--vt-texto);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--vt-texto-suave);
 }
 
-/* Con un evento abierto, la sección se marca con el borde melocotón. */
+/* Con un evento abierto, la sección se marca con el borde de acento. */
 .vt-seccion--acento {
   border-color: var(--vt-acento-borde);
 }
@@ -2048,7 +2084,7 @@ fieldset:disabled .vt-segmento {
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(46, 58, 69, 0.28);
+  background: rgba(0, 0, 0, 0.35);
   opacity: 0;
   pointer-events: none;
   transition: opacity 240ms ease;
@@ -2082,7 +2118,7 @@ fieldset:disabled .vt-segmento {
   width: min(440px, 94vw);
   background: var(--vt-superficie);
   border-left: 1px solid var(--vt-borde);
-  box-shadow: -12px 0 40px rgba(46, 58, 69, 0.12);
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.18);
   transform: translateX(104%);
   visibility: hidden;
   transition: transform 280ms cubic-bezier(0.2, 0.7, 0.3, 1), visibility 0s linear 280ms;
@@ -2104,13 +2140,13 @@ fieldset:disabled .vt-segmento {
   align-items: center;
   gap: 12px;
   padding: 20px 20px 16px;
-  border-bottom: 1px solid var(--vt-hundido);
+  border-bottom: 1px solid var(--vt-borde);
 }
 
 .vt-pagina .vt-glosario__titulo {
   margin: 0;
-  font-size: 1.05rem;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--vt-texto);
 }
 
@@ -2127,14 +2163,14 @@ fieldset:disabled .vt-segmento {
 }
 
 .vt-glosario__grupo + .vt-glosario__grupo {
-  border-top: 1px solid var(--vt-hundido);
+  border-top: 1px solid var(--vt-borde);
 }
 
 .vt-pagina .vt-glosario__grupo-titulo {
   margin: 18px 0 8px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--vt-acento-fuerte);
 }
@@ -2148,7 +2184,7 @@ fieldset:disabled .vt-segmento {
 
 .vt-glosario__entrada {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 6px;
   transition: background-color var(--vt-transicion);
 }
 
@@ -2274,7 +2310,7 @@ html:has(.vt-pagina) {
     padding-top: 0;
     padding-left: 24px;
     border-top: none;
-    border-left: 1px solid var(--vt-hundido);
+    border-left: 1px solid var(--vt-borde);
   }
 
   /* La lista acompaña al desplazamiento: se salta de un evento a otro sin volver arriba. */
@@ -2297,8 +2333,8 @@ html:has(.vt-pagina) {
     padding: 20px 16px 56px;
   }
 
-  .vt-pagina .vt-pagina__titulo h1 {
-    font-size: 1.4rem;
+  .vt-pagina .vt-pagina__titulo h2 {
+    font-size: 20px;
   }
 
   .vt-pagina__cabecera {
@@ -2330,7 +2366,7 @@ html:has(.vt-pagina) {
     max-width: none;
     margin: 0;
     background: var(--vt-fondo);
-    box-shadow: 12px 0 40px rgba(46, 58, 69, 0.14);
+    box-shadow: 12px 0 40px rgba(0, 0, 0, 0.2);
     transform: translateX(-104%);
     visibility: hidden;
     transition: transform 280ms cubic-bezier(0.2, 0.7, 0.3, 1), visibility 0s linear 280ms;
@@ -2371,10 +2407,10 @@ html:has(.vt-pagina) {
   }
 
   .vt-panel-config .vt-config__bloque {
-    border-top: none;
+    border: 1px solid var(--vt-borde);
     padding: 14px;
     margin-bottom: 10px;
-    border-radius: 12px;
+    border-radius: var(--vt-radio);
     background: var(--vt-superficie);
     grid-template-columns: 1fr;
     gap: 8px;

@@ -1,8 +1,11 @@
 """Modelos de datos para las respuestas de los endpoints del módulo de KPIs."""
 from datetime import date, datetime
+from typing import Literal
+from uuid import UUID
 
 
 from pydantic import BaseModel, Field
+
     
 
 
@@ -25,6 +28,14 @@ class SesionResponse(BaseModel):
     filename: str = Field(description="Nombre del archivo original que se cargó")
     processing_date: datetime = Field(description="Fecha y hora en que se procesó la carga")
     records_valid: int = Field(description="Registros válidos que aportó esta sesión a handover_record")
+    primera_medicion: datetime | None = Field(
+        description="Fecha/hora (local Ecuador) de la primera medición de esta sesión en "
+        "handover_record. null si la sesión no tiene ninguna medición válida."
+    )
+    ultima_medicion: datetime | None = Field(
+        description="Fecha/hora (local Ecuador) de la última medición de esta sesión en "
+        "handover_record. null si la sesión no tiene ninguna medición válida."
+    )
 
 
 class KpiSummaryResponse(BaseModel):
@@ -35,26 +46,61 @@ class KpiSummaryResponse(BaseModel):
     fecha_fin: date
     total_mediciones: int = Field(description="Total de mediciones tomadas en el periodo")
     total_handovers: int = Field(description="Total de saltos de celda detectados en el periodo")
-    tasa_handover: float = Field(
+    tasa_handover: float | None = Field(
         description="total_handovers / total_mediciones (%). Qué tan seguido ocurre un "
-        "handover respecto al total de mediciones -- no es una tasa de éxito."
+        "handover respecto al total de mediciones -- no es una tasa de éxito. "
+        "null si total_mediciones es 0 (sin datos, no un 0% real)."
     )
-    exitosos: int = Field(description="Handovers donde mejoraron todos los indicadores de señal disponibles")
-    fallidos: int = Field(description="Handovers donde al menos un indicador disponible no mejoró")
+    exitosos: int = Field(
+        description="Handovers donde NO se cumplió el criterio PHD: rssi_destino > rssi_origen "
+        "y rsrq_destino >= rsrq_origen -- la conexión mejoró o se mantuvo mejor"
+    )
+    fallidos: int = Field(
+        description="Handovers donde SÍ se cumplió el criterio PHD: rssi_destino <= rssi_origen "
+        "o rsrq_destino < rsrq_origen -- la conexión se degradó"
+    )
     indeterminados: int = Field(
-        description="Handovers sin ningún indicador de señal disponible en ambos lados de la "
+        description="Handovers sin RSSI/RSRQ disponibles en ambos lados de la "
         "transición -- no se pueden clasificar como éxito ni fallo"
     )
-    tasa_exito: float = Field(
+    tasa_exito: float | None = Field(
         description="exitosos / (exitosos + fallidos) (%). Los indeterminados quedan fuera "
-        "del denominador a propósito, no hay evidencia para clasificarlos."
+        "del denominador a propósito, no hay evidencia para clasificarlos. "
+        "null si no hay ningún handover clasificado (sin datos, no un 0% real)."
     )
-    tasa_innecesarios: float = Field(
-        description="fallidos / total_handovers (%). 'Handover innecesario': el salto ocurrió "
-        "pero no mejoró la conexión (mismo concepto que 'fallido', otro nombre para el front)."
+    tasa_phd: float | None = Field(
+        description="fallidos / (exitosos + fallidos) (%) -- el complemento de tasa_exito, "
+        "mismo denominador. null si no hay ningún handover clasificado."
+    )
+    tasa_innecesarios: float | None = Field(
+
+        description="uho_eventos / uho_evaluables (%), según el criterio UHO: el salto no hacía "
+        "falta porque la señal de la celda de ORIGEN ya era buena (RSSI >= -100 dBm y "
+        "RSRQ >= -15 dB). Es independiente de PHD/tasa_exito -- responde si el salto era "
+        "necesario, no si mejoró la señal. null si no hay ningún handover evaluable para UHO."
+    )
+    uho_evaluables: int = Field(
+        description="Handovers evaluables para el criterio UHO (origen LTE con RSSI y RSRQ "
+        "disponibles) -- denominador de tasa_innecesarios. El numerador (uho_eventos) no se "
+        "expone por separado, solo la tasa; este conteo es para el panel de resumen."
     )
     ping_pongs: int = Field(description="Handovers que formaron parte de un patrón A -> B -> A")
-    tasa_hopp: float = Field(description="ping_pongs / total_handovers (%)")
+    tasa_hopp: float | None = Field(
+        description="ping_pongs / total_handovers (%). null si total_handovers es 0."
+    )
+    celdas_distintas: int = Field(
+        description="Número de celdas (cell_id) distintas observadas en las mediciones del "
+        "periodo, filtradas por tecnología si se seleccionó alguna (mismo criterio que "
+        "total_mediciones, pero sin franja ni la lógica de detección de handovers)."
+    )
+
+
+    cambios_celda_no_observados: int = Field(
+        description="Cortes de la secuencia por hueco de datos (más de 10 s entre mediciones "
+        "de la misma sesión) donde la celda antes y después del hueco era distinta -- un "
+        "cambio de celda que probablemente ocurrió pero no se pudo confirmar como handover "
+        "por falta de mediciones en el intervalo."
+    )
 
 
 class HourlyDistributionResponse(BaseModel):
@@ -67,6 +113,10 @@ class HourlyDistributionResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(
+        description="Total de mediciones (no handovers) tomadas en esa hora, para contexto en "
+        "el tooltip del gráfico (Paso 9 del plan de refactor)."
+    )
 
 
 class FranjaHorariaResponse(BaseModel):
@@ -79,6 +129,7 @@ class FranjaHorariaResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) de esa franja")
 
 
 class DiaSemanaResponse(BaseModel):
@@ -92,6 +143,8 @@ class DiaSemanaResponse(BaseModel):
     fallidos: int
     indeterminados: int
     ping_pongs: int
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) de ese día de la semana")
+
 
 
 class TrendResponse(BaseModel):
@@ -99,10 +152,71 @@ class TrendResponse(BaseModel):
     agrupada por periodo (diario/semanal/mensual/anual)."""
 
     periodo: str = Field(description="Clave de agrupación técnica, ordenable (ej. '2026-05-06', '2026-W19')")
-    etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05', 'Sem 19/2026')")
+    etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05/26', 'Sem 19/2026')")
+    fecha_inicio: date = Field(description="Primer día calendario de este periodo (ej. lunes de la semana ISO)")
+    fecha_fin: date = Field(description="Último día calendario de este periodo (ej. domingo de la semana ISO)")
+    total_mediciones: int = Field(description="Total de mediciones (no handovers) tomadas en este periodo")
     total_handovers: int
     exitosos: int
     fallidos: int
     indeterminados: int
+    tasa_exito: float | None = Field(
+        description="exitosos / (exitosos + fallidos) (%) de ese periodo. "
+        "null si ese periodo no tiene ningún handover clasificado."
+    )
+    tasa_phd: float | None = Field(
+        description="fallidos / (exitosos + fallidos) (%) de ese periodo -- complemento de "
+        "tasa_exito, mismo denominador. null si no hay ningún handover clasificado."
+    )
     ping_pongs: int
-    tasa_exito: float = Field(description="exitosos / (exitosos + fallidos) (%) de ese periodo")
+    tasa_hopp: float | None = Field(
+        description="ping_pongs / total_handovers (%) de ese periodo. null si total_handovers es 0."
+    )
+    uho_evaluables: int = Field(description="Handovers evaluables para UHO en este periodo")
+    uho: int = Field(description="Handovers innecesarios (UHO) en este periodo")
+    tasa_innecesarios: float | None = Field(
+        description="uho / uho_evaluables (%) de ese periodo. null si no hay ningún handover "
+        "evaluable para UHO."
+    )
+
+
+class GuardarReporteRequest(BaseModel):
+    """Body de POST /kpis/reportes: snapshot de un reporte de KPIs exportado a
+    PDF (HU-010, Paso 13 del plan de refactor). No incluye
+    `sesion_execution_id` ni `parametros_calculo` -- el backend los arma él
+    mismo (ver repository.py/services.py) para no duplicar en el frontend
+    datos que ya puede resolver o que ya tiene como constantes."""
+
+    nombre_archivo: str = Field(description="Nombre del PDF generado")
+    fecha_inicio: date
+    fecha_fin: date
+    tecnologia: list[int] = Field(default_factory=list, description="Vacío = todas")
+    franja: list[Literal["manana", "tarde", "noche"]] = Field(default_factory=list, description="Vacío = todas")
+    sesion_label: list[int] = Field(default_factory=list, description="Vacío = todas las sesiones")
+    periodicidad: Literal["diario", "semanal", "mensual", "anual"]
+    periodo_seleccionado: str | None = Field(
+        default=None, description="Clave del punto de /kpis/trend si había uno seleccionado (Paso 10)"
+    )
+    resultados: dict = Field(
+        description="Snapshot de tarjetas, panel de resumen y tabla por período tal como se exportaron"
+    )
+
+
+class ReporteHistorialResponse(BaseModel):
+    """Un elemento de la respuesta de GET /kpis/reportes."""
+
+    id: UUID
+    fecha_generacion: datetime
+    nombre_archivo: str
+    fecha_inicio: date
+    fecha_fin: date
+    tecnologia: list[int]
+    franja: list[str]
+    sesion_label: list[int]
+    periodicidad: str
+    periodo_seleccionado: str | None
+    resultados: dict
+    parametros_calculo: dict = Field(
+        description="Umbrales con los que se calculó (hueco_maximo_s, ping_pong_ventana_s, "
+        "uho_rssi_min_dbm, uho_rsrq_min_db), tal como estaban al generar el reporte"
+    )
