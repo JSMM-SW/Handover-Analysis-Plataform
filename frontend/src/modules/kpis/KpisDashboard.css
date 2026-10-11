@@ -341,8 +341,33 @@
     cursor: pointer;
 }
 
+.kpis-card-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.kpis-btn-reset-periodo {
+    background: var(--color-superficie);
+    border: 1px solid var(--color-primario);
+    color: var(--color-primario);
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--fuente-base);
+    white-space: nowrap;
+}
+
+.kpis-btn-reset-periodo:hover {
+    background: var(--color-primario-suave);
+}
+
 .kpis-periodo-seleccionado-hint {
     font-size: 12px;
     color: var(--color-primario);
     margin: 4px 0 0;
 }
+

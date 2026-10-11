@@ -161,10 +161,14 @@ export default function KpisDashboard() {
     const [franjaData, setFranjaData] = useState([]);
     const [diaSemanaData, setDiaSemanaData] = useState([]);
 
-    const [trendData, setTrendData] = useState([]);
+        const [trendData, setTrendData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
+    const [hourlyDataPeriodo, setHourlyDataPeriodo] = useState(null);
+    const [franjaDataPeriodo, setFranjaDataPeriodo] = useState(null);
+    const [loadingPeriodo, setLoadingPeriodo] = useState(false);
+
 
 
     const dashboardRef = useRef(null);
@@ -232,9 +236,67 @@ export default function KpisDashboard() {
     }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
 
 
-       useEffect(() => {
+              useEffect(() => {
         fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
     }, []);
+
+    useEffect(() => {
+        /**
+         * Vuelve a consultar la distribución por hora y por franja horaria,
+         * pero acotada a las fechas del periodo seleccionado en "Evolución
+         * de KPIs" (en vez de todo el rango de fechas global) -- así esos
+         * dos gráficos también reflejan el periodo elegido, no solo las
+         * tarjetas y el panel de resumen.
+         *
+         * Es un efecto aparte (no se suma al de cargarDatos()) porque se
+         * dispara por una interacción distinta (clic en un punto del
+         * gráfico, no un cambio de filtro) y no debe bloquear el resto del
+         * dashboard con su propio estado de carga.
+         */
+                if (!periodoSeleccionado) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
+            setHourlyDataPeriodo(null);
+            setFranjaDataPeriodo(null);
+            return;
+        }
+
+
+        const punto = trendData.find((item) => item.periodo === periodoSeleccionado);
+        if (!punto) return;
+
+        let cancelado = false;
+        setLoadingPeriodo(true);
+
+        Promise.all([
+            fetchHourlyDistribution(punto.fecha_inicio, punto.fecha_fin, tecnologias, franjas, sesionLabels),
+            fetchFranjaHoraria(punto.fecha_inicio, punto.fecha_fin, tecnologias, sesionLabels),
+        ])
+            .then(([hourly, franjaResultado]) => {
+                if (cancelado) return;
+                setHourlyDataPeriodo(hourly.map((item) => ({
+                    ...item,
+                    hora_etiqueta: `${String(item.hora).padStart(2, '0')}:00`,
+                })));
+                setFranjaDataPeriodo(franjaResultado.map((item) => ({
+                    ...item,
+                    franja_etiqueta: ETIQUETAS_FRANJA[item.franja] ?? item.franja,
+                })));
+            })
+            .catch(() => {
+                if (!cancelado) {
+                    setHourlyDataPeriodo(null);
+                    setFranjaDataPeriodo(null);
+                }
+            })
+            .finally(() => {
+                if (!cancelado) setLoadingPeriodo(false);
+            });
+
+        return () => {
+            cancelado = true;
+        };
+    }, [periodoSeleccionado, trendData, tecnologias, franjas, sesionLabels]);
+
 
     useEffect(() => {
         /**
@@ -386,17 +448,25 @@ export default function KpisDashboard() {
      * selección de un periodo nunca oculta ni muestra el dashboard, solo
      * cambia qué números se ven dentro de él.
      */
-        const resumenMostrado = puntoSeleccionado
+     const resumenMostrado = puntoSeleccionado
         ? construirResumenDesdePeriodo(puntoSeleccionado)
         : summaryData;
 
-    const pieData = resumenMostrado ? [
+        const pieData = resumenMostrado ? [
         { name: 'Exitoso', value: resumenMostrado.exitosos, color: colorExitoso },
         { name: 'Fallido', value: resumenMostrado.fallidos, color: colorFallido },
         { name: 'Indeterminado', value: resumenMostrado.indeterminados, color: colorIndeterminado },
     ] : [];
 
+    // Datos para "Distribución de Handovers por Hora del Día" y
+    // "Distribución por Franja Horaria": los del periodo seleccionado si ya
+    // llegaron (hourlyDataPeriodo/franjaDataPeriodo), o los del rango
+    // completo mientras tanto.
+    const hourlyMostrado = (puntoSeleccionado && hourlyDataPeriodo) ? hourlyDataPeriodo : hourlyData;
+    const franjaMostrado = (puntoSeleccionado && franjaDataPeriodo) ? franjaDataPeriodo : franjaData;
+
     const periodoTexto = puntoSeleccionado
+
 
         ? `${puntoSeleccionado.fecha_inicio} a ${puntoSeleccionado.fecha_fin} (periodo: ${puntoSeleccionado.etiqueta})`
         : `${startDate} a ${endDate}`;
@@ -409,11 +479,31 @@ export default function KpisDashboard() {
      * @param {object} eventoRecharts - evento de clic que entrega Recharts,
      * con `activePayload` (el/los punto(s) bajo el cursor).
      */
-    const alternarSeleccionPeriodo = (eventoRecharts) => {
-        if (!eventoRecharts || !eventoRecharts.activePayload || eventoRecharts.activePayload.length === 0) return;
-        const puntoClic = eventoRecharts.activePayload[0].payload;
-        setPeriodoSeleccionado((actual) => (actual === puntoClic.periodo ? null : puntoClic.periodo));
+                /**
+     * Selecciona el periodo clickeado en el gráfico "Evolución de KPIs".
+     * Siempre reemplaza la selección anterior (patrón de "filtro cruzado"
+     * de los dashboards BI: Power BI, Tableau, Grafana) en vez de hacer
+     * toggle comparando con el punto ya seleccionado -- así cada clic en
+     * una fecha distinta cambia la selección de inmediato, sin casos
+     * ambiguos. Para deseleccionar existe un botón explícito ("Ver todo el
+     * periodo") en vez de depender de volver a clickear el mismo punto.
+     *
+     * @param {object} eventoRecharts - evento de clic de Recharts v3: trae
+     * `activeTooltipIndex` (el índice del punto dentro de `trendData`),
+     * entregado como STRING ("0", "1", ...), no como número.
+     */
+    const seleccionarPeriodo = (eventoRecharts) => {
+        if (!eventoRecharts || eventoRecharts.activeTooltipIndex == null) return;
+        const puntoClic = trendData[Number(eventoRecharts.activeTooltipIndex)];
+        if (!puntoClic) return;
+        setPeriodoSeleccionado(puntoClic.periodo);
     };
+
+    /** Limpia la selección de periodo y vuelve a mostrar el rango completo. */
+    const limpiarSeleccionPeriodo = () => setPeriodoSeleccionado(null);
+
+
+
 
     return (
 
@@ -557,17 +647,25 @@ export default function KpisDashboard() {
                     </div>
 
 
-                                        <div className="kpis-row-layout">
+                                                            <div className="kpis-row-layout">
                         <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Evolución de KPIs ({periodo})</h3>
+                            <div className="kpis-card-header-row">
+                                <h3 className="kpis-card-title">Evolución de KPIs ({periodo})</h3>
+                                {puntoSeleccionado && (
+                                    <button type="button" className="kpis-btn-reset-periodo" onClick={limpiarSeleccionPeriodo}>
+                                        Ver todo el periodo
+                                    </button>
+                                )}
+                            </div>
                             {puntoSeleccionado && (
                                 <p className="kpis-periodo-seleccionado-hint">
-                                    Mostrando el periodo <strong>{puntoSeleccionado.etiqueta}</strong> -- clic de nuevo sobre el punto para ver todo el rango
+                                    Mostrando el periodo <strong>{puntoSeleccionado.etiqueta}</strong>
                                 </p>
                             )}
                             <div className="kpis-chart-clickeable" style={{ height: '280px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={trendData} onClick={alternarSeleccionPeriodo}>
+                                    <LineChart data={trendData} onClick={seleccionarPeriodo}>
+
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
@@ -633,11 +731,18 @@ export default function KpisDashboard() {
 
                     <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
-
+                                                        <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
+                            {puntoSeleccionado && (
+                                <p className="kpis-periodo-seleccionado-hint">
+                                    {loadingPeriodo ? 'Cargando datos del periodo...' : (
+                                        <>Mostrando solo <strong>{puntoSeleccionado.etiqueta}</strong></>
+                                    )}
+                                </p>
+                            )}
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                                                        <ComposedChart data={hourlyData}>
+                                                                        <ComposedChart data={hourlyMostrado}>
+
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
@@ -654,10 +759,18 @@ export default function KpisDashboard() {
                         </div>
 
                         <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Distribución por Franja Horaria</h3>
+                                                        <h3 className="kpis-card-title">Distribución por Franja Horaria</h3>
+                            {puntoSeleccionado && (
+                                <p className="kpis-periodo-seleccionado-hint">
+                                    {loadingPeriodo ? 'Cargando datos del periodo...' : (
+                                        <>Mostrando solo <strong>{puntoSeleccionado.etiqueta}</strong></>
+                                    )}
+                                </p>
+                            )}
                             <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                                                        <ComposedChart data={franjaData}>
+                                                                        <ComposedChart data={franjaMostrado}>
+
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
                                         <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} />
