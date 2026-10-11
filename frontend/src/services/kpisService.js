@@ -56,3 +56,23 @@ export const fetchDistribucionDiaSemana = async (startDate, endDate, tecnologias
 export const fetchSesiones = async () => {
     return obtenerJSON(`${URL_BASE}/sesiones`, "Error al cargar la lista de sesiones");
 };
+
+/**
+ * Guarda una entrada del historial de reportes KPI (HU-010, Paso 13 del
+ * plan de refactor) -- se llama desde exportToPDF cada vez que se genera un
+ * PDF, con los filtros y el snapshot de resultados de ese momento.
+ */
+export const guardarReporteHistorial = async (datos) => {
+    const response = await fetch(`${URL_BASE}/reportes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(datos),
+    });
+    if (!response.ok) throw new Error('Error al guardar el reporte en el historial');
+    return response.json();
+};
+
+export const fetchHistorialReportes = async (limit = 50) => {
+    const query = construirQueryParams({ limit });
+    return obtenerJSON(`${URL_BASE}/reportes?${query}`, "Error al cargar el historial de reportes");
+};

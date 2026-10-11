@@ -7,7 +7,9 @@ import {
     fetchDistribucionDiaSemana,
     fetchTrend,
     fetchSesiones,
+    guardarReporteHistorial,
 } from '../../services/kpisService';
+
 import MultiSelectDropdown from './MultiSelectDropdown';
 import VentanaTemporalSelector from './VentanaTemporalSelector';
 import ResumenPanel from './ResumenPanel';
@@ -391,12 +393,30 @@ export default function KpisDashboard() {
                 alturaRestante -= altoPagina;
             }
 
-            pdf.save(`Reporte_Handovers_${startDate}_al_${endDate}.pdf`);
+            const nombreArchivo = `Reporte_Handovers_${startDate}_al_${endDate}.pdf`;
+            pdf.save(nombreArchivo);
+
+            // Guarda una entrada en el historial (HU-010, Paso 13). No se
+            // espera ni bloquea la descarga del PDF por esto -- si falla
+            // (ej. sin conexión al backend en ese instante), el usuario ya
+            // tiene su PDF de todas formas.
+            guardarReporteHistorial({
+                nombre_archivo: nombreArchivo,
+                fecha_inicio: startDate,
+                fecha_fin: endDate,
+                tecnologia: tecnologias.map(Number),
+                franja: franjas,
+                sesion_label: sesionLabels.map(Number),
+                periodicidad: periodo,
+                periodo_seleccionado: periodoSeleccionado,
+                resultados: { resumen: resumenMostrado, tendencia: trendData },
+            }).catch(() => {});
         } finally {
             controles.style.display = 'flex';
             resumenFiltros.style.display = 'none';
         }
     };
+
 
 
         const hasData = summaryData && summaryData.total_handovers > 0;
