@@ -69,12 +69,13 @@ export default function App() {
                     <img src={logo} alt="H Analytics" className="app-brand-logo" />
 
           <p>Plataforma de handovers</p>
-          <nav aria-label="Menú principal">
-            <NavLink to="/ingesta">Ingesta</NavLink>
-            <NavLink to="/kpis">KPIs</NavLink>
-            <NavLink to="/geoespacial">Geoespacial</NavLink>
+            <nav aria-label="Menú principal">
+            <NavLink to="/ingesta">Procesamiento de datos</NavLink>
+            <NavLink to="/geoespacial">Visualización geoespacial</NavLink>
             <NavLink to="/visualizacion-temporal">Visualización temporal</NavLink>
+            <NavLink to="/kpis">Indicadores de desempeño</NavLink>
           </nav>
+
           <button
             type="button"
             className="app-theme-toggle"
