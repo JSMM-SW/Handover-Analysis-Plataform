@@ -1,6 +1,6 @@
 const TABS = [['rutas', 'Mapa de rutas y handovers'], ['calor', 'Mapa de calor']];
-const ROUTE_LAYERS = [['handovers', 'Handovers'], ['rutas', 'Trayectoria'], ['radiosBase', 'Radios Base']];
-const HEAT_LAYERS = [['handovers', 'Handovers'], ['rsrp', 'RSRP'], ['rsrq', 'RSRQ'], ['rssnr', 'RSSNR'], ['rssi', 'RSSI']];
+const ROUTE_LAYERS = [['rutas', 'Trayectoria'], ['handovers', 'Handovers'], ['radiosBase', 'Radios Base']];
+const HEAT_LAYERS = [['rsrp', 'RSRP'], ['rsrq', 'RSRQ'], ['rssnr', 'RSSNR'], ['rssi', 'RSSI']];
 
 export function MapTabs({ tab, onChange }) {
   function handleKeyDown(event, index) {
@@ -32,11 +32,16 @@ export function MapTabs({ tab, onChange }) {
   );
 }
 
-export function MapToolbar({ tab, layers, onLayerChange, heatMetric, onHeatChange, exporting, canExport, onExport }) {
+export function MapToolbar({ tab, layers, onLayerChange, heatMetric, onHeatChange, showHeatHandovers, onHeatHandoversChange, exporting, canExport, onExport }) {
   return (
     <div className="geo-toolbar">
       <span>Capas</span>
       {tab === 'calor' ? (
+        <>
+        <label>
+          <input type="checkbox" checked={showHeatHandovers} onChange={(event) => onHeatHandoversChange(event.target.checked)} />
+          Handovers
+        </label>
         <div className="geo-heat-options" role="radiogroup" aria-label="Capas del mapa de calor">
           {HEAT_LAYERS.map(([key, label]) => (
             <label key={key}>
@@ -45,6 +50,7 @@ export function MapToolbar({ tab, layers, onLayerChange, heatMetric, onHeatChang
             </label>
           ))}
         </div>
+        </>
       ) : ROUTE_LAYERS.map(([key, label]) => (
         <label key={key}>
           <input type="checkbox" checked={layers[key]} onChange={(event) => onLayerChange(key, event.target.checked)} />

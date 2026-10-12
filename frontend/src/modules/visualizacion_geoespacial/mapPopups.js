@@ -33,6 +33,12 @@ export function handoverTooltip(point, metric = null) {
   return content;
 }
 
+export function measurementTooltip(point, metric) {
+  const content = handoverTooltip(point, metric);
+  content.querySelector('strong').textContent = `Medición · Celda ${point.cell_id}`;
+  return content;
+}
+
 export function radioBasePopup(estimates, executions) {
   const content = document.createElement('div');
   content.className = 'geo-radio-popup';
