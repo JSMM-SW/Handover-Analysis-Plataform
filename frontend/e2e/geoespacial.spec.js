@@ -6,6 +6,7 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   await page.route('**/api/v1/geoespacial/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/ejecuciones')) return route.fulfill({ json: [{ execution_id: 'csv-session', sesion_label: 14, filename: 'Session_55_312312_23132.csv', processing_date: '2026-05-05T13:00:00Z', fecha_inicio: '2026-05-05T13:00:00Z', fecha_fin: '2026-05-05T13:40:58Z' }] });
+    if (url.pathname.endsWith('/disponibilidad')) return route.fulfill({ json: [{ fecha: '2026-05-05', n_mediciones: 3, franjas: [{ inicio: '08:00', fin: '08:00' }] }] });
     if (url.pathname.endsWith('/hojas')) return route.fulfill({ json: [null] });
     expect(url.searchParams.has('hoja')).toBe(false);
     const point = { ...points[0], timestamp_medicion: '2026-05-05T13:40:58Z', hoja_origen: null, rsrp_dbm: null, rssi: null, tecnologia: 2 };
@@ -16,7 +17,6 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   await expect(page.getByRole('checkbox', { name: /Sesión 14/ })).toBeVisible();
   await expect(page.getByText('Session_55_312312_23132.csv')).toHaveCount(0);
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('1');
   await expect(page.getByText('RSSI promedio').locator('..').locator('strong')).toHaveText('—');
   const map = page.locator('.geo-map');
@@ -39,12 +39,30 @@ async function setup(page) {
   await page.route('**/api/v1/geoespacial/**', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/ejecuciones')) return route.fulfill({ json: [{ execution_id: 'test-execution', sesion_label: 15, filename: 'Prueba.xlsx', processing_date: '2026-05-05T13:00:00Z', records_valid: 3, fecha_inicio: '2026-05-05T13:00:00Z', fecha_fin: '2026-05-05T13:00:02Z' }] });
+    if (url.pathname.endsWith('/disponibilidad')) return route.fulfill({ json: [{ fecha: '2026-05-05', n_mediciones: 3, franjas: [{ inicio: '08:00', fin: '08:00' }] }] });
     if (url.pathname.endsWith('/hojas')) return route.fulfill({ json: ['Datos 1'] });
     const cell = url.searchParams.get('cell_id');
     const filtered = url.searchParams.get('tecnologia') === '0' ? [] : cell ? points.filter((p) => String(p.cell_id) === cell) : points;
     return route.fulfill({ json: { mediciones: filtered, total: filtered.length, handovers: filtered.length ? [{ ...points[1], celda_origen: 5, nodo_origen: 100, node_id: 200 }] : [], total_handovers: filtered.length ? 1 : 0, tramos: filtered.length > 1 ? [filtered.map((p) => p.id_registro)] : [], advertencias: ['Mapa de calor de mediciones.'] } });
   });
 }
+
+test('counts all detected handovers while mapping only those with GPS', async ({ page }) => {
+  await setup(page);
+  await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
+    mediciones: points, total: points.length,
+    handovers: [{ ...points[1], celda_origen: 5, nodo_origen: null }],
+    total_handovers: 3, handovers_con_ubicacion: 1, handovers_sin_ubicacion: 2,
+    tramos: [], advertencias: [],
+  } }));
+  await page.goto('/geoespacial');
+  await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
+  await page.locator('.geo-session-option input').first().check();
+  await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true }).locator('..').locator('strong')).toHaveText('3');
+  await expect(page.locator('.geo-handover-coverage')).toHaveText('3 handovers detectados · 1 con ubicación · 2 sin ubicación');
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true }).locator('..').locator('strong')).toHaveText('3');
+});
 
 test('navigation, map, layers, detail, filters and empty state', async ({ page }) => {
   const errors = [];
@@ -55,16 +73,21 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await page.getByRole('link', { name: 'Visualización geoespacial', exact: true }).click();
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
   await expect(page.getByText('RSSI promedio').locator('..').locator('strong')).toHaveText('-75 dBm');
   await expect(page.locator('.leaflet-control-zoom-in')).toBeVisible();
   const filterBox = await page.getByRole('complementary', { name: 'Filtros geoespaciales' }).boundingBox();
   const mapBox = await page.locator('.geo-map').boundingBox();
-  expect(filterBox.x + filterBox.width).toBeLessThan(mapBox.x);
+  expect(filterBox.y + filterBox.height).toBeLessThan(mapBox.y);
+  const fromBox = await page.getByRole('button', { name: 'Fecha de inicio', exact: true }).boundingBox();
+  const toBox = await page.getByRole('button', { name: 'Fecha de fin', exact: true }).boundingBox();
+  expect(Math.abs(fromBox.y - toBox.y)).toBeLessThan(2);
+  expect(fromBox.x + fromBox.width).toBeLessThan(toBox.x);
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
-  await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Handovers', exact: true })).toBeChecked();
+  await expect(page.locator('.geo-signal-heat-layer')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'RSSI', exact: true })).toBeChecked();
+  await expect(page.getByRole('radio', { name: 'Calor de handovers', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('radio')).toHaveCount(4);
   await expect(page.getByRole('checkbox', { name: 'Mapa de calor', exact: true })).toHaveCount(0);
   await expect(page.getByRole('checkbox', { name: 'Trayectoria', exact: true })).toHaveCount(0);
   await page.getByRole('radio', { name: 'RSSI', exact: true }).check();
@@ -81,7 +104,13 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).not.toContainText('RSRQ:');
   await expect(signalBubble).not.toContainText('RSSNR:');
   await expect(signalBubble).not.toContainText('RSRP:');
+  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).check();
+  await expect(page.locator('.leaflet-geo-handover-points-pane canvas')).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'RSSI', exact: true })).toBeChecked();
   await page.getByRole('radio', { name: 'RSRQ', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Handovers', exact: true })).toBeChecked();
+  await expect(page.locator('.leaflet-geo-handover-points-pane canvas')).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).uncheck();
   await expect(page.locator('.geo-signal-legend')).toContainText('RSRQ ≤ -15 dB');
   await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
   await expect(signalBubble).toHaveCount(1);
@@ -106,15 +135,14 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
       await expect(signalBubble).not.toContainText(`${other}:`);
     }
   }
-  await page.getByRole('radio', { name: 'Handovers', exact: true }).check();
+  await page.getByRole('radio', { name: 'RSSI', exact: true }).check();
   // Leaflet keeps closed tooltips in the DOM during its fade-out animation.
   await expect(signalBubble).toHaveCount(0);
-  await expect(page.locator('.geo-signal-heat-layer')).toHaveCount(0);
-  await expect(page.locator('.leaflet-heatmap-layer')).toBeVisible();
+  await expect(page.locator('.geo-signal-heat-layer')).toBeVisible();
   await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
   await expect(signalBubble).toHaveCount(1);
   await expect(signalBubble).toBeVisible();
-  await expect(signalBubble).toHaveText('Handover 5 → 10Fecha: 5 may 2026Hora: 08:00:01');
+  await expect(signalBubble).toContainText('RSSI: -75 dBm');
   await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
   await expect(page.locator('.leaflet-heatmap-layer')).toHaveCount(0);
   // Select the point located at the map's geographic midpoint.
@@ -144,7 +172,14 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   }
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).press('ArrowLeft');
   await expect(page.getByRole('tab', { name: 'Mapa de rutas y handovers' })).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', { name: 'Filtrar por zona visible' }).click();
+  const centerRequests = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/geoespacial/mediciones')) centerRequests.push(request.url());
+  });
+  await page.locator('.leaflet-control-zoom-out').click();
+  await page.getByRole('button', { name: 'Ajustar vista', exact: true }).click();
+  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
+  expect(centerRequests).toEqual([]);
   await page.getByRole('combobox', { name: 'Tecnolog\u00eda', exact: true }).selectOption('0');
   await page.getByRole('button', { name: 'Aplicar filtros' }).click();
   await expect(page.getByText('No hay mediciones que coincidan con estos filtros.')).toBeVisible();
@@ -154,27 +189,79 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   expect(errors).toEqual([]);
 });
 
+test('signal heat includes clean measurements even without handovers', async ({ page }) => {
+  await setup(page);
+  await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
+    mediciones: points, total: points.length, handovers: [], total_handovers: 0,
+    tramos: [], advertencias: [],
+  } }));
+  await page.goto('/geoespacial');
+  await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
+  await page.locator('.geo-session-option input').first().check();
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  const heat = page.locator('.geo-signal-heat-layer');
+  await expect(heat).toBeVisible();
+  expect(await heat.evaluate((canvas) => {
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    return pixels.some((value, index) => index % 4 === 3 && value > 0);
+  })).toBe(true);
+  const map = page.locator('.geo-map');
+  const box = await map.boundingBox();
+  await map.hover({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.locator('.geo-handover-tooltip')).toContainText('Medición · Celda 10');
+  await expect(page.locator('.geo-handover-tooltip')).toContainText('RSSI: -75 dBm');
+});
+
+test('RSSI average stays identical across tabs and excludes missing values', async ({ page }) => {
+  await setup(page);
+  const mediciones = points.map((point, index) => ({ ...point, rssi: [-70, -81, null][index] }));
+  await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
+    mediciones, total: 3, handovers: [{ ...mediciones[1], celda_origen: 5 }],
+    total_handovers: 1, tramos: [], advertencias: [],
+  } }));
+  await page.goto('/geoespacial');
+  await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
+  await page.locator('.geo-session-option input').first().check();
+  const average = page.locator('.geo-stats').getByText('RSSI promedio', { exact: true }).locator('..').locator('strong');
+  await expect(average).toHaveText('-75,5 dBm');
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  await expect(average).toHaveText('-75,5 dBm');
+  await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
+  await expect(average).toHaveText('-75,5 dBm');
+});
+
 test('explicit Ecuador offset and layer preferences survive reload', async ({ page }) => {
   await setup(page);
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
-  await expect(page.locator('input[name=desde]')).toHaveAttribute('step', '60');
-  await expect(page.locator('input[name=hasta]')).toHaveAttribute('step', '60');
-  await page.getByLabel('Hasta').fill('2026-05-05T08:01');
-  await page.getByLabel('Desde').fill('2026-05-05T08:00');
+  await expect(page.getByRole('button', { name: 'Fecha de inicio', exact: true })).toContainText('2026');
+  await page.getByRole('button', { name: 'Fecha de inicio', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Elegir fecha de inicio' })).toContainText('mayo de 2026');
+  await page.keyboard.press('Escape');
+  const startHour = page.getByRole('combobox', { name: 'Franja horaria: desde', exact: true });
+  const endHour = page.getByRole('combobox', { name: 'Franja horaria: hasta', exact: true });
+  await expect(startHour).toHaveValue('08:00');
+  await expect(endHour).toHaveValue('08:00');
+  await expect(startHour.locator('option')).toHaveText(['Desde…', '08:00']);
+  await expect(endHour.locator('option')).toHaveText(['Hasta…', '08:00']);
+  const technologyBox = await page.getByRole('combobox', { name: 'Tecnología', exact: true }).boundingBox();
+  const hourBox = await startHour.boundingBox();
+  const dateBox = await page.getByRole('button', { name: 'Fecha de inicio', exact: true }).boundingBox();
+  expect(Math.abs(technologyBox.y - hourBox.y)).toBeLessThan(3);
+  expect(Math.abs(dateBox.y - hourBox.y)).toBeLessThan(3);
   const request = page.waitForRequest((r) => r.url().includes('/mediciones?') && r.url().includes('desde='));
   await page.getByRole('button', { name: 'Aplicar filtros' }).click();
   const params = new URL((await request).url()).searchParams;
-  expect(params.get('desde')).toBe('2026-05-05T08:00:00-05:00');
-  expect(params.get('hasta')).toBe('2026-05-05T08:01:59.999999-05:00');
+  expect(params.get('desde')).toBe('2026-05-05T00:00:00-05:00');
+  expect(params.get('hora_inicio')).toBe('08:00:00');
+  expect(params.get('hora_fin')).toBe('08:00:59.999999');
+  expect(params.get('hasta')).toBe('2026-05-05T23:59:59.999999-05:00');
   await page.getByRole('checkbox', { name: 'Trayectoria' }).uncheck();
   await page.reload();
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'Trayectoria' })).not.toBeChecked();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('link', { name: 'Procesamiento de datos', exact: true })).toBeVisible();
@@ -189,6 +276,7 @@ test('selects several sessions and shows their combined date range', async ({ pa
       { execution_id: 'first', sesion_label: 21, filename: 'uno.csv', records_valid: 2, fecha_inicio: '2026-05-05T13:00:00Z', fecha_fin: '2026-05-05T14:00:00Z' },
       { execution_id: 'second', sesion_label: 22, filename: 'dos.csv', records_valid: 2, fecha_inicio: '2026-05-06T15:00:00Z', fecha_fin: '2026-05-06T16:00:00Z' },
     ] });
+    if (url.pathname.endsWith('/disponibilidad')) return route.fulfill({ json: [{ fecha: '2026-05-05', n_mediciones: 2, franjas: [{ inicio: '08:00', fin: '08:00' }] }, { fecha: '2026-05-06', n_mediciones: 2, franjas: [{ inicio: '08:00', fin: '08:00' }] }] });
     requested.push(url.searchParams.getAll('execution_id'));
     const selected = url.searchParams.getAll('execution_id');
     const mediciones = selected.map((id, index) => ({ ...points[index], id_registro: id, execution_id: id }));
@@ -200,19 +288,17 @@ test('selects several sessions and shows their combined date range', async ({ pa
   await page.getByRole('checkbox', { name: /Sesión 21/ }).check();
   await expect(page.locator('.geo-date-range')).toContainText('5/5/26');
   await page.getByRole('checkbox', { name: /Sesión 22/ }).check();
-  expect(requested).toEqual([]);
-  await expect(page.locator('.geo-map')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.locator('.geo-date-range')).toContainText('6/5/26');
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('2');
   expect(requested.some((ids) => ids.length === 2 && ids.includes('first') && ids.includes('second'))).toBe(true);
-  await expect(page.locator('.geo-session-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.geo-session-toggle')).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.geo-session-toggle')).toContainText('Sesión 21, Sesión 22');
-  await page.locator('.geo-session-toggle').click();
   await page.getByRole('checkbox', { name: /Sesión 21/ }).uncheck();
-  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('2');
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('1');
+  await expect(page.getByRole('button', { name: 'Analizar sesiones', exact: true })).toHaveCount(0);
+  await page.getByRole('checkbox', { name: /Sesión 22/ }).uncheck();
+  await expect(page.locator('.geo-map')).toHaveCount(0);
+  await expect(page.getByText('Selecciona una o varias sesiones para ver los mapas.')).toBeVisible();
 });
 
 test('shows API failure without presenting stale measurements', async ({ page }) => {
@@ -221,7 +307,6 @@ test('shows API failure without presenting stale measurements', async ({ page })
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByRole('alert')).toHaveText('Base de datos no disponible.');
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('—');
 });
@@ -245,7 +330,6 @@ test('radio base layer shows estimated positions, coincident sessions and insuff
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
   await expect(page.locator('.geo-radio-base-marker')).toHaveCount(0);
   await page.getByRole('checkbox', { name: 'Radios Base', exact: true }).check();

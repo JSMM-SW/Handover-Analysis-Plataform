@@ -33,6 +33,7 @@ export default function SelectorFecha({
   max = '',
   onCambio,
   cargando = false,
+  mostrarHandovers = true,
 }) {
   // Se desestructura: el resultado lleva la referencia del contenedor, y leer otras propiedades
   // del mismo objeto durante el render contaría como leer la referencia.
@@ -130,7 +131,7 @@ export default function SelectorFecha({
                               title={celda.descripcion}
                             >
                               {celda.dia}
-                              {celda.conHandovers && (
+                              {mostrarHandovers && celda.conHandovers && (
                                 <span className="vt-calendario__punto" aria-hidden="true" />
                               )}
                             </button>
@@ -143,8 +144,8 @@ export default function SelectorFecha({
               </table>
 
               <p className="vt-calendario__pie">
-                <span className="vt-calendario__punto" aria-hidden="true" /> con handovers · solo se
-                pueden elegir los días con datos
+                {mostrarHandovers && <><span className="vt-calendario__punto" aria-hidden="true" /> con handovers · </>}
+                Solo se pueden elegir los días con datos
               </p>
             </>
           )}
