@@ -296,6 +296,89 @@
     border: 1.5px solid var(--color-border);
 }
 
+/* Etapa en curso (informada por el backend en GET /status) */
+.ingesta-step.is-active {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.ingesta-step.is-active .ingesta-step-icon {
+    border: 2px solid var(--color-primary-soft);
+    border-top-color: var(--color-primary);
+    animation: ingesta-spin 700ms linear infinite;
+}
+
+/* Avance real del procesamiento (campo `progreso` de GET /status) */
+.ingesta-progress {
+    position: relative;
+    height: 22px;
+    margin-top: 12px;
+    border-radius: 11px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    overflow: hidden;
+}
+
+.ingesta-progress-bar {
+    height: 100%;
+    background: var(--color-primary-soft);
+    border-right: 2px solid var(--color-primary);
+    transition: width 400ms ease;
+}
+
+.ingesta-progress-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+
+/* Cancelar */
+.ingesta-cancel-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.ingesta-btn-secondary {
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ingesta-btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-text-muted);
+}
+
+.ingesta-btn-secondary:disabled {
+    color: var(--color-text-faint);
+    cursor: not-allowed;
+}
+
+.ingesta-btn-secondary.is-danger {
+    border-color: var(--color-error);
+    color: var(--color-error);
+}
+
+.ingesta-link-btn {
+    margin-top: 10px;
+    background: none;
+    border: none;
+    color: var(--color-text-faint);
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 0;
+}
+
 /* Alerts */
 .ingesta-alert {
     display: flex;
@@ -316,6 +399,19 @@
 .ingesta-alert.is-error {
     background: var(--color-error-soft);
     color: var(--color-error);
+}
+
+/* Cancelado por el usuario: ni error ni éxito. */
+.ingesta-alert.is-neutral {
+    background: var(--color-bg);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+}
+
+/* Rechazo esperado (ej. archivo ya cargado): no es un error del sistema. */
+.ingesta-alert.is-warning {
+    background: var(--color-warning-soft);
+    color: var(--color-warning);
 }
 
 .ingesta-alert-title {

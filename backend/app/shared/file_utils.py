@@ -23,5 +23,14 @@ def sanitize_filename(filename: str) -> str:
     return f"{safe_stem}.{safe_suffix}" if safe_suffix else safe_stem
 
 
+def filename_key(filename: str) -> str:
+    """Clave de duplicados de un nombre de archivo original: sin ruta, sin
+    espacios en los extremos y en minúsculas. Debe coincidir con la columna
+    generada `etl_execution.filename_clave`
+    (lower(btrim(regexp_replace(filename, '^.*[\\/]', ''))) en schema.sql).
+    """
+    return re.split(r"[\\/]", filename)[-1].strip(" ").lower()
+
+
 def get_extension(filename: str) -> str:
     return Path(filename).suffix.lower()

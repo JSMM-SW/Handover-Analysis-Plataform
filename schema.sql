@@ -3,8 +3,9 @@
 BEGIN;
 CREATE TABLE IF NOT EXISTS etl_execution (
     execution_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sesion_label             INTEGER GENERATED ALWAYS AS IDENTITY UNIQUE,
+    sesion_label             INTEGER NULL UNIQUE,      -- NULL hasta 'completed'; lo asigna trg_etl_execution_sesion_label (migración 010)
     filename                 TEXT NOT NULL,
+    filename_clave           TEXT GENERATED ALWAYS AS (lower(btrim(regexp_replace(filename, '^.*[\\/]', '')))) STORED,
     processing_date          TIMESTAMPTZ NOT NULL DEFAULT now(),
     records_read             INTEGER NOT NULL DEFAULT 0 CHECK (records_read >= 0),
     records_valid            INTEGER NOT NULL DEFAULT 0 CHECK (records_valid >= 0),
@@ -13,8 +14,17 @@ CREATE TABLE IF NOT EXISTS etl_execution (
     errors                   JSONB NOT NULL DEFAULT '[]'::jsonb,
     processing_time_seconds  NUMERIC(10,3),
     status                   TEXT NOT NULL DEFAULT 'pending'
-                              CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-    created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+                              CONSTRAINT etl_execution_status_check
+                              CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Migración 011: avance, latido y cancelación. etapa/progreso/updated_at/
+    -- cancel_requested se escriben y leen desde una conexión aparte en
+    -- autocommit (no desde la transacción del Load).
+    etapa                    TEXT NULL,                -- subida, extract, validate, clean, normalize, load, verify, done
+    progreso                 SMALLINT NULL CONSTRAINT chk_etl_execution_progreso CHECK (progreso BETWEEN 0 AND 100),
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT now(),   -- latido; processing sin latido reciente = interrumpida
+    cancel_requested         BOOLEAN NOT NULL DEFAULT false,       -- cancelación cooperativa (POST /ingestion/cancel/{id})
+    stored_filename          TEXT NULL                 -- temporal en data/input/ (prefijo upload_id); se borra al terminar
 );
 
 CREATE TABLE IF NOT EXISTS handover_record (
@@ -40,7 +50,7 @@ CREATE TABLE IF NOT EXISTS handover_record (
     lac_tac_raw         INTEGER NULL,
     report_index        INTEGER NULL,
     net_type            TEXT NULL,   -- LTE, HSPA, HSPA+, EDGE, UMTS, GPRS, UNKNOWN
-    tech                TEXT NULL,   -- LTE, WCDMA, GSM (RAT real; fuente de verdad es net_type, no tech)
+    tech                TEXT NULL,   -- LTE, WCDMA, GSM (RAT de la celda medida; fuente de `tecnologia` en cargas nuevas, ver etl/tecnologia.py)
     data_state          TEXT NULL,   -- DISCONNECTED, CONNECTED, CONNECTING
     call_state          TEXT NULL,   -- IDLE, OFFHOOK
 
@@ -62,6 +72,45 @@ CREATE TABLE IF NOT EXISTS handover_record_rejected (
     datos_crudos        JSONB NOT NULL,               -- fila completa tal como vino del archivo origen
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Número de sesión sin huecos (migración 010): se asigna al pasar a 'completed',
+-- dentro de la transacción del Load, desde esta fila bloqueada. Un rollback,
+-- fallo o cancelación no consume número; dos cargas simultáneas no lo repiten.
+CREATE TABLE IF NOT EXISTS etl_sesion_contador (
+    id      SMALLINT PRIMARY KEY CONSTRAINT chk_etl_sesion_contador_unica CHECK (id = 1),
+    ultimo  INTEGER NOT NULL CONSTRAINT chk_etl_sesion_contador_ultimo CHECK (ultimo >= 0)
+);
+
+INSERT INTO etl_sesion_contador (id, ultimo)
+SELECT 1, COALESCE(MAX(sesion_label), 0) FROM etl_execution
+ON CONFLICT (id) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION etl_asignar_sesion_label() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.status = 'completed' AND NEW.sesion_label IS NULL THEN
+        UPDATE etl_sesion_contador
+           SET ultimo = GREATEST(ultimo, (SELECT COALESCE(MAX(sesion_label), 0) FROM etl_execution)) + 1
+         WHERE id = 1
+        RETURNING ultimo INTO NEW.sesion_label;
+        IF NEW.sesion_label IS NULL THEN
+            RAISE EXCEPTION 'etl_sesion_contador no está inicializado (falta la fila id = 1)';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_etl_execution_sesion_label ON etl_execution;
+CREATE TRIGGER trg_etl_execution_sesion_label
+    BEFORE INSERT OR UPDATE OF status ON etl_execution
+    FOR EACH ROW EXECUTE FUNCTION etl_asignar_sesion_label();
+
+-- Un mismo archivo (nombre normalizado) no puede tener dos ejecuciones
+-- processing/completed; failed no bloquea el nombre (migración 010).
+CREATE UNIQUE INDEX IF NOT EXISTS ux_etl_execution_filename_activo
+    ON etl_execution (filename_clave)
+    WHERE status IN ('processing', 'completed');
 
 CREATE INDEX IF NOT EXISTS idx_handover_record_execution_id
     ON handover_record (execution_id);

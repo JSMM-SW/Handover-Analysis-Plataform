@@ -13,7 +13,7 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   });
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
-  await expect(page.getByRole('checkbox', { name: /Sesión 55/ })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: /Sesión 14/ })).toBeVisible();
   await expect(page.getByText('Session_55_312312_23132.csv')).toHaveCount(0);
   await page.locator('.geo-session-option input').first().check();
   await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();

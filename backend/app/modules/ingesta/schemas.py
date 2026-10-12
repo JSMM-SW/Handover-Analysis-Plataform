@@ -41,6 +41,13 @@ class UploadBatchItem(BaseModel):
     ok: bool
     upload: UploadResponse | None = None
     error: str | None = None
+    # Motivo del rechazo, para que el cliente distinga un rechazo esperado
+    # de un error: "duplicado" (ya cargado o en proceso), "duplicado_en_seleccion"
+    # (nombre repetido en esta misma carga) o "invalido" (validación del archivo).
+    # "subida_incompleta": los bytes recibidos no coinciden con los declarados.
+    error_code: (
+        Literal["duplicado", "duplicado_en_seleccion", "invalido", "subida_incompleta"] | None
+    ) = None
 
 
 class ProcessRequest(BaseModel):
@@ -49,8 +56,9 @@ class ProcessRequest(BaseModel):
 
 
 class ProcessResult(BaseModel):
-    """Resultado trazable de una corrida completa del pipeline ETL,
-    reflejando la fila persistida en `etl_execution`."""
+    """Respuesta de POST /process: la ejecución recién creada, en estado
+    "processing" y con contadores en 0. El resultado final (completed o
+    failed) se consulta con GET /status/{execution_id}."""
 
     execution_id: str
     sesion_label: int | None = None
@@ -61,16 +69,36 @@ class ProcessResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     errors: list[str] = Field(default_factory=list)
     processing_time_seconds: float
-    status: Literal["completed", "failed"]
+    status: Literal["processing", "completed", "failed"]
+
+
+class CancelResponse(BaseModel):
+    """Respuesta de POST /ingestion/cancel/{execution_id}. "cancelling": la
+    cancelación quedó solicitada y el pipeline se detendrá en el siguiente
+    punto de control (seguir consultando /status hasta "cancelled").
+    "cancelled": la ejecución no tenía proceso vivo y se canceló al instante."""
+
+    execution_id: str
+    status: Literal["cancelling", "cancelled"]
+    message: str
 
 
 class StatusResponse(BaseModel):
-    """Lectura del estado persistido de una ejecución (GET /ingestion/status/{id})."""
+    """Lectura del estado persistido de una ejecución (GET /ingestion/status/{id}).
+
+    `status`: processing, completed, failed o cancelled. Mientras está en
+    processing, `etapa` (en_cola, extract, validate, clean, normalize,
+    structure, load, verify) y `progreso` (0-100) indican el avance;
+    `cancel_requested` indica que se pidió cancelar y aún no se detuvo."""
 
     execution_id: str
     sesion_label: int | None = None
     filename: str
     status: str
+    etapa: str | None = None
+    progreso: int | None = None
+    cancel_requested: bool = False
+    updated_at: datetime | None = None
     processing_date: datetime
     records_read: int
     records_valid: int

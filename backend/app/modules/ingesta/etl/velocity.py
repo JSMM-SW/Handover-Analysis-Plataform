@@ -2,24 +2,22 @@
 inmediato anterior de la misma sesión, dividida entre la diferencia de
 tiempo.
 
-"Misma sesión" = misma `hoja_origen`. Para xlsx esto significa por hoja, NO
-toda la ejecución combinada: las hojas de un Excel real representan pases
-de manejo distintos (confirmado con datos reales: combinarlas produce
-saltos de tiempo hacia atrás en el orden de extracción). Para csv,
-`hoja_origen` siempre es None (no tiene el concepto de hojas), así que toda
-la ejecución cae en un solo grupo — correcto, porque cada archivo csv ya es
-una sesión de manejo continua.
+"Misma sesión" = misma `hoja_origen`. En csv `hoja_origen` siempre es None
+(no tiene el concepto de hojas), así que toda la ejecución cae en un solo
+grupo — correcto, porque cada archivo csv ya es una sesión de manejo
+continua. La agrupación por `hoja_origen` se conserva por compatibilidad con
+el contrato de la función.
 
 Cuando dos registros comparten exactamente el mismo `timestamp_medicion`
-(ocurre en datos reales de xlsx, resolución de 1 segundo), se tratan como
-el mismo instante: diferencia de tiempo 0 -> NULL. No se intenta desempatar
-cuál fue "primero".
+(resolución de 1 segundo), se tratan como el mismo instante: diferencia de
+tiempo 0 -> NULL. No se intenta desempatar cuál fue "primero".
 
-Un registro válido sin posición (latitud/longitud NULL — csv con gps sin
-fix desde Session_43, que ya no se rechaza, ver validator.py/cleaner.py) no
-puede aportar ni recibir un cálculo de distancia: su propia velocidad queda
-NULL, y también rompe la cadena para el siguiente registro de la sesión,
-igual que un `gps_reject_anchors` de xlsx.
+Un registro válido sin posición (latitud/longitud NULL — gps sin fix desde
+Session_43, que ya no se rechaza, ver validator.py/cleaner.py) no puede
+aportar ni recibir un cálculo de distancia: su propia velocidad queda NULL,
+y también rompe la cadena para el siguiente registro de la sesión, igual
+que un ancla de `gps_reject_anchors`. En csv esa lista llega vacía (ningún
+registro se rechaza por gps sin fix).
 """
 
 import math

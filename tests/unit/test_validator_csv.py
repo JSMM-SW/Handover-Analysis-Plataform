@@ -1,4 +1,4 @@
-from app.modules.ingesta.etl.constants import MOTIVO_CID_CENTINELA
+from app.modules.ingesta.etl.constants import MOTIVO_CID_CENTINELA, MOTIVO_TECNOLOGIA_AUSENTE
 from app.modules.ingesta.etl.validator import validate_record_csv
 
 
@@ -9,6 +9,7 @@ def _record(**overrides) -> dict:
         "lat": -0.180653,
         "long": -78.467838,
         "net_type": "LTE",
+        "tech": "LTE",
     }
     base.update(overrides)
     return base
@@ -18,26 +19,12 @@ def test_valid_record_passes():
     assert validate_record_csv(_record()) is None
 
 
-def test_valid_record_umts_passes():
-    assert validate_record_csv(_record(net_type="UMTS")) is None
+def test_valid_record_wcdma_passes():
+    assert validate_record_csv(_record(tech="WCDMA", net_type="HSPA")) is None
 
 
-def test_valid_record_hspa_plus_passes():
-    assert validate_record_csv(_record(net_type="HSPA+")) is None
-
-
-def test_valid_record_hspa_without_plus_passes():
-    """Confirmado en Session_43_20260623_165825.csv (145 filas reales):
-    'HSPA' sin '+' es un valor real distinto de 'HSPA+', ambos 3G."""
-    assert validate_record_csv(_record(net_type="HSPA")) is None
-
-
-def test_valid_record_edge_passes():
-    assert validate_record_csv(_record(net_type="EDGE")) is None
-
-
-def test_valid_record_gprs_passes():
-    assert validate_record_csv(_record(net_type="GPRS")) is None
+def test_valid_record_gsm_passes():
+    assert validate_record_csv(_record(tech="GSM", net_type="EDGE")) is None
 
 
 def test_rejects_cid_sentinel():
@@ -63,16 +50,23 @@ def test_cid_centinela_rejects_even_with_gps_sin_fix():
     assert validate_record_csv(record) == MOTIVO_CID_CENTINELA
 
 
-def test_rejects_unknown_net_type():
-    motivo = validate_record_csv(_record(net_type="GSM"))
-    assert motivo is not None
-    assert "GSM" in motivo
+def test_net_type_unknown_no_longer_rejects():
+    """Session_41..47: 575 filas con net_type='UNKNOWN' traen tech y señal
+    válidos. Con `tech` como fuente de `tecnologia`, net_type es informativo
+    y ya no es motivo de rechazo."""
+    assert validate_record_csv(_record(net_type="UNKNOWN")) is None
 
 
-def test_rejects_net_type_literally_unknown():
-    """Caso real confirmado en Session_43_20260623_165825.csv (45 filas,
-    0.05%): la propia app reporta net_type='UNKNOWN'. Se rechaza en vez de
-    adivinar una tecnología, igual que cualquier otro valor no confirmado."""
-    motivo = validate_record_csv(_record(net_type="UNKNOWN"))
+def test_net_type_disagreeing_with_tech_does_not_reject():
+    """Caso real (S45: 10,520 filas): net_type=HSPA con tech=LTE."""
+    assert validate_record_csv(_record(net_type="HSPA", tech="LTE")) is None
+
+
+def test_rejects_unknown_tech():
+    motivo = validate_record_csv(_record(tech="NR"))
     assert motivo is not None
-    assert "UNKNOWN" in motivo
+    assert "NR" in motivo
+
+
+def test_rejects_empty_tech():
+    assert validate_record_csv(_record(tech=None)) == MOTIVO_TECNOLOGIA_AUSENTE

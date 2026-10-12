@@ -170,8 +170,8 @@ describe('varios intervalos', () => {
       ...TOTAL,
       minutos: 5,
       bins: [
-        { inicio: '2026-07-01T13:00:00Z', fin: '2026-07-01T13:05:00Z', sesion_id: 'a', sesion_nombre: 'Session_12_x.csv', celdas: CELDAS },
-        { inicio: '2026-09-28T21:24:53Z', fin: '2026-09-28T21:29:53Z', sesion_id: 'b', sesion_nombre: 'Session_134_y.csv', celdas: CELDAS },
+        { inicio: '2026-07-01T13:00:00Z', fin: '2026-07-01T13:05:00Z', sesion_id: 'a', sesion_nombre: 'Sesión 12 · Session_90_x.csv', celdas: CELDAS },
+        { inicio: '2026-09-28T21:24:53Z', fin: '2026-09-28T21:29:53Z', sesion_id: 'b', sesion_nombre: 'Sesión 134 · Session_7_y.csv', celdas: CELDAS },
       ],
     };
     renderizar();

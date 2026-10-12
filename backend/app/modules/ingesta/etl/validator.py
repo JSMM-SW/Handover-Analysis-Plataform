@@ -3,16 +3,27 @@
 from app.shared.config import Settings
 from app.shared.exceptions import FileValidationError
 from app.modules.ingesta.etl.constants import (
+    MOTIVO_CELDA_AUSENTE,
     MOTIVO_CID_CENTINELA,
-    NET_TYPE_2G,
-    NET_TYPE_3G,
-    NET_TYPE_LTE,
+    MOTIVO_TIMESTAMP_AUSENTE,
     SENTINEL_INT32_MAX,
 )
+from app.modules.ingesta.etl.tecnologia import motivo_rechazo_tecnologia_csv
 from app.shared.file_utils import get_extension
 
 
+def _megabytes(size_bytes: int) -> str:
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
 def validate_uploaded_file(filename: str, content: bytes, settings: Settings) -> None:
+    validate_upload_metadata(filename, len(content), settings)
+
+
+def validate_upload_metadata(filename: str, size_bytes: int, settings: Settings) -> None:
+    """Validaciones de archivo que no requieren leer su contenido: nombre,
+    extensión y tamaño (la subida en streaming conoce el tamaño sin cargar el
+    archivo en memoria)."""
     if not filename:
         raise FileValidationError("El archivo no tiene nombre.")
 
@@ -24,14 +35,20 @@ def validate_uploaded_file(filename: str, content: bytes, settings: Settings) ->
             f"Extensiones permitidas: {allowed}."
         )
 
-    if len(content) == 0:
+    if size_bytes == 0:
         raise FileValidationError("El archivo está vacío.")
 
-    if len(content) > settings.max_upload_size_bytes:
+    if size_bytes > settings.max_upload_size_bytes:
         raise FileValidationError(
-            f"El archivo supera el tamaño máximo permitido "
+            f"El archivo pesa {_megabytes(size_bytes)} y supera el tamaño máximo permitido "
             f"({settings.max_upload_size_mb} MB)."
         )
+
+
+def _vacio(data: dict, *campos: str) -> bool:
+    """True si alguno de `campos` vino vacío (None: celda en blanco o columna
+    ausente en el archivo — el extractor siempre entrega la clave)."""
+    return any(campo in data and data[campo] is None for campo in campos)
 
 
 def validate_record_csv(data: dict) -> str | None:
@@ -46,17 +63,21 @@ def validate_record_csv(data: dict) -> str | None:
     `cleaner.apply_sentinels_csv`.
 
     Orden de precedencia: `cid` centinela primero (rechazo específico e
-    inequívoco), luego un net_type fuera de los 6 valores confirmados con
-    datos reales (LTE, UMTS, HSPA, HSPA+, EDGE, GPRS) — no se inventa un
-    mapeo de tecnología para un valor no confirmado, se rechaza el registro
-    para que quede visible en la cuarentena en vez de fallar silenciosamente
-    o adivinar. Esto también cubre 'UNKNOWN' (confirmado en
-    Session_43_20260623_165825.csv, 45 filas, 0.05%): la propia app declara
-    que no sabe la tecnología, así que no correspondía inventarle una.
+    inequívoco), luego un `tech` fuera de los 3 valores confirmados (LTE,
+    WCDMA, GSM) — no se inventa un mapeo de tecnología para un valor no
+    confirmado, se rechaza el registro para que quede visible en la
+    cuarentena. `net_type` ya NO se valida: es informativo (ver
+    etl/tecnologia.py), así que 'UNKNOWN' u otro valor raro en net_type no
+    rechaza la fila.
+
+    Antes de todo eso: `sys_time`, `cid` o `tech` (fuente de `tecnologia`,
+    NOT NULL) vacíos rechazan la fila con un motivo explícito.
     """
+    if _vacio(data, "sys_time"):
+        return MOTIVO_TIMESTAMP_AUSENTE
+    if _vacio(data, "cid"):
+        return MOTIVO_CELDA_AUSENTE
     if data["cid"] == SENTINEL_INT32_MAX:
         return MOTIVO_CID_CENTINELA
-    net_type = data["net_type"]
-    if net_type != NET_TYPE_LTE and net_type not in NET_TYPE_3G and net_type not in NET_TYPE_2G:
-        return f"net_type desconocido: '{net_type}' (no es LTE, UMTS, HSPA, HSPA+, EDGE ni GPRS)"
-    return None
+    # Regla de tecnología (tech, no net_type) aislada en etl/tecnologia.py.
+    return motivo_rechazo_tecnologia_csv(data)
