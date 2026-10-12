@@ -2,7 +2,30 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.shared.config import Settings, get_settings
+from app.shared.db.database import get_db
 from app.main import app
+
+
+class _EmptyDatabaseSession:
+    """Sesión de base de datos falsa: cualquier consulta devuelve "sin
+    resultados". /upload consulta si el archivo ya fue cargado
+    (find_active_execution_by_filename); con esta sesión la respuesta es
+    siempre "sin duplicados" y estos tests no necesitan una base real (el CI
+    no tiene Postgres ni credenciales de Supabase). El rechazo por duplicado
+    se prueba en tests/unit/test_duplicados.py y, contra Postgres, en
+    tests/integration/test_duplicados_y_sesion.py."""
+
+    def query(self, *args, **kwargs):
+        return self
+
+    filter = order_by = query
+
+    def first(self):
+        return None
+
+
+def _override_get_db():
+    yield _EmptyDatabaseSession()
 
 
 @pytest.fixture
@@ -20,6 +43,7 @@ def client(tmp_path):
         )
 
     app.dependency_overrides[get_settings] = override_settings
+    app.dependency_overrides[get_db] = _override_get_db
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
