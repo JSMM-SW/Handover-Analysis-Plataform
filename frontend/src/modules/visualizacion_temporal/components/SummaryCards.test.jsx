@@ -70,7 +70,7 @@ describe('los tres indicadores obligatorios de HU-C2-007', () => {
   it('muestra las radiobases involucradas (CA2)', async () => {
     renderizar();
 
-    const tarjeta = (await screen.findByText('Radiobases')).closest('article');
+    const tarjeta = (await screen.findByText('Celdas observadas')).closest('article');
     await waitFor(() => expect(within(tarjeta).getByText('8')).toBeInTheDocument());
     expect(tarjeta).toHaveTextContent('celdas distintas');
   });
@@ -129,7 +129,7 @@ describe('complementos', () => {
     respuesta = { total_handovers: 3, radiobases_involucradas: 2, sesiones_analizadas: 1 };
     renderizar();
 
-    for (const titulo of ['Handovers', 'Radiobases', 'Sesiones']) {
+    for (const titulo of ['Handovers', 'Celdas observadas', 'Sesiones']) {
       expect(await screen.findByText(titulo)).toBeInTheDocument();
     }
   });
