@@ -89,6 +89,51 @@ function esperarRepintado() {
 }
 
 /**
+ * Calcula dónde debe caer cada salto de página del PDF para que ninguna
+ * sección (tarjeta, gráfico o tabla) quede partida entre dos páginas.
+ *
+ * En vez de avanzar en incrementos fijos de `altoPagina` (como antes), si
+ * el límite de una página cae DENTRO de una sección, el corte se adelanta
+ * al inicio de esa sección -- esa sección completa pasa entera a la
+ * siguiente página. Si una sola sección es más alta que una página
+ * completa, no hay forma de evitar el corte y se divide donde alcanza.
+ *
+ * @param {Array<{inicio: number, fin: number}>} limites - posición (en mm,
+ * mismas unidades que `altoPagina`/`altoTotal`) de cada sección dentro de
+ * la imagen completa del dashboard.
+ * @param {number} altoPagina - alto de una página del PDF, en mm.
+ * @param {number} altoTotal - alto de la imagen completa del dashboard, en mm.
+ * @returns {number[]} los puntos de corte, de 0 a `altoTotal` inclusive.
+ */
+function calcularSaltosDePagina(limites, altoPagina, altoTotal) {
+    const saltos = [0];
+    let actual = 0;
+
+    while (actual < altoTotal - 0.01) {
+        const limitePagina = actual + altoPagina;
+        if (limitePagina >= altoTotal) {
+            saltos.push(altoTotal);
+            break;
+        }
+
+        const seccionCruzada = limites.find(
+            ({ inicio, fin }) => inicio < limitePagina - 0.01 && fin > limitePagina + 0.01
+        );
+        let corte = seccionCruzada ? seccionCruzada.inicio : limitePagina;
+        if (corte <= actual + 0.01) {
+            // La sección es más alta que una página completa: no se puede
+            // evitar el corte, se divide donde alcanza.
+            corte = limitePagina;
+        }
+
+        saltos.push(corte);
+        actual = corte;
+    }
+
+    return saltos;
+}
+
+/**
  * Contenido de tooltip para los gráficos de distribución (hora/franja/día
 
  * de la semana): además de las series que ya dibuja Recharts (exitosos,
@@ -371,9 +416,21 @@ export default function KpisDashboard() {
         // desbordarse.
         element.classList.add('kpis-pdf-compacto');
 
-        try {
+               try {
             await esperarRepintado();
 
+            // Posición (en px CSS, antes de escalar) de cada sección que no
+            // debe partirse entre dos páginas, relativa al propio elemento
+            // capturado -- se mide ANTES de generar el canvas, con el DOM ya
+            // en su estado final (modo compacto, controles ocultos).
+            const rectRaiz = element.getBoundingClientRect();
+            const alturaTotalPx = element.scrollHeight;
+            const limitesSeccionPx = Array.from(
+                element.querySelectorAll('.kpis-resumen-panel, .kpis-card')
+            ).map((seccion) => {
+                const rect = seccion.getBoundingClientRect();
+                return { inicio: rect.top - rectRaiz.top, fin: rect.bottom - rectRaiz.top };
+            });
 
             const fondoActual = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
 
@@ -389,24 +446,26 @@ export default function KpisDashboard() {
             const altoPagina = pdf.internal.pageSize.getHeight();
             const altoImagen = (canvas.height * anchoPdf) / canvas.width;
 
-            let alturaRestante = altoImagen;
-            let posicionY = 0;
+            // Convierte los límites de cada sección de px CSS a mm del PDF,
+            // con la misma proporción que ya usa el resto de la imagen.
+            const pxAMm = altoImagen / alturaTotalPx;
+            const limitesSeccionMm = limitesSeccionPx.map(({ inicio, fin }) => ({
+                inicio: inicio * pxAMm,
+                fin: fin * pxAMm,
+            }));
 
-            pdf.addImage(imgData, 'PNG', 0, posicionY, anchoPdf, altoImagen);
-            alturaRestante -= altoPagina;
-
-            while (alturaRestante > 0) {
-                posicionY = alturaRestante - altoImagen;
-                pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, posicionY, anchoPdf, altoImagen);
-                alturaRestante -= altoPagina;
+            const saltos = calcularSaltosDePagina(limitesSeccionMm, altoPagina, altoImagen);
+            for (let indice = 0; indice < saltos.length - 1; indice += 1) {
+                if (indice > 0) pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, -saltos[indice], anchoPdf, altoImagen);
             }
+
 
             const nombreArchivo = `Reporte_Handovers_${startDate}_al_${endDate}.pdf`;
             pdf.save(nombreArchivo);
 
-            // Guarda una entrada en el historial (HU-010, Paso 13). No se
-            // espera ni bloquea la descarga del PDF por esto -- si falla
+            // Guarda una entrada en el historial .
+            //  No se espera ni bloquea la descarga del PDF por esto -- si falla
             // (ej. sin conexión al backend en ese instante), el usuario ya
             // tiene su PDF de todas formas.
             guardarReporteHistorial({
