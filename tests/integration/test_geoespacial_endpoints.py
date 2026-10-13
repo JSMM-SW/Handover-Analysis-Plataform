@@ -8,6 +8,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.main import app
 from app.modules.visualizacion_geoespacial.router import get_repository
+from app.modules.visualizacion_temporal.detector import Medicion, detectar_handovers
 from app.shared.db.database import get_db
 
 
@@ -22,6 +23,12 @@ def geo_client():
 
         def sheets(self, key):
             return ["Datos 1", None]
+
+        def handovers(self, keys):
+            return []
+
+        def available_days(self, keys):
+            return [{"fecha": "2026-05-05", "n_mediciones": 1}]
 
         def measurements(self, keys, sheet, start, end):
             calls.append((keys, sheet, start, end))
@@ -43,6 +50,17 @@ def test_serialization_and_ecuador_time(geo_client):
     assert calls[0][2].astimezone(timezone.utc).hour == 13
 
 
+def test_available_dates_and_daily_hour_window(geo_client):
+    client, params, _ = geo_client
+    response = client.get('/api/v1/geoespacial/disponibilidad', params={'execution_id': params['execution_id']})
+    assert response.status_code == 200
+    assert response.json() == [{"fecha": "2026-05-05", "n_mediciones": 1}]
+    for start, expected in [('08:00:00', 1), ('09:00:00', 0)]:
+        response = client.get('/api/v1/geoespacial/mediciones', params=params | {'hora_inicio': start, 'hora_fin': '09:59:59'})
+        assert response.status_code == 200
+        assert response.json()['total'] == expected
+
+
 def test_csv_without_sheet_or_rsrp(geo_client):
     client, params, calls = geo_client
     response = client.get(f"/api/v1/geoespacial/ejecuciones/{params['execution_id']}/hojas")
@@ -60,6 +78,7 @@ def test_csv_without_sheet_or_rsrp(geo_client):
     {"desde": "2026-05-06T00:00:00Z", "hasta": "2026-05-05T00:00:00Z"},
     {"bbox": "1,2,3"}, {"bbox": "nan,0,1,2"}, {"bbox": "10,0,5,2"},
     {"tecnologia": 4}, {"cell_id": 0},
+    {"hora_inicio": "09:00", "hora_fin": "08:00"},
 ])
 def test_invalid_filters_rejected_before_query(geo_client, filters):
     client, params, calls = geo_client
@@ -111,6 +130,9 @@ def test_radio_base_estimates_are_serialized_for_each_selected_session():
         def execution(self, key):
             return object() if key in ids else None
 
+        def handovers(self, keys):
+            return []
+
         def measurements(self, keys, sheet, start, end):
             return [SimpleNamespace(
                 id_registro=uuid4(), execution_id=key,
@@ -135,5 +157,38 @@ def test_radio_base_estimates_are_serialized_for_each_selected_session():
             filtered = client.get('/api/v1/geoespacial/mediciones', params=params + [('tecnologia', '2')])
             assert filtered.status_code == 200
             assert filtered.json()['radios_base'] == []
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+
+def test_handover_without_gps_is_counted_in_api_but_not_mapped():
+    session_id = uuid4()
+    rows = [SimpleNamespace(id_registro=uuid4(), execution_id=session_id,
+                            timestamp_medicion=datetime(2026, 5, 5, 13, 0, index, tzinfo=timezone.utc),
+                            cell_id=10 if index < 2 else 20, node_id=100, tecnologia=1,
+                            latitud=-0.2 if index < 2 else None, longitud=-78.5 if index < 2 else None,
+                            hoja_origen=None) for index in range(4)]
+
+    class Repository:
+        def execution(self, key):
+            return object() if key == session_id else None
+
+        def measurements(self, keys, sheet, start, end):
+            return rows
+
+        def handovers(self, keys):
+            return detectar_handovers([Medicion(id_medicion=str(row.id_registro), sesion_id=str(session_id),
+                                               timestamp_medicion=row.timestamp_medicion,
+                                               cid=row.cell_id, node_id=row.node_id, tech='LTE') for row in rows])
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        with TestClient(app) as client:
+            response = client.get('/api/v1/geoespacial/mediciones', params={'execution_id': str(session_id)})
+        assert response.status_code == 200
+        data = response.json()
+        assert data['total_handovers'] == data['handovers_sin_ubicacion'] == 1
+        assert data['handovers_con_ubicacion'] == 0
+        assert data['handovers'] == []
     finally:
         app.dependency_overrides.pop(get_repository, None)

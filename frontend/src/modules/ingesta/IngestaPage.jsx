@@ -4,19 +4,26 @@ import { sessionName } from '../../shared/sessionNames';
 import './IngestaPage.css';
 
 const API_BASE = "http://localhost:8000/api/v1";
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const POLL_MAX_FAILURES = 5;
+const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 
-const PIPELINE_STEPS = [
-    { key: "select", label: "Archivo seleccionado" },
-    { key: "validate_file", label: "Validando archivo" },
+const MSG_CANCELLED = "Procesamiento cancelado. No se guardó ningún dato.";
+const MSG_DISCARDED = "Descartado de la cola. No se subió ni se procesó.";
+
+// Etapas reales que informa el backend en GET /status (campo `etapa`), en orden.
+const BACKEND_STAGES = [
+    { key: "en_cola", label: "En cola" },
     { key: "extract", label: "Extrayendo datos" },
-    { key: "validate_data", label: "Validando información" },
+    { key: "validate", label: "Validando información" },
     { key: "clean", label: "Limpiando datos" },
     { key: "normalize", label: "Normalizando datos" },
     { key: "structure", label: "Generando dataset" },
-    { key: "done", label: "Procesamiento completado" },
+    { key: "load", label: "Guardando en la base de datos" },
+    { key: "verify", label: "Verificando la carga" },
 ];
 
-/** Ícono de visto (paso completado). */
 function IconCheck() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -25,17 +32,6 @@ function IconCheck() {
     );
 }
 
-/** Ícono de equis (paso fallido). */
-function IconCross() {
-    return (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-        </svg>
-    );
-}
-
-/** Ícono de subida (zona para arrastrar archivos). */
 function IconUpload() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -45,7 +41,6 @@ function IconUpload() {
     );
 }
 
-/** Ícono de alerta (mensaje de error). */
 function IconAlert() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -56,7 +51,6 @@ function IconAlert() {
     );
 }
 
-/** Ícono de descarga (botón del dataset limpio). */
 function IconDownload() {
     return (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -66,232 +60,320 @@ function IconDownload() {
     );
 }
 
-/**
- * Convierte un tamaño en bytes a un texto legible (B, KB o MB).
- *
- * @param {number} bytes - tamaño del archivo en bytes.
- * @returns {string} tamaño formateado, ej. "12.4 KB".
- */
 function formatBytes(bytes) {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-/**
- * Genera un identificador único para un archivo seleccionado.
- *
- * @param {File} file - archivo elegido por el usuario.
- * @param {number} index - posición del archivo dentro de la selección.
- * @returns {string} identificador único.
- */
 function makeId(file, index) {
     return `${file.name}-${file.size}-${Date.now()}-${index}`;
 }
 
-/**
- * Indica si el archivo tiene una extensión soportada (.csv).
- *
- * @param {File} file - archivo elegido por el usuario.
- * @returns {boolean} true si el archivo es .csv.
- */
 function isSupportedFile(file) {
     const name = file.name.toLowerCase();
     return name.endsWith(".csv");
 }
 
-/**
- * Crea el estado inicial de un archivo en la lista de procesamiento.
- *
- * @param {File} file - archivo elegido por el usuario.
- * @param {number} index - posición del archivo dentro de la selección.
- * @returns {object} estado inicial del archivo (sin procesar).
- */
-function newItem(file, index) {
+// Misma clave que el backend (sin ruta, sin espacios en los extremos, en
+// minúsculas): dos archivos con la misma clave son el mismo archivo.
+function filenameKey(name) {
+    return name.split(/[\\/]/).pop().replace(/^ +| +$/g, "").toLowerCase();
+}
+
+// Desenlaces que no son errores del sistema ni éxitos: cada uno se muestra
+// con su propio mensaje.
+class DuplicateRejection extends Error {}   // ya cargado / repetido en la selección
+class UploadFailure extends Error {}        // no se subió (red, 413, timeout, subida incompleta)
+class NotProcessed extends Error {}         // se subió pero no se procesó (con motivo)
+class UserCancelled extends Error {}        // el usuario canceló
+class StatusUnknown extends Error {}        // se perdió la conexión durante el polling
+
+function newItem(file, index, rejection = null) {
     return {
         id: makeId(file, index),
         file,
-        isProcessing: false,
-        completedSteps: [],
-        failedStep: null,
+        phase: rejection ? "rejected" : "pending",
+        message: rejection,
+        etapa: null,
+        progreso: 0,
+        executionId: null,
+        cancelRequested: false,
         result: null,
-        error: null,
     };
 }
 
-/**
- * Página del módulo de ingesta: permite seleccionar uno o varios CSV,
- * subirlos y ejecutar el pipeline ETL, mostrando el progreso y el
- * resultado de cada archivo.
- */
+async function readJson(response) {
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+}
+
 export default function IngestaPage() {
     const [items, setItems] = useState([]);
     const [isDragging, setIsDragging] = useState(false);
+    const [isRunning, setIsRunning] = useState(false);
     const inputRef = useRef(null);
+    // Estado de control de la cola (no necesita re-render).
+    const control = useRef({ currentId: null, abort: null, cancelledIds: new Set(), cancelAll: false });
 
-    const isProcessingAny = items.some((item) => item.isProcessing);
-
-    /**
-     * Actualiza parcialmente el estado de un archivo de la lista.
-     *
-     * @param {string} id - identificador del archivo.
-     * @param {object|Function} patch - cambios a aplicar, o función que los
-     *   calcula a partir del estado actual del archivo.
-     */
     const updateItem = (id, patch) => {
         setItems((prev) =>
             prev.map((item) => (item.id === id ? { ...item, ...(typeof patch === "function" ? patch(item) : patch) } : item))
         );
     };
 
-    /**
-     * Reemplaza la selección actual por los archivos .csv recibidos.
-     *
-     * @param {FileList} fileList - archivos del input o del drag & drop.
-     */
     const addFiles = (fileList) => {
         const files = Array.from(fileList).filter(isSupportedFile);
         if (files.length === 0) return;
-        setItems(files.map((file, index) => newItem(file, index)));
+        const seen = new Set();
+        setItems(files.map((file, index) => {
+            const key = filenameKey(file.name);
+            const repeated = seen.has(key);
+            seen.add(key);
+            return newItem(
+                file,
+                index,
+                repeated ? `El archivo '${file.name}' está repetido en esta selección; solo se procesa una vez.` : null
+            );
+        }));
     };
 
-    /**
-     * Maneja la selección de archivos desde el input.
-     *
-     * @param {Event} e - evento change del input de archivos.
-     */
     const handleFileInput = (e) => addFiles(e.target.files);
 
-    /**
-     * Maneja los archivos soltados sobre la zona de carga.
-     *
-     * @param {DragEvent} e - evento drop.
-     */
     const handleDrop = (e) => {
         e.preventDefault();
         setIsDragging(false);
-        addFiles(e.dataTransfer.files);
+        if (!isRunning) addFiles(e.dataTransfer.files);
     };
 
-    /** Limpia la selección y reinicia el input de archivos. */
     const clearAll = () => {
         setItems([]);
         if (inputRef.current) inputRef.current.value = "";
     };
 
-    /**
-     * Sube el archivo al backend (POST /ingestion/upload).
-     *
-     * @param {File} file - archivo a subir.
-     * @returns {Promise<object>} metadatos del archivo almacenado.
-     * @throws {Error} si el backend rechaza el archivo.
-     */
     const uploadFile = async (file) => {
         const formData = new FormData();
         formData.append("files", file);
+        // El backend compara los bytes recibidos contra este tamaño.
+        formData.append("declared_sizes", String(file.size));
 
-        const response = await fetch(`${API_BASE}/ingestion/upload`, {
-            method: "POST",
-            body: formData,
-        });
-        const data = await response.json();
+        const abort = new AbortController();
+        control.current.abort = abort;
+        let timedOut = false;
+        const timer = setTimeout(() => { timedOut = true; abort.abort(); }, UPLOAD_TIMEOUT_MS);
+
+        let response;
+        try {
+            response = await fetch(`${API_BASE}/ingestion/upload`, { method: "POST", body: formData, signal: abort.signal });
+        } catch (err) {
+            if (timedOut) {
+                throw new UploadFailure("La subida tardó demasiado y se interrumpió. Revisa tu conexión y vuelve a intentarlo.");
+            }
+            if (err.name === "AbortError") throw new UserCancelled();
+            throw new UploadFailure("No se pudo conectar con el servidor. Revisa tu conexión y vuelve a intentarlo.");
+        } finally {
+            clearTimeout(timer);
+            control.current.abort = null;
+        }
+
+        if (response.status === 413) {
+            throw new UploadFailure("El archivo es demasiado grande para subirse.");
+        }
+        const data = await readJson(response);
         const item = Array.isArray(data) ? data[0] : null;
-        if (!response.ok || !item) {
-            throw new Error("Error desconocido al subir el archivo.");
+        // 409: todos los archivos de la carga se rechazaron por duplicado; el
+        // cuerpo trae igual el resultado por archivo.
+        if ((!response.ok && response.status !== 409) || !item) {
+            throw new UploadFailure("El servidor no pudo recibir el archivo. Vuelve a intentarlo.");
         }
         if (!item.ok) {
-            throw new Error(item.error || "Error desconocido al subir el archivo.");
+            const message = item.error || "El archivo no se pudo recibir.";
+            if (item.error_code === "duplicado" || item.error_code === "duplicado_en_seleccion") {
+                throw new DuplicateRejection(message);
+            }
+            if (item.error_code === "subida_incompleta") throw new UploadFailure(message);
+            throw new NotProcessed(message);
         }
         return item.upload;
     };
 
-    /**
-     * Ejecuta el pipeline ETL sobre un archivo ya subido (POST /ingestion/process).
-     *
-     * @param {object} uploadData - metadatos devueltos por uploadFile.
-     * @returns {Promise<object>} resultado de la ejecución del pipeline.
-     * @throws {Error} si el procesamiento falla.
-     */
-    const processFile = async (uploadData) => {
-        const response = await fetch(`${API_BASE}/ingestion/process`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                stored_filename: uploadData.stored_filename,
-                original_filename: uploadData.original_filename,
-            }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.detail || "Error desconocido al procesar el archivo.");
+    const startProcessing = async (uploadData) => {
+        let response;
+        try {
+            response = await fetch(`${API_BASE}/ingestion/process`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    stored_filename: uploadData.stored_filename,
+                    original_filename: uploadData.original_filename,
+                }),
+            });
+        } catch {
+            throw new NotProcessed("El archivo se subió, pero no se pudo iniciar el procesamiento (sin conexión con el servidor). Vuelve a intentarlo.");
         }
-        return data;
+        const data = await readJson(response);
+        if (response.status === 409) {
+            throw new DuplicateRejection(data?.detail || "El archivo ya fue cargado. No se volvió a procesar.");
+        }
+        if (!response.ok || !data?.execution_id) {
+            throw new NotProcessed(data?.detail || "El archivo se subió, pero el servidor no pudo iniciar el procesamiento.");
+        }
+        return data.execution_id;
     };
 
-    /**
-     * Sube y procesa un archivo, marcando cada paso del pipeline a medida
-     * que avanza y registrando el paso en el que falló, si falla.
-     *
-     * @param {string} id - identificador del archivo en la lista.
-     * @param {File} file - archivo a procesar.
-     */
-    const processItem = async (id, file) => {
-        updateItem(id, {
-            isProcessing: true,
-            completedSteps: ["select"],
-            failedStep: null,
-            result: null,
-            error: null,
-        });
+    // Consulta /status hasta que la ejecución deje de estar en "processing".
+    // Nunca asume éxito ni fallo: si no puede confirmar, lanza StatusUnknown.
+    const pollExecution = async (id, executionId) => {
+        const deadline = Date.now() + POLL_TIMEOUT_MS;
+        let consecutiveFailures = 0;
+        while (Date.now() < deadline) {
+            await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+            try {
+                const response = await fetch(`${API_BASE}/ingestion/status/${executionId}`);
+                const data = await readJson(response);
+                if (!response.ok || !data) throw new Error("status no disponible");
+                consecutiveFailures = 0;
+                if (data.status !== "processing") return data;
+                updateItem(id, {
+                    etapa: data.etapa,
+                    progreso: data.progreso ?? 0,
+                    cancelRequested: Boolean(data.cancel_requested),
+                });
+            } catch {
+                // Un fallo de red aislado no aborta: el procesamiento sigue en el servidor.
+                consecutiveFailures += 1;
+                if (consecutiveFailures >= POLL_MAX_FAILURES) throw new StatusUnknown();
+            }
+        }
+        throw new StatusUnknown();
+    };
 
-        const advance = (key) =>
-            updateItem(id, (item) => ({ completedSteps: [...item.completedSteps, key] }));
+    const applyFinalStatus = (id, data) => {
+        if (data.status === "completed") {
+            updateItem(id, { phase: "completed", result: data, progreso: 100, message: null });
+        } else if (data.status === "cancelled") {
+            updateItem(id, { phase: "cancelled", result: null, message: MSG_CANCELLED });
+        } else {
+            updateItem(id, {
+                phase: "failed",
+                result: data,
+                message: (data.errors && data.errors[0]) || "El archivo se subió, pero no se pudo procesar.",
+            });
+        }
+    };
+
+    const followExecution = async (id, executionId) => {
+        try {
+            applyFinalStatus(id, await pollExecution(id, executionId));
+        } catch (err) {
+            if (!(err instanceof StatusUnknown)) throw err;
+            updateItem(id, {
+                phase: "unknown",
+                message: "No se pudo confirmar el estado del procesamiento (se perdió la conexión con el servidor). El archivo puede seguir procesándose.",
+            });
+        }
+    };
+
+    const processItem = async (id, file) => {
+        const wasCancelled = () => control.current.cancelledIds.has(id);
+        control.current.currentId = id;
+        updateItem(id, { phase: "uploading", message: null, etapa: null, progreso: 0, result: null });
 
         try {
             const uploadData = await uploadFile(file);
-            advance("validate_file");
-            advance("extract");
+            if (wasCancelled()) throw new UserCancelled();
 
-            const processData = await processFile(uploadData);
-            advance("validate_data");
-            advance("clean");
-            advance("normalize");
-            advance("structure");
-            advance("done");
-
-            if (processData.status !== "completed") {
-                updateItem(id, { failedStep: "done" });
-            }
-            updateItem(id, { result: processData });
+            const executionId = await startProcessing(uploadData);
+            updateItem(id, { phase: "processing", executionId, etapa: "en_cola", progreso: 0 });
+            // Si se canceló justo mientras se creaba la ejecución, se cancela ya en el servidor.
+            if (wasCancelled()) await requestServerCancel(id, executionId);
+            await followExecution(id, executionId);
         } catch (err) {
-            updateItem(id, (item) => {
-                const nextStepIndex = PIPELINE_STEPS.findIndex(
-                    (step) => !item.completedSteps.includes(step.key)
-                );
-                return {
-                    failedStep: PIPELINE_STEPS[nextStepIndex]?.key ?? "done",
-                    error: err.message,
-                };
-            });
+            if (err instanceof UserCancelled) {
+                updateItem(id, { phase: "cancelled", message: MSG_CANCELLED });
+            } else if (err instanceof DuplicateRejection) {
+                updateItem(id, { phase: "rejected", message: err.message });
+            } else if (err instanceof UploadFailure) {
+                updateItem(id, { phase: "upload_failed", message: err.message });
+            } else if (err instanceof NotProcessed) {
+                updateItem(id, { phase: "failed", message: err.message });
+            } else {
+                updateItem(id, { phase: "failed", message: "Ocurrió un problema inesperado. Vuelve a intentarlo." });
+            }
         } finally {
-            updateItem(id, { isProcessing: false });
+            control.current.currentId = null;
         }
     };
 
-    /** Procesa todos los archivos que aún no tienen resultado. */
-    const handleProcessAll = () => {
-        items.forEach((item) => {
-            if (!item.isProcessing && !item.result) {
-                processItem(item.id, item.file);
+    const handleProcessAll = async () => {
+        if (isRunning) return;
+        control.current.cancelAll = false;
+        control.current.cancelledIds = new Set();
+        setIsRunning(true);
+        try {
+            // Uno por uno, en orden: así "Cancelar archivo actual" y "Cancelar
+            // todo" tienen un significado claro.
+            for (const item of items.filter((candidate) => candidate.phase === "pending")) {
+                if (control.current.cancelAll) {
+                    updateItem(item.id, { phase: "discarded", message: MSG_DISCARDED });
+                    continue;
+                }
+                await processItem(item.id, item.file);
             }
-        });
+        } finally {
+            setIsRunning(false);
+        }
+    };
+
+    const requestServerCancel = async (id, executionId) => {
+        updateItem(id, { cancelRequested: true });
+        try {
+            const response = await fetch(`${API_BASE}/ingestion/cancel/${executionId}`, { method: "POST" });
+            // 409: ya terminó (p. ej. "ya completada"): el polling mostrará el estado real.
+            if (!response.ok && response.status !== 409) updateItem(id, { cancelRequested: false });
+        } catch {
+            updateItem(id, { cancelRequested: false });
+        }
+    };
+
+    const cancelItem = (item) => {
+        control.current.cancelledIds.add(item.id);
+        if (item.phase === "uploading") {
+            control.current.abort?.abort();
+        } else if (item.phase === "processing" && item.executionId) {
+            requestServerCancel(item.id, item.executionId);
+        }
+    };
+
+    const currentItem = items.find((item) => item.phase === "uploading" || item.phase === "processing");
+    const pendingCount = items.filter((item) => item.phase === "pending").length;
+
+    const handleCancelCurrent = () => {
+        if (!currentItem) return;
+        if (!window.confirm(`¿Cancelar el procesamiento de '${currentItem.file.name}'? No se guardará ningún dato de este archivo.`)) return;
+        cancelItem(currentItem);
+    };
+
+    const handleCancelAll = () => {
+        if (!window.confirm("¿Cancelar todo? Se cancelará el archivo actual y se descartarán los archivos pendientes de la cola.")) return;
+        control.current.cancelAll = true;
+        if (currentItem) cancelItem(currentItem);
+    };
+
+    const handleRecheck = async (item) => {
+        updateItem(item.id, { phase: "processing", message: null });
+        await followExecution(item.id, item.executionId);
     };
 
     return (
         <div className="ingesta-page">
             <div className="ingesta-shell">
                 <header className="ingesta-header">
-                    <h2 className="ingesta-title">Carga de datos de handover</h2>
+                    <span className="ingesta-eyebrow">Módulo de ingesta</span>
+                    <h1 className="ingesta-title">Carga de datos de handover</h1>
                     <p className="ingesta-subtitle">
                         Sube uno o varios archivos CSV con mediciones de handover para
                         validarlos, limpiarlos y estructurarlos como dataset listo para análisis.
@@ -299,7 +381,7 @@ export default function IngestaPage() {
                 </header>
 
                 <section className="ingesta-card">
-                    <h3 className="ingesta-card-title">Archivos</h3>
+                    <h2 className="ingesta-card-title">Archivos</h2>
                     <p className="ingesta-card-hint">Formatos soportados: .csv — puedes seleccionar varios a la vez</p>
 
                     <label
@@ -314,7 +396,7 @@ export default function IngestaPage() {
                             accept=".csv"
                             multiple
                             onChange={handleFileInput}
-                            disabled={isProcessingAny}
+                            disabled={isRunning}
                         />
                         <span className="ingesta-dropzone-icon"><IconUpload /></span>
                         {items.length > 0 ? (
@@ -332,101 +414,137 @@ export default function IngestaPage() {
                         )}
                     </label>
 
-                    <div className="ingesta-actions">
-                        <button
-                            className="ingesta-btn"
-                            onClick={handleProcessAll}
-                            disabled={items.length === 0 || isProcessingAny}
-                        >
-                            {isProcessingAny && <span className="ingesta-spinner" />}
-                            {isProcessingAny
-                                ? "Procesando…"
-                                : `Procesar archivo${items.length > 1 ? "s" : ""}`}
-                        </button>
+                    <button
+                        className="ingesta-btn"
+                        onClick={handleProcessAll}
+                        disabled={pendingCount === 0 || isRunning}
+                    >
+                        {isRunning && <span className="ingesta-spinner" />}
+                        {isRunning
+                            ? "Procesando…"
+                            : `Procesar archivo${pendingCount > 1 ? "s" : ""}`}
+                    </button>
 
-                        {items.length > 0 && !isProcessingAny && (
-                            <button type="button" className="ingesta-btn-link" onClick={clearAll}>
-                                Quitar selección
+                    {isRunning && (
+                        <div className="ingesta-cancel-row">
+                            <button type="button" className="ingesta-btn-secondary" onClick={handleCancelCurrent} disabled={!currentItem || currentItem.cancelRequested}>
+                                {items.length > 1 ? "Cancelar archivo actual" : "Cancelar"}
                             </button>
-                        )}
-                    </div>
+                            {items.length > 1 && (
+                                <button type="button" className="ingesta-btn-secondary is-danger" onClick={handleCancelAll}>
+                                    Cancelar todo
+                                </button>
+                            )}
+                        </div>
+                    )}
+
+                    {items.length > 0 && !isRunning && (
+                        <button type="button" className="ingesta-link-btn" onClick={clearAll}>
+                            Quitar selección
+                        </button>
+                    )}
                 </section>
 
                 {items.map((item) => (
-                    <FileResultCard key={item.id} item={item} />
+                    <FileResultCard key={item.id} item={item} onRecheck={handleRecheck} />
                 ))}
             </div>
         </div>
     );
 }
 
-/**
- * Tarjeta con el progreso y el resultado del procesamiento de un archivo.
- *
- * @param {object} props
- * @param {object} props.item - estado del archivo (ver newItem).
- */
-function FileResultCard({ item }) {
-    const { file, completedSteps, failedStep, result, error } = item;
-    const hasStarted = completedSteps.length > 0 || failedStep;
+function StageList({ item }) {
+    const stageIndex = BACKEND_STAGES.findIndex((stage) => stage.key === item.etapa);
+    const steps = [
+        { key: "upload", label: "Subiendo archivo", done: item.phase !== "uploading", active: item.phase === "uploading" },
+        ...BACKEND_STAGES.slice(1).map((stage, index) => ({
+            key: stage.key,
+            label: stage.label,
+            done: item.phase === "processing" && stageIndex > index + 1,
+            active: item.phase === "processing" && stageIndex === index + 1,
+        })),
+    ];
+    return (
+        <>
+            <ul className="ingesta-steps">
+                {steps.map((step) => (
+                    <li key={step.key} className={`ingesta-step ${step.done ? "is-success" : step.active ? "is-active" : "is-pending"}`}>
+                        <span className="ingesta-step-icon">{step.done ? <IconCheck /> : null}</span>
+                        {step.label}
+                    </li>
+                ))}
+            </ul>
+            {item.phase === "processing" && (
+                <div className="ingesta-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.progreso}>
+                    <div className="ingesta-progress-bar" style={{ width: `${item.progreso}%` }} />
+                    <span className="ingesta-progress-label">
+                        {item.cancelRequested ? "Cancelando…" : `${item.progreso}%`}
+                    </span>
+                </div>
+            )}
+        </>
+    );
+}
 
-    const stepsToShow = hasStarted
-        ? PIPELINE_STEPS.filter((step, index) => {
-            const failedIndex = PIPELINE_STEPS.findIndex((s) => s.key === failedStep);
-            return failedIndex === -1 || index <= failedIndex;
-        })
-        : [];
+function Notice({ kind, title, children }) {
+    return (
+        <div className={`ingesta-alert ${kind}`} style={{ marginTop: 16 }}>
+            <span className="ingesta-alert-icon"><IconAlert /></span>
+            <div>
+                <p className="ingesta-alert-title">{title}</p>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+function FileResultCard({ item, onRecheck }) {
+    const { file, phase, message, result } = item;
+    const inProgress = phase === "uploading" || phase === "processing";
 
     return (
         <section className="ingesta-card">
             <div className="ingesta-result-header">
-                <h3 className="ingesta-file-name">{file.name}</h3>
+                <h2 className="ingesta-card-title">{file.name}</h2>
                 <span className="ingesta-dropzone-hint">{formatBytes(file.size)}</span>
             </div>
 
-            {stepsToShow.length > 0 && (
-                <ul className="ingesta-steps">
-                    {stepsToShow.map((step) => {
-                        const isDone = completedSteps.includes(step.key);
-                        const isFailed = failedStep === step.key;
-                        const state = isFailed ? "is-error" : isDone ? "is-success" : "is-pending";
-                        return (
-                            <li key={step.key} className={`ingesta-step ${state}`}>
-                                <span className="ingesta-step-icon">
-                                    {isFailed ? <IconCross /> : isDone ? <IconCheck /> : null}
-                                </span>
-                                {step.label}
-                            </li>
-                        );
-                    })}
-                </ul>
+            {inProgress && <StageList item={item} />}
+
+            {phase === "rejected" && (
+                <Notice kind="is-warning" title="Archivo no procesado"><p>{message}</p></Notice>
+            )}
+            {(phase === "cancelled" || phase === "discarded") && (
+                <Notice kind="is-neutral" title={phase === "cancelled" ? "Cancelado" : "Descartado"}><p>{message}</p></Notice>
+            )}
+            {phase === "upload_failed" && (
+                <Notice kind="is-error" title="El archivo no se subió"><p>{message}</p></Notice>
+            )}
+            {phase === "failed" && (
+                <Notice kind="is-error" title="El archivo se subió, pero no se procesó"><p>{message}</p></Notice>
+            )}
+            {phase === "unknown" && (
+                <Notice kind="is-warning" title="No se pudo confirmar el estado">
+                    <p>{message}</p>
+                    <button type="button" className="ingesta-btn-secondary" style={{ marginTop: 10 }} onClick={() => onRecheck(item)}>
+                        Volver a consultar
+                    </button>
+                </Notice>
             )}
 
-            {error && (
-                <div className="ingesta-alert is-error">
-                    <span className="ingesta-alert-icon"><IconAlert /></span>
-                    <div>
-                        <p className="ingesta-alert-title">No se pudo completar el procesamiento</p>
-                        <p>{error}</p>
-                    </div>
-                </div>
-            )}
-
-            {result && (
-                <div className="ingesta-result">
+            {/* Solo se muestra "Completado" con status=completed confirmado por el backend. */}
+            {phase === "completed" && result?.status === "completed" && (
+                <div style={{ marginTop: 16 }}>
                     <div className="ingesta-result-header">
-                        <span className={`ingesta-status-pill ${result.status === "completed" ? "is-completed" : "is-failed"}`}>
-                            {result.status === "completed" ? "Completado" : "Con errores"}
-                        </span>
-                        {result.status === "completed" && (
-                            <a
-                                className="ingesta-btn"
-                                href={`${API_BASE}/ingestion/export?execution_id=${result.execution_id}`}
-                            >
-                                <IconDownload />
-                                Descargar dataset limpio
-                            </a>
-                        )}
+                        <span className="ingesta-status-pill is-completed">Completado</span>
+                        <a
+                            className="ingesta-btn"
+                            style={{ width: "auto", marginTop: 0, padding: "8px 16px", fontSize: 13 }}
+                            href={`${API_BASE}/ingestion/export?execution_id=${result.execution_id}`}
+                        >
+                            <IconDownload />
+                            Descargar dataset limpio
+                        </a>
                     </div>
                     <p className="ingesta-result-meta">
                         {sessionName(result)}
@@ -452,26 +570,13 @@ function FileResultCard({ item }) {
                     </div>
 
                     <div className="ingesta-section">
-                        <h4 className="ingesta-section-title">Advertencias</h4>
+                        <h3 className="ingesta-section-title">Advertencias</h3>
                         {result.warnings.length === 0 ? (
                             <p className="ingesta-note is-empty">Sin advertencias</p>
                         ) : (
                             <ul className="ingesta-note-list">
                                 {result.warnings.map((warning) => (
                                     <li key={warning} className="ingesta-note is-warning">{warning}</li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-
-                    <div className="ingesta-section">
-                        <h4 className="ingesta-section-title">Errores</h4>
-                        {result.errors.length === 0 ? (
-                            <p className="ingesta-note is-empty">Sin errores</p>
-                        ) : (
-                            <ul className="ingesta-note-list">
-                                {result.errors.map((err) => (
-                                    <li key={err} className="ingesta-note is-error">{err}</li>
                                 ))}
                             </ul>
                         )}

@@ -1,19 +1,34 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import 'leaflet.heat';
 import { signalColor } from '../signalHeat';
 import SignalHeatLayer from './SignalHeatLayer';
 
-import { handoverTooltip, radioBasePopup } from '../mapPopups';
+import { handoverTooltip, measurementTooltip, radioBasePopup } from '../mapPopups';
 
-export default function MapaGeoespacial({ data, layers, onSelect, onZone, executions }) {
+export default function MapaGeoespacial({ data, layers, onSelect, executions }) {
   const host = useRef(null);
   const mapRef = useRef(null);
   const [tileError, setTileError] = useState(false);
+  // Reuse the route index when changing layers or opening a handover detail.
+  const byId = useMemo(() => new Map((data?.mediciones || []).map((point) => [point.id_registro, point])), [data]);
+  function centerData() {
+    const points = [
+      ...(data?.mediciones || []),
+      ...(data?.handovers || []),
+      ...(layers.radiosBase ? data?.radios_base || [] : []),
+    ];
+    if (!points.length) return;
+    mapRef.current.fitBounds(points.map((point) => [point.latitud, point.longitud]), {
+      padding: [40, 40], maxZoom: 16,
+    });
+  }
   useEffect(() => {
     const map = L.map(host.current, { preferCanvas: true }).setView([-0.2, -78.5], 11);
     mapRef.current = map;
+    const handoverPane = map.createPane('geo-handover-points');
+    handoverPane.style.zIndex = '450';
+    handoverPane.style.pointerEvents = 'none';
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19, crossOrigin: 'anonymous', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).on('tileerror', () => setTileError(true)).addTo(map);
@@ -27,29 +42,26 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
   }, [data]);
   useEffect(() => {
     const group = L.layerGroup().addTo(mapRef.current);
-    const points = data?.mediciones || [];
-    const byId = new Map(points.map((p) => [p.id_registro, p]));
     const events = data?.handovers || [];
     if (layers.rutas) for (const segment of data?.tramos || []) {
       L.polyline(segment.map((id) => { const p = byId.get(id); return [p.latitud, p.longitud]; }), { color: '#3b69b1', weight: 3, opacity: 0.65 }).addTo(group);
     }
-    if (layers.calor && events.length) L.heatLayer(events.map((p) => [p.latitud, p.longitud, 1]), {
-      // Keep isolated events visible at wide zooms while reserving stronger
-      // colors for overlapping events. These are display settings, not counts.
-      radius: 22, blur: 16, minOpacity: 0.4, max: 3, maxZoom: 12,
-      gradient: { 0.2: '#3066d6', 0.5: '#15bba5', 0.75: '#ffd45c', 1: '#e5504b' },
-    }).addTo(group);
     if (layers.handovers) for (const p of events) {
       const marker = L.circleMarker([p.latitud, p.longitud], { radius: 7, color: '#fff', weight: 2, fillColor: signalColor(p.rssi, 'rssi'), fillOpacity: 0.95 }).addTo(group);
-      marker.bindTooltip(handoverTooltip(p), { direction: 'top', offset: [0, -8] }).on('click', () => onSelect(p));
+      marker.bindTooltip(() => handoverTooltip(p), { direction: 'top', offset: [0, -8] }).on('click', () => onSelect(p));
     }
     if (layers.signalMetric) {
-      new SignalHeatLayer(events, layers.signalMetric).addTo(group);
-    }
-    if (layers.signalMetric || layers.calor) {
-      for (const event of events) L.circleMarker([event.latitud, event.longitud], {
+      const measurements = data?.mediciones || [];
+      new SignalHeatLayer(measurements, layers.signalMetric).addTo(group);
+      for (const point of measurements) L.circleMarker([point.latitud, point.longitud], {
         radius: 8, stroke: false, fillOpacity: 0,
-      }).bindTooltip(handoverTooltip(event, layers.signalMetric || 'handovers')).addTo(group);
+      }).bindTooltip(() => measurementTooltip(point, layers.signalMetric)).addTo(group);
+    }
+    if (layers.blackHandovers) for (const event of events) {
+      L.circleMarker([event.latitud, event.longitud], {
+        radius: 3, stroke: false, fillColor: '#000', fillOpacity: 1,
+        interactive: false, pane: 'geo-handover-points',
+      }).addTo(group);
     }
     if (layers.radiosBase) {
       // Identical uploads may yield coincident candidates. Share a marker but
@@ -89,13 +101,12 @@ export default function MapaGeoespacial({ data, layers, onSelect, onZone, execut
       }
     }
     return () => group.remove();
-  }, [data, layers, onSelect, executions]);
+  }, [data, layers, onSelect, executions, byId]);
   return <div className="geo-map-wrap">
     <div className="geo-map" ref={host} aria-label="Mapa de mediciones GPS" />
-    <button type="button" className="geo-zone-button" data-html2canvas-ignore onClick={() => {
-      const b = mapRef.current.getBounds();
-      onZone([Math.max(-180, b.getWest()), Math.max(-90, b.getSouth()), Math.min(180, b.getEast()), Math.min(90, b.getNorth())].join(','));
-    }}>Filtrar por zona visible</button>
+    <button type="button" className="geo-center-button" data-html2canvas-ignore
+      disabled={!data?.mediciones?.length && !data?.handovers?.length}
+      onClick={centerData}>Ajustar vista</button>
     {tileError && <p className="geo-tile-error" role="status">No se pudo cargar parte del mapa base. Comprueba tu conexión a Internet.</p>}
   </div>;
 }

@@ -14,12 +14,13 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     Column,
+    Computed,
     Date,
     DateTime,
     ForeignKey,
-    Identity,
     Integer,
     Numeric,
     SmallInteger,
@@ -39,14 +40,21 @@ class EtlExecution(Base):
     __tablename__ = "etl_execution"
 
     execution_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # Identity(always=True) le indica a SQLAlchemy que esta columna es
-    # GENERATED ALWAYS AS IDENTITY en Postgres: la excluye del INSERT (nunca
-    # manda un valor, ni NULL) y la lee de vuelta después de insertar. Un
-    # Column(Integer, nullable=True) simple rompía el INSERT porque
-    # SQLAlchemy sí manda NULL explícito para esos, y Postgres lo rechaza en
-    # una columna GENERATED ALWAYS.
-    sesion_label = Column(Integer, Identity(always=True), unique=True)
+    # NULL mientras la ejecución no está "completed". Lo asigna el trigger
+    # trg_etl_execution_sesion_label al pasar a "completed", dentro de la
+    # misma transacción del Load, desde la fila bloqueada de
+    # etl_sesion_contador: un rollback, fallo o cancelación no consume
+    # número, y dos cargas simultáneas no pueden repetirlo (ver schema.sql).
+    sesion_label = Column(Integer, unique=True, nullable=True)
     filename = Column(Text, nullable=False)
+    # Clave de duplicados (nombre original sin ruta, trim, minúsculas),
+    # calculada por Postgres. El índice único parcial
+    # ux_etl_execution_filename_activo impide dos ejecuciones
+    # processing/completed con la misma clave.
+    filename_clave = Column(
+        Text,
+        Computed("lower(btrim(regexp_replace(filename, '^.*[\\\\/]', '')))", persisted=True),
+    )
     processing_date = Column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
     )
@@ -68,10 +76,39 @@ class EtlExecution(Base):
         "HandoverRecordRejected", back_populates="execution", cascade="all, delete-orphan"
     )
 
+    # Migración 011. etapa/progreso/updated_at/cancel_requested se escriben y
+    # leen desde una conexión aparte en autocommit (ver ExecutionMonitor), no
+    # desde la transacción del Load.
+    etapa = Column(Text)
+    progreso = Column(SmallInteger)
+    updated_at = Column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    stored_filename = Column(Text)
+
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending','processing','completed','failed')", name="chk_status"
+            "status IN ('pending','processing','completed','failed','cancelled')",
+            name="etl_execution_status_check",
         ),
+        CheckConstraint("progreso BETWEEN 0 AND 100", name="chk_etl_execution_progreso"),
+    )
+
+
+class EtlSesionContador(Base):
+    """Fila única (id = 1) con el último `sesion_label` asignado. Solo la usa
+    el trigger trg_etl_execution_sesion_label (ver schema.sql); la aplicación
+    no la escribe directamente."""
+
+    __tablename__ = "etl_sesion_contador"
+
+    id = Column(SmallInteger, primary_key=True)
+    ultimo = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="chk_etl_sesion_contador_unica"),
+        CheckConstraint("ultimo >= 0", name="chk_etl_sesion_contador_ultimo"),
     )
 
 

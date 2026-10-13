@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -39,6 +39,8 @@ def measurements(
     hoja: str | None = Query(default=None, min_length=1),
     desde: datetime | None = None,
     hasta: datetime | None = None,
+    hora_inicio: time | None = None,
+    hora_fin: time | None = None,
     tecnologia: int | None = Query(default=None, ge=0, le=3),
     cell_id: int | None = Query(default=None, gt=0),
     bbox: str | None = Query(default=None, description="oeste,sur,este,norte en grados"),
@@ -49,6 +51,8 @@ def measurements(
             raise HTTPException(422, "Las fechas deben incluir zona horaria, por ejemplo -05:00.")
     if desde and hasta and desde > hasta:
         raise HTTPException(422, "La fecha inicial debe ser anterior o igual a la final.")
+    if hora_inicio and hora_fin and hora_inicio > hora_fin:
+        raise HTTPException(422, "La hora inicial debe ser anterior o igual a la final.")
     bounds = None
     if bbox is not None:
         try:
@@ -67,6 +71,16 @@ def measurements(
         raise HTTPException(404, "La hoja no existe en esta ejecución.")
     records = repository.measurements(execution_ids, hoja, desde, hasta)
     try:
-        return prepare_map(records, tecnologia, cell_id, bounds, desde=desde)
+        return prepare_map(records, tecnologia, cell_id, bounds, desde=desde,
+                           hora_inicio=hora_inicio, hora_fin=hora_fin,
+                           detected_events=repository.handovers(execution_ids))
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.get("/disponibilidad")
+def availability(execution_id: list[UUID] = Query(min_length=1), repository=Depends(get_repository)):
+    execution_ids = list(dict.fromkeys(execution_id))
+    if any(repository.execution(key) is None for key in execution_ids):
+        raise HTTPException(404, "La ejecución no existe.")
+    return repository.available_days(execution_ids)

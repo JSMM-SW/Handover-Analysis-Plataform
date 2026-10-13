@@ -67,7 +67,7 @@ export default function SummaryCards() {
         cargando={isLoading}
       />
       <Tarjeta
-        titulo="Radiobases"
+        titulo="Celdas observadas"
         valor={numero(data?.radiobases_involucradas)}
         detalle="celdas distintas"
         icono={<IconoAntena />}

@@ -272,7 +272,91 @@
     border: 1.5px solid var(--color-borde);
 }
 
+/* Etapa en curso (informada por el backend en GET /status) */
+.ingesta-step.is-active {
+    color: var(--color-texto);
+    font-weight: 600;
+}
+
+.ingesta-step.is-active .ingesta-step-icon {
+    border: 2px solid var(--color-primario-suave);
+    border-top-color: var(--color-primario);
+    animation: ingesta-spin 700ms linear infinite;
+}
+
+/* Avance real del procesamiento (campo `progreso` de GET /status) */
+.ingesta-progress {
+    position: relative;
+    height: 22px;
+    margin-top: 12px;
+    border-radius: 11px;
+    background: var(--color-fondo);
+    border: 1px solid var(--color-borde);
+    overflow: hidden;
+}
+
+.ingesta-progress-bar {
+    height: 100%;
+    background: var(--color-primario-suave);
+    border-right: 2px solid var(--color-primario);
+    transition: width 400ms ease;
+}
+
+.ingesta-progress-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+/* Cancelar */
+.ingesta-cancel-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.ingesta-btn-secondary {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--color-borde);
+    background: var(--color-superficie);
+    color: var(--color-texto);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.ingesta-btn-secondary:hover:not(:disabled) {
+    border-color: var(--color-texto-tenue);
+}
+
+.ingesta-btn-secondary:disabled {
+    color: var(--color-texto-debil);
+    cursor: not-allowed;
+}
+
+.ingesta-btn-secondary.is-danger {
+    border-color: var(--color-error);
+    color: var(--color-error);
+}
+
+.ingesta-link-btn {
+    margin-top: 10px;
+    background: none;
+    border: none;
+    color: var(--color-texto-debil);
+    font-size: 12.5px;
+    cursor: pointer;
+    padding: 0;
+}
+
 /* Alertas */
+
 .ingesta-alert {
     display: flex;
     gap: 12px;
@@ -298,6 +382,19 @@
     background: var(--color-error-suave);
     color: var(--color-error);
 }
+
+/* Cancelado por el usuario: ni error ni éxito. */
+.ingesta-alert.is-neutral {
+    background: var(--color-fondo);
+    color: var(--color-texto-tenue);
+    border: 1px solid var(--color-borde);
+}
+
+.ingesta-alert.is-warning {
+    background: var(--color-advertencia-suave);
+    color: var(--color-advertencia);
+}
+
 
 .ingesta-alert-title {
     font-weight: 600;

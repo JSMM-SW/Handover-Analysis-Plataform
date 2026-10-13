@@ -20,13 +20,12 @@ async function prepare(page, { brokenTiles = false, empty = false } = {}) {
     new URL(route.request().url()).pathname.endsWith('/ejecuciones') ? [
       { execution_id: 'first', sesion_label: 14, records_valid: 3 },
       { execution_id: 'second', sesion_label: 15, records_valid: 3 },
-    ] : { mediciones: empty ? [] : points, total: empty ? 0 : 3, handovers: empty ? [] : [points[1]], total_handovers: empty ? 0 : 1,
+    ] : new URL(route.request().url()).pathname.endsWith('/disponibilidad') ? [{ fecha: '2026-05-05', n_mediciones: 3, franjas: [{ inicio: '08:00', fin: '08:00' }] }] : { mediciones: empty ? [] : points, total: empty ? 0 : 3, handovers: empty ? [] : [points[1]], total_handovers: empty ? 0 : 1,
       tramos: empty ? [] : [['0', '1', '2']], radios_base: empty ? [] : [{ ...points[0], execution_id: 'first', tecnologia: 1 }], advertencias: [] },
   }));
   await page.goto('/geoespacial');
   await page.getByRole('button', { name: /Selecciona las sesiones/ }).click();
   await page.locator('.geo-session-option input').first().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText(empty ? '0' : '3');
 }
 
@@ -80,13 +79,13 @@ test('downloads PNG with visible layers, legend, and session filename in both ta
   await page.mouse.down();
   await page.mouse.move(map.x + map.width / 2 + 40, map.y + map.height / 2 + 30, { steps: 8 });
   await page.mouse.up();
-  const heat = await capture(page, testInfo, /^mapa_calor_sesion_14_.*\.png$/);
+  const heat = await capture(page, testInfo, /^mapa_calor_rssi_sesion_14_.*\.png$/);
   expect(heat.tile).toBeGreaterThan(100000);
   expect(heat.heat).toBeGreaterThan(20);
   expect(heat.purple).toBe(0);
   await page.locator('.geo-session-toggle').click();
   await page.locator('.geo-session-option input').last().check();
-  await page.getByRole('button', { name: 'Analizar sesiones', exact: true }).click();
+  await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
   await expect(page.getByRole('button', { name: 'Descargar mapa' })).toBeEnabled();
   await capture(page, testInfo, /^mapa_handovers_varias_sesiones_.*\.png$/);
 });

@@ -25,24 +25,27 @@ def test_map_tecnologia_csv_lte():
     assert map_tecnologia_csv("LTE") == 1
 
 
-def test_map_tecnologia_csv_umts():
-    assert map_tecnologia_csv("UMTS") == 2
+def test_map_tecnologia_csv_wcdma():
+    assert map_tecnologia_csv("WCDMA") == 2
 
 
-def test_map_tecnologia_csv_hspa_plus():
-    assert map_tecnologia_csv("HSPA+") == 2
+def test_map_tecnologia_csv_gsm():
+    assert map_tecnologia_csv("GSM") == 3
 
 
-def test_map_tecnologia_csv_hspa_without_plus():
-    assert map_tecnologia_csv("HSPA") == 2
-
-
-def test_map_tecnologia_csv_edge():
-    assert map_tecnologia_csv("EDGE") == 3
-
-
-def test_map_tecnologia_csv_gprs():
-    assert map_tecnologia_csv("GPRS") == 3
+def test_tecnologia_follows_tech_not_net_type():
+    """Session_41..47: net_type=HSPA con tech=LTE (band 700/1900, EARFCN,
+    rsrq y node_id presentes) es una celda LTE; tecnologia debe ser 1 y
+    net_type se conserva tal cual como dato informativo."""
+    record = normalize_record_csv({
+        "sys_time": 20260620182003, "cid": 191, "lac_tac": 33171, "arfcn": 700,
+        "net_type": "HSPA", "tech": "LTE", "lat": None, "long": None, "rssi": -114,
+        "node_id": 28953, "psc_pci": 436, "rsrq": -21, "rssnr": None, "accuracy": None,
+        "report": 0, "data_state": "CONNECTED", "call_state": "IDLE",
+    })
+    assert record["tecnologia"] == 1
+    assert record["rssi"] == -114
+    assert record["net_type"] == "HSPA"
 
 
 def test_normalize_record_csv_maps_all_fields_lte():
@@ -77,7 +80,7 @@ def test_normalize_record_csv_maps_all_fields_lte():
     assert normalized["tecnologia"] == 1
     assert normalized["latitud"] == -0.180653
     assert normalized["longitud"] == -78.467838
-    assert normalized["rssi"] == -90  # tech=LTE -> rssi va a rsrp_dbm
+    assert normalized["rssi"] == -90  # rssi se conserva tal cual, sin reparto por tech
     assert normalized["node_id"] == 28886
     assert normalized["psc_pci"] == 61
     assert normalized["rsrq"] == -15

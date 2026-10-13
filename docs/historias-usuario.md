@@ -4,15 +4,15 @@ Se construyen de forma incremental, iteración a iteración, según la metodolog
 
 ---
 
-## HU-01 — Carga de archivo Excel
+## HU-01 — Carga de archivo CSV
 
 **Descripción:**
-Como usuario de la plataforma, quiero cargar un archivo Excel con datos de handover, para que el sistema lo reciba y verifique que es un archivo válido antes de procesarlo.
+Como usuario de la plataforma, quiero cargar un archivo CSV con datos de handover (export de NetMonitor), para que el sistema lo reciba y verifique que es un archivo válido antes de procesarlo.
 
 **Criterios de aceptación:**
-- El usuario puede seleccionar un archivo `.xlsx` desde el navegador.
-- Si el archivo no tiene extensión `.xlsx`, el sistema rechaza la carga con un mensaje de error claro.
-- Si el archivo está vacío o supera el tamaño máximo configurado, el sistema lo rechaza.
+- El usuario puede seleccionar un archivo `.csv` desde el navegador.
+- Si el archivo no tiene extensión `.csv`, el sistema rechaza la carga con un mensaje de error claro.
+- Si el archivo está vacío (o solo tiene encabezado) o supera el tamaño máximo configurado, el sistema lo rechaza.
 - El archivo se envía al backend mediante una petición HTTP real a FastAPI (sin datos simulados).
 
 **Prioridad:** Alta

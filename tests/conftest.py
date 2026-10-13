@@ -2,6 +2,31 @@ import io
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _no_startup_maintenance(monkeypatch):
+    """Al arrancar, la app marca ejecuciones interrumpidas y limpia
+    data/input/ (services.startup_maintenance). Los tests que levantan la app
+    con TestClient no deben hacerlo contra la base compartida ni contra la
+    carpeta real: esas funciones se prueban aparte, con rollback y carpetas
+    temporales."""
+    from app.modules.ingesta import services
+
+    monkeypatch.setattr(services, "startup_maintenance", lambda *args, **kwargs: None)
+
+
+class NullMonitor:
+    """Monitor de avance que no escribe nada (para tests que no lo prueban)."""
+
+    def stage(self, etapa):
+        pass
+
+    def load_progress(self, sent, total):
+        pass
+
+    def close(self):
+        pass
+
+
 CSV_COLUMNS = [
     "sys_time",
     "lat",

@@ -41,7 +41,7 @@ class Measurement(BaseModel):
 class HandoverEvent(Measurement):
     registro_anterior_id: UUID
     celda_origen: int
-    nodo_origen: int
+    nodo_origen: int | None
 
 
 class RadioBaseEstimate(BaseModel):
@@ -79,6 +79,8 @@ class MapData(BaseModel):
     total: int
     handovers: list[HandoverEvent]
     total_handovers: int
+    handovers_con_ubicacion: int = 0
+    handovers_sin_ubicacion: int = 0
     advertencias: list[str]
     radios_base: list[RadioBaseEstimate] = Field(default_factory=list)
     resumen_radios_base: RadioBaseSummary = Field(default_factory=RadioBaseSummary)

@@ -10,9 +10,11 @@ función `timezone(zona, timestamp)` equivalente a la de PostgreSQL, que
 `KpisRepository._en_hora_local()` necesita y SQLite no trae integrada.
 """
 
+import re
 from datetime import date, datetime, timezone
 from uuid import uuid4
 from zoneinfo import ZoneInfo
+
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.dialects.postgresql import JSONB
@@ -46,17 +48,44 @@ def _timezone_sqlite(zona: str, valor: str | None) -> str | None:
         instante = instante.replace(tzinfo=ZoneInfo("UTC"))
     return instante.astimezone(ZoneInfo(zona)).isoformat(sep=" ")
 
+def _regexp_replace_sqlite(texto: str | None, patron: str, reemplazo: str) -> str | None:
+    """Emula `regexp_replace(texto, patron, reemplazo)` de PostgreSQL para
+    SQLite -- lo necesita `EtlExecution.filename_clave` (columna GENERATED
+    de develop) al crear la tabla. El resultado exacto no le importa a
+    ninguna prueba de kpis, solo que la función exista para que SQLite
+    pueda crear la columna generada."""
+    if texto is None:
+        return None
+    return re.sub(patron, reemplazo, texto)
+
+
+def _btrim_sqlite(texto: str | None) -> str | None:
+    """Emula `btrim(texto)` de PostgreSQL (recorta espacios en ambos
+    extremos) para SQLite -- mismo motivo que `_regexp_replace_sqlite`."""
+    if texto is None:
+        return None
+    return texto.strip()
 
 
 def _crear_motor_sqlite():
-    """Motor SQLite en memoria con la función `timezone` registrada."""
+    """Motor SQLite en memoria con las funciones `timezone`,
+    `regexp_replace` y `btrim` registradas (las dos últimas las necesita
+    la columna generada `EtlExecution.filename_clave`, agregada en el
+    merge con develop)."""
     engine = create_engine('sqlite://')
 
     @event.listens_for(engine, "connect")
-    def _registrar_timezone(conexion_dbapi, _registro):
+    def _registrar_funciones(conexion_dbapi, _registro):
         conexion_dbapi.create_function("timezone", 2, _timezone_sqlite)
+        # SQLite exige que las funciones usadas en columnas GENERATED sean
+        # deterministas (mismo resultado para los mismos argumentos) -- sin
+        # deterministic=True, rechaza la función aunque exista.
+        conexion_dbapi.create_function("regexp_replace", 3, _regexp_replace_sqlite, deterministic=True)
+        conexion_dbapi.create_function("btrim", 1, _btrim_sqlite, deterministic=True)
+
 
     return engine
+
 
 
 def test_secuencia_desempata_mismo_timestamp_por_report_index():
