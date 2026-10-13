@@ -1,8 +1,9 @@
 /**
  * Página del Módulo 2 — Visualización temporal de handovers.
  *
- * Estructura V1 (`docs/00-contexto.md`) con el sistema visual de paleta pastel
- * (`docs/11-sistema-visual.md`). El recorrido de lectura va de lo general a lo particular:
+ * Estructura V1 (`docs/00-contexto.md`). Comparte el sistema visual del resto de la plataforma
+ * (variables globales de tema en `src/index.css`). El recorrido de lectura va de lo general a lo
+ * particular:
  *
  * 1. Configuración del análisis (qué sesiones y qué parte).
  * 2. Resumen en tarjetas.
@@ -93,6 +94,10 @@ function Bienvenida() {
   );
 }
 
+/**
+ * Página principal del módulo: cabecera, panel de configuración y, cuando hay sesión elegida,
+ * el resumen, los eventos y las gráficas temporales.
+ */
 export default function VisualizacionTemporalPage() {
   const haySesion = useVisStore((e) => e.sesionIds.length > 0);
   const seleccionado = useVisStore((e) => e.handoverSeleccionadoId);
@@ -110,7 +115,8 @@ export default function VisualizacionTemporalPage() {
     <div className="vt-pagina">
       <header className="vt-pagina__cabecera">
         <div className="vt-pagina__titulo">
-          <h1>Visualización temporal de handovers</h1>
+          <h2>Visualización temporal de handovers</h2>
+          <p>Evolución de la señal y de la celda servidora a lo largo del recorrido.</p>
         </div>
 
         <div className="vt-pagina__acciones">

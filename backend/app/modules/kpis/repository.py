@@ -4,15 +4,30 @@ Repositorio de acceso a datos del módulo de KPIs.
 
 from datetime import date
 
-from sqlalchemy import extract, func
+from sqlalchemy import extract, func, or_
+
 
 from sqlalchemy.orm import Session
 
-from app.shared.db.models import EtlExecution, HandoverRecord
+from app.shared.db.models import EtlExecution, HandoverRecord, KpiReporteHistorial
+
 
 
 
 import uuid
+
+# Los timestamps se guardan en UTC (ver ingesta/etl/normalizer.py). Sin
+# convertir a la zona de origen antes de extraer fecha/hora, Postgres usa
+# UTC (zona de la sesión) y desfasa todo 5 horas respecto a la hora real
+# en que ocurrió la medición en Ecuador.
+ZONA_HORARIA_ORIGEN = "America/Guayaquil"
+
+
+def _en_hora_local(columna):
+    """Convierte una columna timestamptz a la hora local de Ecuador antes
+    de extraer componentes de calendario (fecha, hora) en una consulta."""
+    return func.timezone(ZONA_HORARIA_ORIGEN, columna)
+
 
 
 # Rangos de hora [min, max] cerrados para mañana/tarde. "noche" no entra
@@ -36,7 +51,7 @@ class KpisRepository:
         general de calidad de señal, no de handovers.
         """
         consulta_base = self._db.query(HandoverRecord).filter(
-            func.date(HandoverRecord.timestamp_medicion) == fecha
+            func.date(_en_hora_local(HandoverRecord.timestamp_medicion)) == fecha
         )
 
         total = consulta_base.count()
@@ -48,69 +63,97 @@ class KpisRepository:
         return {"total": total, "total_rsrp": total_rsrp,
                 "promedio": float(promedio) if promedio is not None else None, "criticos": criticos}
 
-    def listar_sesiones(self) -> list[EtlExecution]:
-        """Lista las sesiones (ejecuciones) completadas, para poblar el
-        selector de sesión del frontend -- más recientes primero. No
+
+    def listar_sesiones(self) -> list:
+        """Lista las sesiones (ejecuciones) completadas, con la fecha/hora de
+        su primera y última medición (en hora local de Ecuador) -- para
+        poblar el selector de sesión del frontend y permitirle ajustar la
+        ventana temporal automáticamente a lo que esa sesión realmente
+        cubre (Paso 7 del plan de refactor). Más recientes primero. No
         incluye ejecuciones fallidas: no tienen datos en handover_record.
+
+        Devuelve filas `(EtlExecution, primera_medicion, ultima_medicion)`
+        -- las dos últimas son `None` si la sesión no tiene ninguna
+        medición en handover_record (ej. un archivo procesado cuyas filas
+        se rechazaron todas en la validación).
         """
+        primera = func.min(_en_hora_local(HandoverRecord.timestamp_medicion)).label("primera_medicion")
+        ultima = func.max(_en_hora_local(HandoverRecord.timestamp_medicion)).label("ultima_medicion")
         return (
-            self._db.query(EtlExecution)
+            self._db.query(EtlExecution, primera, ultima)
+            .outerjoin(HandoverRecord, HandoverRecord.execution_id == EtlExecution.execution_id)
             .filter(EtlExecution.status == "completed")
+            .group_by(EtlExecution.execution_id)
             .order_by(EtlExecution.sesion_label.desc())
             .all()
         )
 
-    def _resolver_execution_id_por_sesion(self, sesion_label: int) -> uuid.UUID:
-        """Traduce sesion_label (identificador corto y amigable) al
-        execution_id real para poder filtrar handover_record.
 
-        Si la sesión no existe, devuelve un UUID aleatorio (que por
-        construcción no va a coincidir con ningún execution_id real) en vez
-        de lanzar un error -- el filtro simplemente no encuentra nada, y el
-        frontend ya sabe mostrar el estado "sin datos" para ese caso.
+    def _resolver_execution_ids_por_sesiones(self, sesiones: list[int]) -> list[uuid.UUID]:
+        """Traduce varios sesion_label (identificadores cortos y amigables) a
+        sus execution_id reales, para poder filtrar handover_record por
+        varias sesiones a la vez.
+
+        Las etiquetas que no existan se traducen a un UUID aleatorio cada
+        una (garantiza cero resultados para esa sesión puntual, sin afectar
+        a las demás que sí existen) en vez de lanzar un error.
         """
-        ejecucion = (
-            self._db.query(EtlExecution)
-            .filter(EtlExecution.sesion_label == sesion_label)
-            .one_or_none()
-        )
-        return ejecucion.execution_id if ejecucion else uuid.uuid4()
+        resultado = []
+        for sesion_label in sesiones:
+            ejecucion = (
+                self._db.query(EtlExecution)
+                .filter(EtlExecution.sesion_label == sesion_label)
+                .one_or_none()
+            )
+            resultado.append(ejecucion.execution_id if ejecucion else uuid.uuid4())
+        return resultado
+
+    def _condicion_franjas(self, franjas: list[str]):
+        """Arma la condición SQL (OR de rangos horarios) para una lista de
+        franjas horarias. Ver FRANJA_RANGOS_HORA para mañana/tarde; noche se
+        maneja aparte por envolver la medianoche."""
+        hora = extract("hour", _en_hora_local(HandoverRecord.timestamp_medicion))
+        condiciones = []
+        for franja in franjas:
+            if franja == "noche":
+                condiciones.append((hora >= 19) | (hora <= 5))
+            else:
+                hora_min, hora_max = FRANJA_RANGOS_HORA[franja]
+                condiciones.append(hora.between(hora_min, hora_max))
+        return or_(*condiciones)
+
 
 
     def contar_mediciones(
         self,
         fecha_inicio: date,
         fecha_fin: date,
-        tecnologia: int | None = None,
-        franja: str | None = None,
-        sesion_label: int | None = None,
+        tecnologia: list[int] | None = None,
+        franja: list[str] | None = None,
+        sesion_label: list[int] | None = None,
     ) -> int:
         """Total de mediciones (filas de handover_record) en el rango dado.
 
         Es el denominador de la tasa de handover (total_ho / total de
-        mediciones). `tecnologia` es opcional: 0=sin señal, 1=LTE/4G,
-        2=3G/UMTS. `franja` es opcional: 'manana', 'tarde' o 'noche' (ver
-        FRANJA_RANGOS_HORA) -- filtra por la hora del día de la medición,
-        no por fecha. `sesion_label` es opcional: restringe a una sola
-        carga de archivo (ver `_resolver_execution_id_por_sesion`).
+        mediciones). Los 3 filtros opcionales son listas: una selección
+        vacía o None se trata como "todas" (sin filtro), no como "ninguna".
+        A diferencia de `obtener_secuencia_completa`, aquí sí tiene sentido
+        filtrar tecnología en SQL: este total es un conteo plano, no pasa
+        por la detección de handovers.
         """
         consulta = self._db.query(func.count(HandoverRecord.id_registro)).filter(
-            func.date(HandoverRecord.timestamp_medicion).between(fecha_inicio, fecha_fin)
+            func.date(_en_hora_local(HandoverRecord.timestamp_medicion)).between(fecha_inicio, fecha_fin)
         )
-        if tecnologia is not None:
-            consulta = consulta.filter(HandoverRecord.tecnologia == tecnologia)
-        if franja is not None:
-            hora = extract("hour", HandoverRecord.timestamp_medicion)
-            if franja == "noche":
-                consulta = consulta.filter((hora >= 19) | (hora <= 5))
-            else:
-                hora_min, hora_max = FRANJA_RANGOS_HORA[franja]
-                consulta = consulta.filter(hora.between(hora_min, hora_max))
-        if sesion_label is not None:
+        if tecnologia:
+            consulta = consulta.filter(HandoverRecord.tecnologia.in_(tecnologia))
+        if franja:
+            consulta = consulta.filter(self._condicion_franjas(franja))
+        if sesion_label:
             consulta = consulta.filter(
-                HandoverRecord.execution_id == self._resolver_execution_id_por_sesion(sesion_label)
+                HandoverRecord.execution_id.in_(self._resolver_execution_ids_por_sesiones(sesion_label))
             )
         return consulta.scalar() or 0
+
 
 
 
@@ -118,15 +161,20 @@ class KpisRepository:
         self,
         fecha_inicio: date,
         fecha_fin: date,
-        tecnologia: int | None = None,
-        sesion_label: int | None = None,
+        sesion_label: list[int] | None = None,
     ) -> list[tuple]:
-        """Secuencia cronológica de mediciones del rango, con todos los
-        indicadores de señal necesarios para detectar handovers y
-        clasificarlos como exitosos/fallidos: cell_id, timestamp, rsrp_dbm,
-        rssi, rsrq, rssnr.
+        """Secuencia de mediciones del rango, con todos los indicadores de
+        señal necesarios para detectar handovers y clasificarlos:
+        (cell_id, timestamp_medicion, rsrp_dbm, rssi, rsrq, rssnr,
+        execution_id, tecnologia, report_index).
 
-        `sesion_label` es opcional: restringe a una sola carga de archivo.
+        `sesion_label` es una lista opcional (ver `contar_mediciones`).
+        `tecnologia` y `franja` NO se filtran aquí -- se aplican después de
+        detectar los eventos, en services.py (Paso 4 del plan de refactor):
+        filtrar tecnología en SQL podría quitar la medición "puente" entre
+        dos mediciones de la tecnología buscada, haciendo que la detección
+        las vea como consecutivas y arme un handover que en la realidad no
+        ocurrió directamente.
 
         Reemplaza a los antiguos `get_sequence_data_by_range`,
         `get_sequence_with_timestamps` y `get_full_sequence_data`: los tres
@@ -135,9 +183,11 @@ class KpisRepository:
         a mano; el costo de traer columnas que algún servicio no usa es
         despreciable frente a eso.
 
-        Ordenado por timestamp ascendente: ese orden es lo que le permite a
-        los servicios detectar una transición de celda comparando cada
-        registro contra el anterior.
+        Ordenado por (execution_id, timestamp_medicion, report_index): ese
+        orden agrupa automáticamente las mediciones de cada sesión de forma
+        contigua y cronológica, con desempate -- services.py solo necesita
+        detectar cuándo cambia el execution_id para saber que empezó una
+        sesión nueva, sin tener que agrupar él mismo.
         """
         consulta = self._db.query(
             HandoverRecord.cell_id,
@@ -146,11 +196,66 @@ class KpisRepository:
             HandoverRecord.rssi,
             HandoverRecord.rsrq,
             HandoverRecord.rssnr,
-        ).filter(func.date(HandoverRecord.timestamp_medicion).between(fecha_inicio, fecha_fin))
-        if tecnologia is not None:
-            consulta = consulta.filter(HandoverRecord.tecnologia == tecnologia)
-        if sesion_label is not None:
+            HandoverRecord.execution_id,
+            HandoverRecord.tecnologia,
+            HandoverRecord.report_index,
+        ).filter(func.date(_en_hora_local(HandoverRecord.timestamp_medicion)).between(fecha_inicio, fecha_fin))
+        if sesion_label:
             consulta = consulta.filter(
-                HandoverRecord.execution_id == self._resolver_execution_id_por_sesion(sesion_label)
+                HandoverRecord.execution_id.in_(self._resolver_execution_ids_por_sesiones(sesion_label))
             )
-        return consulta.order_by(HandoverRecord.timestamp_medicion.asc()).all()
+        return consulta.order_by(
+            HandoverRecord.execution_id.asc(),
+            HandoverRecord.timestamp_medicion.asc(),
+            HandoverRecord.report_index.asc(),
+        ).all()
+
+    def guardar_reporte_historial(
+        self,
+        *,
+        nombre_archivo: str,
+        fecha_inicio: date,
+        fecha_fin: date,
+        tecnologia: list[int],
+        franja: list[str],
+        sesion_label: list[int],
+        periodicidad: str,
+        periodo_seleccionado: str | None,
+        resultados: dict,
+        parametros_calculo: dict,
+    ) -> KpiReporteHistorial:
+        """Guarda una entrada del historial de reportes KPI exportados a PDF
+        (HU-010, Paso 13 del plan de refactor).
+
+        Resuelve `sesion_label` a `sesion_execution_id` (identificador
+        estable de cada sesión) reusando `_resolver_execution_ids_por_sesiones`
+        -- el llamador (services.py) nunca necesita conocer los execution_id
+        reales, solo las etiquetas cortas que ya maneja el resto del módulo.
+        """
+        reporte = KpiReporteHistorial(
+            nombre_archivo=nombre_archivo,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            tecnologia=tecnologia,
+            franja=franja,
+            sesion_execution_id=self._resolver_execution_ids_por_sesiones(sesion_label) if sesion_label else [],
+            sesion_label=sesion_label,
+            periodicidad=periodicidad,
+            periodo_seleccionado=periodo_seleccionado,
+            resultados=resultados,
+            parametros_calculo=parametros_calculo,
+        )
+        self._db.add(reporte)
+        self._db.commit()
+        self._db.refresh(reporte)
+        return reporte
+
+    def listar_historial_reportes(self, limit: int = 50) -> list[KpiReporteHistorial]:
+        """Lista las entradas del historial de reportes KPI, más recientes primero."""
+        return (
+            self._db.query(KpiReporteHistorial)
+            .order_by(KpiReporteHistorial.fecha_generacion.desc())
+            .limit(limit)
+            .all()
+        )
+

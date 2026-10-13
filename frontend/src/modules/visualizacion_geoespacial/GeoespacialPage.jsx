@@ -5,6 +5,11 @@ import SessionSelector from './components/SessionSelector';
 import FiltersPanel from './components/FiltersPanel';
 import './GeoespacialPage.css';
 
+/**
+ * Página del módulo de visualización geoespacial: permite elegir una o
+ * varias sesiones procesadas y muestra sus mediciones sobre el mapa
+ * (rutas, handovers, radios base y mapa de calor).
+ */
 export default function GeoespacialPage() {
   const [executions, setExecutions] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -25,11 +30,17 @@ export default function GeoespacialPage() {
     return () => controller.abort();
   }, []);
 
+  /**
+   * Marca o desmarca una sesión en la selección actual.
+   *
+   * @param {number|string} id - execution_id de la sesión.
+   * @param {boolean} checked - true para agregarla, false para quitarla.
+   */
   function selectSession(id, checked) {
     setSelectedIds((old) => checked ? [...old, id] : old.filter((key) => key !== id));
   }
-
   const selector = (
+
     <SessionSelector
       executions={executions}
       selectedIds={selectedIds}
@@ -40,14 +51,14 @@ export default function GeoespacialPage() {
   );
 
   return (
-    <section className="geo-page">
-      <header className="geo-heading">
+    <section className="geo-page">      <header className="geo-heading">
         <div>
           <h1>Explora tus mediciones</h1>
         </div>
       </header>
+
       {error && <p className="geo-error" role="alert">{error}</p>}
-      {!executions && !error && <p role="status">Consultando ejecuciones…</p>}
+      {!executions && !error && <p className="geo-empty" role="status">Consultando ejecuciones…</p>}
       {executions?.length === 0 && (
         <p className="geo-empty">No hay ejecuciones completadas. Procesa un archivo desde Ingesta y vuelve a Geoespacial.</p>
       )}

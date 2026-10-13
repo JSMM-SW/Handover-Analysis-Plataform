@@ -4,12 +4,16 @@
  * Aquí vive toda la lógica de las gráficas; los componentes solo montan `<ReactECharts>` con lo
  * que devuelven estos hooks (regla 5 de CLAUDE.md). Las funciones puras se exportan aparte para
  * poder probarlas sin renderizar nada.
+ *
+ * Los colores salen de `TEMA` (`utils/temaVisual.js`), que resuelve las variables globales del
+ * tema activo. Cada hook de opción incluye `useTemaActual()` en las dependencias de su `useMemo`
+ * para que la gráfica se redibuje con los colores nuevos al alternar claro/oscuro.
  */
 
 import { useMemo } from 'react';
 
 import { ETIQUETAS_RF, ETIQUETAS_TIPO_EVENTO } from '../types/index.js';
-import { ESTILO_EJE, ESTILO_TOOLTIP, TEMA } from '../utils/temaVisual.js';
+import { ESTILO_EJE, ESTILO_TOOLTIP, TEMA, useTemaActual } from '../utils/temaVisual.js';
 
 /** Fusiona el estilo común de ejes con lo propio de cada eje, sin perder los sub-objetos. */
 function eje(propio = {}) {
@@ -22,27 +26,36 @@ function eje(propio = {}) {
   };
 }
 
-/** Deslizador de zoom en azul pastel: discreto, pero con asas fáciles de agarrar. */
-const DESLIZADOR_ZOOM = {
-  type: 'slider',
-  height: 20,
-  bottom: 12,
-  borderColor: 'transparent',
-  backgroundColor: TEMA.claro,
-  fillerColor: 'rgba(127,181,218,0.18)',
-  dataBackground: {
-    lineStyle: { color: TEMA.acentoBorde, width: 1 },
-    areaStyle: { color: TEMA.acentoTenue, opacity: 0.8 },
-  },
-  selectedDataBackground: {
-    lineStyle: { color: TEMA.acento, width: 1 },
-    areaStyle: { color: TEMA.acentoBorde, opacity: 0.5 },
-  },
-  handleStyle: { color: TEMA.superficie, borderColor: TEMA.acento, borderWidth: 1.2 },
-  moveHandleStyle: { color: TEMA.acentoBorde, opacity: 0.7 },
-  emphasis: { handleStyle: { borderColor: TEMA.acentoFuerte } },
-  textStyle: { color: TEMA.textoSuave, fontSize: 10 },
-};
+/**
+ * Deslizador de zoom con el acento del tema: discreto, pero con asas fáciles de agarrar.
+ *
+ * Es una función (no una constante) para que lea `TEMA` cada vez que se arma la opción y así
+ * siga el tema activo.
+ *
+ * @returns {Object} configuración del `dataZoom` de tipo slider.
+ */
+function deslizadorZoom() {
+  return {
+    type: 'slider',
+    height: 20,
+    bottom: 12,
+    borderColor: 'transparent',
+    backgroundColor: TEMA.claro,
+    fillerColor: TEMA.acentoTenue,
+    dataBackground: {
+      lineStyle: { color: TEMA.acentoBorde, width: 1 },
+      areaStyle: { color: TEMA.acentoTenue, opacity: 0.8 },
+    },
+    selectedDataBackground: {
+      lineStyle: { color: TEMA.acento, width: 1 },
+      areaStyle: { color: TEMA.acentoBorde, opacity: 0.5 },
+    },
+    handleStyle: { color: TEMA.superficie, borderColor: TEMA.acento, borderWidth: 1.2 },
+    moveHandleStyle: { color: TEMA.acentoBorde, opacity: 0.7 },
+    emphasis: { handleStyle: { borderColor: TEMA.acentoFuerte } },
+    textStyle: { color: TEMA.textoSuave, fontSize: 10 },
+  };
+}
 
 /**
  * Eje Y de cada parámetro.
@@ -220,6 +233,9 @@ export function useOpcionTimeline({
   mostrarMarcadores = true,
   idDestacado = null,
 }) {
+  // Al cambiar el tema, `tema` cambia y el useMemo vuelve a leer los colores de `TEMA`.
+  const tema = useTemaActual();
+
   return useMemo(() => {
     const series = construirSeriesEcharts(datos, parametros);
     const marcadores = mostrarMarcadores ? construirMarcadoresHO(handovers, idDestacado) : null;
@@ -273,10 +289,13 @@ export function useOpcionTimeline({
           splitLine: { show: false },
         }),
       ],
-      dataZoom: [{ type: 'inside', throttle: 80 }, DESLIZADOR_ZOOM],
+      dataZoom: [{ type: 'inside', throttle: 80 }, deslizadorZoom()],
       series,
     };
-  }, [datos, parametros, handovers, mostrarMarcadores, idDestacado]);
+  // }, [datos, parametros, handovers, mostrarMarcadores, idDestacado, tema]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- `tema` obliga a releer los getters de TEMA al alternar claro/oscuro
+  }, [datos, parametros, handovers, mostrarMarcadores, idDestacado, tema]);
+
 }
 
 /**
@@ -294,6 +313,9 @@ export function useOpcionSecuenciaCeldas({
   mostrarMarcadores = true,
   idDestacado = null,
 }) {
+  // Al cambiar el tema, `tema` cambia y el useMemo vuelve a leer los colores de `TEMA`.
+  const tema = useTemaActual();
+
   return useMemo(() => {
     const datos = [];
     const porValor = new Map();
@@ -366,14 +388,20 @@ export function useOpcionSecuenciaCeldas({
       }),
       series: [serie],
     };
-  }, [tramos, handovers, mostrarMarcadores, idDestacado]);
+  // }, [tramos, handovers, mostrarMarcadores, idDestacado, tema]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- `tema` obliga a releer los getters de TEMA al alternar claro/oscuro
+  }, [tramos, handovers, mostrarMarcadores, idDestacado, tema]);
+
 }
 
 // ================================================================================================
 // Fase 6 — ventana PRE/POST e histograma de radiobases
 // ================================================================================================
 
-/** Sombreado de las zonas PRE y POST: azul pastel antes, verde pastel después. */
+/**
+ * Sombreado de las zonas PRE y POST: azul antes, verde después. Son colores de dato con
+ * transparencia, así que se ven igual de suaves sobre fondo claro y oscuro.
+ */
 export const SOMBREADO_VENTANA = {
   pre: 'rgba(127,181,218,0.18)',
   post: 'rgba(127,203,159,0.18)',
@@ -398,11 +426,14 @@ function rotuloZona(texto) {
  * El eje X son **segundos relativos al evento** (−5 … 0 … +5) y no la hora absoluta: para comparar
  * el antes y el después lo que importa es la distancia al traspaso, no qué hora era.
  *
- * El fondo se sombrea en dos tonos pastel, azul para `pre` y verde para `post`. Ese sombreado es
- * lo que hace posible de un vistazo la comparación pre/post que pide el alcance de la tesis; sin
- * él, la línea vertical en t=0 se pierde entre las curvas.
+ * El fondo se sombrea en dos tonos, azul para `pre` y verde para `post`. Ese sombreado es lo que
+ * hace posible de un vistazo la comparación pre/post que pide el alcance de la tesis; sin él, la
+ * línea vertical en t=0 se pierde entre las curvas.
  */
 export function useOpcionVentana({ datos, parametros = [] }) {
+  // Al cambiar el tema, `tema` cambia y el useMemo vuelve a leer los colores de `TEMA`.
+  const tema = useTemaActual();
+
   return useMemo(() => {
     if (!datos?.t_relativo_s?.length) return null;
 
@@ -511,7 +542,10 @@ export function useOpcionVentana({ datos, parametros = [] }) {
       ],
       series,
     };
-  }, [datos, parametros]);
+  // }, [datos, parametros, tema]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- `tema` obliga a releer los getters de TEMA al alternar claro/oscuro
+  }, [datos, parametros, tema]);
+
 }
 
 /**
@@ -566,6 +600,9 @@ export function altoHistograma(nCeldas) {
  * @param {string[]} args.rotulos  uno por celda (`rotulosCeldas`)
  */
 export function useOpcionCeldasRepetidas({ celdas = [], rotulos = [] }) {
+  // Al cambiar el tema, `tema` cambia y el useMemo vuelve a leer los colores de `TEMA`.
+  const tema = useTemaActual();
+
   return useMemo(() => {
     if (!celdas.length) return null;
 
@@ -636,7 +673,10 @@ export function useOpcionCeldasRepetidas({ celdas = [], rotulos = [] }) {
         },
       ],
     };
-  }, [celdas, rotulos]);
+  // }, [celdas, rotulos, tema]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- `tema` obliga a releer los getters de TEMA al alternar claro/oscuro
+  }, [celdas, rotulos, tema]);
+
 }
 
 /**
