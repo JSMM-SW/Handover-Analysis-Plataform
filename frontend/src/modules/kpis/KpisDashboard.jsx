@@ -770,16 +770,10 @@ export default function KpisDashboard() {
                         </div>
                     </div>
 
-                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Tabla de Periodos ({periodo})</h3>
-                            <TablaPeriodos datos={trendData} />
-                        </div>
-                    </div>
-
-                    <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
+                                        <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                                                         <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
+
                             {puntoSeleccionado && (
                                 <p className="kpis-periodo-seleccionado-hint">
                                     {loadingPeriodo ? 'Cargando datos del periodo...' : (
@@ -854,8 +848,15 @@ export default function KpisDashboard() {
                                         <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
                                         <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
                                     </ComposedChart>
-                                </ResponsiveContainer>
+                                                                </ResponsiveContainer>
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
+                        <div className="kpis-card" style={{ margin: 0 }}>
+                            <h3 className="kpis-card-title">Tabla de Periodos ({periodo})</h3>
+                            <TablaPeriodos datos={trendData} />
                         </div>
                     </div>
                 </>
