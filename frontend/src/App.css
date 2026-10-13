@@ -24,4 +24,14 @@
 }
 .app-theme-toggle:hover { background: #223f54; }
 .app-content { flex: 1; min-width: 0; background: var(--color-fondo); color: var(--color-texto); }
+@media (min-width: 761px) {
+    .app-sidebar {
+        position: sticky;
+        top: 0;
+        align-self: flex-start;
+        height: 100dvh;
+        overflow-y: auto;
+    }
+    .app-theme-toggle { flex-shrink: 0; }
+}
 @media (max-width: 760px) { .app-layout { flex-direction: column; } .app-sidebar { width: 100%; padding: 16px; } .app-sidebar p, .app-sidebar small { display: none; } .app-sidebar nav { flex-direction: row; flex-wrap: wrap; margin: 12px 0 0; } .app-theme-toggle { margin-top: 12px; } }
