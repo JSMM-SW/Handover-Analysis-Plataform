@@ -47,6 +47,32 @@ async function setup(page) {
   });
 }
 
+test('geospatial panels, calendar and map controls follow the theme toggle', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('handover-analysis-tema', 'claro'));
+  await setup(page);
+  await page.goto('/geoespacial');
+  const panel = page.locator('.geo-filter-panel');
+  await expect(panel).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await page.getByRole('button', { name: 'Modo oscuro', exact: true }).click();
+  await expect(panel).toHaveCSS('background-color', 'rgb(20, 23, 31)');
+  await expect(page.locator('.geo-heading h1')).toHaveCSS('color', 'rgb(243, 244, 246)');
+  await page.locator('.geo-session-toggle').click();
+  await expect(page.locator('.geo-session-list')).toHaveCSS('background-color', 'rgb(26, 31, 43)');
+  await page.locator('.geo-session-option input').first().check();
+  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
+  await expect(page.locator('.geo-stats > div').first()).toHaveCSS('background-color', 'rgb(20, 23, 31)');
+  await expect(page.getByRole('combobox', { name: 'Franja horaria: desde', exact: true })).toHaveCSS('color-scheme', 'dark');
+  await page.getByRole('button', { name: 'Fecha de inicio', exact: true }).click();
+  await expect(page.locator('.vt-calendario')).toHaveCSS('background-color', 'rgb(20, 23, 31)');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.leaflet-control-zoom-in')).toHaveCSS('background-color', 'rgb(20, 23, 31)');
+  await expect(page.locator('.geo-export')).toHaveCSS('color', 'rgb(243, 244, 246)');
+  await page.getByRole('button', { name: 'Modo claro', exact: true }).click();
+  await expect(panel).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.locator('.geo-stats > div').first()).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
+});
+
 test('counts all detected handovers while mapping only those with GPS', async ({ page }) => {
   await setup(page);
   await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
