@@ -510,6 +510,26 @@
     color: var(--color-texto);
 }
 
+/* Solo activa durante la captura del PDF (ver exportToPDF): obliga a la
+   tabla de periodos a caber en el ancho de la tarjeta en vez de scrollear,
+   repartiendo las columnas con table-layout: fixed. */
+.kpis-pdf-compacto .kpis-tabla-periodos-wrapper {
+    overflow-x: visible;
+}
+
+.kpis-pdf-compacto .kpis-tabla-periodos {
+    table-layout: fixed;
+    width: 100%;
+    font-size: 8px;
+    white-space: normal;
+}
+
+.kpis-pdf-compacto .kpis-tabla-periodos th,
+.kpis-pdf-compacto .kpis-tabla-periodos td {
+    padding: 3px 4px;
+    word-break: break-word;
+}
+
 
 .kpis-historial-archivo {
     font-size: 13px;

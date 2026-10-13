@@ -363,9 +363,17 @@ export default function KpisDashboard() {
         // reemplazamos por texto plano solo durante la captura.
         controles.style.display = 'none';
         resumenFiltros.style.display = 'flex';
+        // La tabla de periodos tiene demasiadas columnas para caber en el
+        // ancho de la tarjeta a su tamaño normal (queda cortada a la
+        // derecha en el PDF) -- esta clase fuerza table-layout: fixed con
+        // fuente/padding reducidos solo durante la captura, para que las
+        // columnas se repartan dentro del ancho disponible en vez de
+        // desbordarse.
+        element.classList.add('kpis-pdf-compacto');
 
         try {
             await esperarRepintado();
+
 
             const fondoActual = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
 
@@ -415,8 +423,10 @@ export default function KpisDashboard() {
         } finally {
             controles.style.display = 'flex';
             resumenFiltros.style.display = 'none';
+            element.classList.remove('kpis-pdf-compacto');
         }
     };
+
 
 
 
