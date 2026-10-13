@@ -529,11 +529,12 @@ export default function KpisDashboard() {
      * vez del nombre).
      */
     const sesionesTexto = sesionLabels.length === 0
-        ? `Todas (${sesiones.length} sesiones)`
+        ? `Todas (${sesiones.length} ${sesiones.length === 1 ? 'sesión' : 'sesiones'})`
         : sesiones
             .filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)))
             .map((sesion) => sessionName(sesion))
             .join(', ');
+
         /**
      * Punto de trendData que corresponde al periodo seleccionado con clic en
      * el gráfico "Evolución de KPIs" (Paso 10 del plan de refactor), o null
