@@ -439,7 +439,8 @@ export default function KpisDashboard() {
                 scale: 2,
             });
 
-            const imgData = canvas.toDataURL('image/png');
+            const imgData = canvas.toDataURL('image/jpeg', 0.85);
+
 
             const pdf = new jsPDF('p', 'mm', 'a4');
             const anchoPdf = pdf.internal.pageSize.getWidth();
@@ -457,7 +458,7 @@ export default function KpisDashboard() {
             const saltos = calcularSaltosDePagina(limitesSeccionMm, altoPagina, altoImagen);
             for (let indice = 0; indice < saltos.length - 1; indice += 1) {
                 if (indice > 0) pdf.addPage();
-                pdf.addImage(imgData, 'PNG', 0, -saltos[indice], anchoPdf, altoImagen);
+                pdf.addImage(imgData, 'JPEG', 0, -saltos[indice], anchoPdf, altoImagen);
             }
 
 
