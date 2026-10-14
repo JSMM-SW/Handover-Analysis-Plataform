@@ -578,7 +578,7 @@ export default function KpisDashboard() {
      * Alterna la selección de un periodo al hacer clic sobre un punto del
      * gráfico "Evolución de KPIs": un clic en un punto nuevo lo selecciona,
      * un clic sobre el mismo punto ya seleccionado lo deselecciona.
-     *
+     *>Mediciones Registradas
      * @param {object} eventoRecharts - evento de clic que entrega Recharts,
      * con `activePayload` (el/los punto(s) bajo el cursor).
      */
@@ -765,7 +765,7 @@ export default function KpisDashboard() {
                                                             <div className="kpis-row-layout">
                         <div className="kpis-card" style={{ margin: 0 }}>
                             <div className="kpis-card-header-row">
-                                <h3 className="kpis-card-title">Evolución de KPIs ({periodo})</h3>
+                                <h3 className="kpis-card-title">Evolución de KPIs ({ETIQUETAS_PERIODO[periodo]})</h3>
                                 {puntoSeleccionado && (
                                     <button type="button" className="kpis-btn-reset-periodo" onClick={limpiarSeleccionPeriodo}>
                                         Ver todo el periodo
@@ -823,7 +823,7 @@ export default function KpisDashboard() {
 
                     <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Mediciones Registradas ({periodo})</h3>
+                            <h3 className="kpis-card-title">Mediciones Registradas ({ETIQUETAS_PERIODO[periodo]})</h3>
                                                         <div style={{ height: '240px', width: '100%', marginTop: '20px' }}>
                                 <ResponsiveContainer width="100%" height="100%">
                                     <ComposedChart data={trendData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
@@ -926,7 +926,7 @@ export default function KpisDashboard() {
 
                     <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Tabla de Periodos ({periodo})</h3>
+                            <h3 className="kpis-card-title">Tabla de Periodos ({ETIQUETAS_PERIODO[periodo]})</h3>
                             <TablaPeriodos datos={trendData} />
                         </div>
                     </div>
