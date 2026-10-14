@@ -70,12 +70,33 @@ function ultimoDiaDeSemanaISO(anio, semana) {
  * relación con los datos que realmente existen.
  */
 export default function VentanaTemporalSelector({ periodo, startDate, endDate, aniosDisponibles, onChange }) {
-    const [anioInicio, setAnioInicio] = useState(() => anioDeFecha(startDate));
-    const [mesInicio, setMesInicio] = useState(() => mesDeFecha(startDate));
-    const [anioFin, setAnioFin] = useState(() => anioDeFecha(endDate));
-    const [mesFin, setMesFin] = useState(() => mesDeFecha(endDate));
+    const anioActual = new Date().getFullYear();
+    const mesActual = new Date().getMonth() + 1;
+    const [anioInicio, setAnioInicio] = useState(() => (startDate ? anioDeFecha(startDate) : anioActual));
+    const [mesInicio, setMesInicio] = useState(() => (startDate ? mesDeFecha(startDate) : mesActual));
+    const [anioFin, setAnioFin] = useState(() => (endDate ? anioDeFecha(endDate) : anioActual));
+    const [mesFin, setMesFin] = useState(() => (endDate ? mesDeFecha(endDate) : mesActual));
     const [semanaInicio, setSemanaInicio] = useState(1);
     const [semanaFin, setSemanaFin] = useState(1);
+
+    // `startDate`/`endDate` llegan vacíos en el primer render (antes de que
+    // KpisDashboard ajuste la ventana automática a las sesiones cargadas);
+    // el useState de arriba solo corre una vez al montar, así que sin este
+    // efecto anioInicio/mesInicio quedaban congelados en el valor inicial
+    // para siempre. Se sincroniza cada vez que el padre entrega fechas
+    // válidas -- incluye las que este mismo componente genera via
+    // onChange, pero eso es un no-op (misma fecha, mismo año/mes).
+    useEffect(() => {
+        if (!startDate || !endDate) return;
+        // Estado derivado de una fuente externa (startDate/endDate que
+        // llega del padre), no un efecto secundario evitable -- mismo
+        // patrón que el resto del dashboard.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAnioInicio(anioDeFecha(startDate));
+        setMesInicio(mesDeFecha(startDate));
+        setAnioFin(anioDeFecha(endDate));
+        setMesFin(mesDeFecha(endDate));
+    }, [startDate, endDate]);
 
     useEffect(() => {
         if (periodo === 'mensual') {
