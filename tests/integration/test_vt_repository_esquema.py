@@ -6,7 +6,9 @@ que hoy tiene `handover_record` como con el esquema antiguo de `develop`. Se omi
 conexión a la base de datos.
 """
 
+from datetime import time as dt_time
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import text
@@ -85,3 +87,56 @@ def test_la_tabla_de_eventos_se_lee_sin_vistas(db):
     total, filas = VisualizacionTemporalRepository(db).listar_handovers(filtros, page_size=5)
 
     assert total >= len(filas)
+
+
+def test_el_filtrado_en_memoria_coincide_con_el_where_de_la_base(db):
+    """La caché aplica los filtros en Python: deben dejar pasar exactamente las mismas filas que
+    el `WHERE` equivalente en PostgreSQL, incluida la franja horaria en la zona del usuario."""
+    sesiones = VisualizacionTemporalRepository(db).listar_sesiones()
+    if not sesiones:
+        pytest.skip("No hay sesiones del ETL cargadas")
+
+    sesion = min(sesiones, key=lambda s: s["n_mediciones"])
+    zona = ZoneInfo("America/Guayaquil")
+    medio = sesion["inicio"] + (sesion["fin"] - sesion["inicio"]) / 2
+    hora_local = medio.astimezone(zona)
+    filtros = SimpleNamespace(
+        sesion_id=str(sesion["sesion_id"]),
+        sesion_ids=[str(sesion["sesion_id"])],
+        desde=sesion["inicio"],
+        hasta=sesion["fin"],
+        hora_inicio=dt_time(hora_local.hour, 0),
+        hora_fin=dt_time(hora_local.hour, 59, 59),
+        tecnologia=list(sesion["tecnologias"][:1]),
+        zona_horaria="America/Guayaquil",
+    )
+
+    en_memoria = VisualizacionTemporalRepository(db).obtener_mediciones_filtradas(filtros)
+
+    parametros = {
+        "sesion_id": filtros.sesion_id,
+        "desde": filtros.desde,
+        "hasta": filtros.hasta,
+        "tecnologias": filtros.tecnologia,
+    }
+    condiciones = VisualizacionTemporalRepository._condiciones_de_hora(
+        filtros, "m.timestamp_medicion", parametros
+    )
+    sql = construir_sql_mediciones(db.info["columnas_etl"], {"execution_id", "sesion_label"})
+    en_base = db.execute(
+        text(
+            f"""
+            SELECT m.id_medicion::text
+              FROM ({sql}) AS m
+             WHERE m.sesion_id = :sesion_id
+               AND m.timestamp_medicion BETWEEN :desde AND :hasta
+               AND m.tech = ANY(:tecnologias)
+               AND {" AND ".join(condiciones)}
+             ORDER BY m.timestamp_medicion, m.report_index NULLS LAST
+            """
+        ),
+        parametros,
+    ).scalars().all()
+
+    assert en_memoria, "la franja elegida debería contener mediciones"
+    assert sorted(m.id_medicion for m in en_memoria) == sorted(en_base)
