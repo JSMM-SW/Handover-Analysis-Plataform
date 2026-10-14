@@ -6,14 +6,15 @@
  * enlazar el zoom con el store y mostrar los estados de carga, error y vacío.
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import ReactECharts from 'echarts-for-react';
 
 import { Cargando, ErrorConsulta, SinDatosValidos, SinResultados } from './EstadoConsulta.jsx';
 import LayerSelector from './LayerSelector.jsx';
 import LeyendaMarcadoresHO from './LeyendaMarcadoresHO.jsx';
-import { useHandovers, useSeries } from '../hooks/useDatosVT.js';
+import { useSeries, useTodosLosHandovers } from '../hooks/useDatosVT.js';
 import { useOpcionTimeline } from '../hooks/useSeriesEcharts.js';
+import { useZoomSincronizado } from '../hooks/useZoomSincronizado.js';
 import { useParametrosActivos, useVisStore } from '../store/visStore.js';
 
 const ALTO = 340;
@@ -22,24 +23,9 @@ export default function TimelineChart() {
   const parametros = useParametrosActivos();
   const mostrarMarcadores = useVisStore((e) => e.capas.marcadoresHO);
   const idDestacado = useVisStore((e) => e.handoverSeleccionadoId);
-  const rangoZoom = useVisStore((e) => e.rangoZoom);
-  const setRangoZoom = useVisStore((e) => e.setRangoZoom);
 
   const series = useSeries();
-  const handovers = useHandovers({ pageSize: 500, alcance: 'graficas' });
-
-  const referencia = useRef(null);
-  const temporizador = useRef(null);
-
-  /**
-   * Marca que el zoom lo ha provocado el propio código y no el usuario.
-   *
-   * Sin esto hay un bucle infinito que congela la pestaña: `dispatchAction({type:'dataZoom'})`
-   * emite el evento `dataZoom`, el manejador escribe `rangoZoom` en el store, el cambio del store
-   * vuelve a ejecutar el efecto, que despacha otra vez… El retardo del manejador no lo rompe,
-   * solo lo hace más lento.
-   */
-  const zoomProgramatico = useRef(false);
+  const handovers = useTodosLosHandovers({ alcance: 'graficas' });
 
   const eventos = useMemo(() => handovers.data?.items ?? [], [handovers.data]);
 
@@ -51,63 +37,8 @@ export default function TimelineChart() {
     idDestacado,
   });
 
-  /**
-   * Al mover el zoom se escribe el rango en el store con un pequeño retardo: sin él, arrastrar el
-   * slider dispararía un render por cada píxel.
-   */
-  const alCambiarZoom = useCallback(() => {
-    if (zoomProgramatico.current) return;
-
-    clearTimeout(temporizador.current);
-    temporizador.current = setTimeout(() => {
-      const instancia = referencia.current?.getEchartsInstance?.();
-      if (!instancia) return;
-
-      const { startValue, endValue } = instancia.getOption()?.dataZoom?.[0] ?? {};
-      if (startValue == null || endValue == null) return;
-
-      const nuevo = [
-        new Date(startValue).toISOString(),
-        new Date(endValue).toISOString(),
-      ];
-
-      // Solo se escribe si el rango cambió de verdad. Es la salvaguarda que rompe el ciclo
-      // render → setOption → evento dataZoom → store → render: al llegar el mismo rango una
-      // segunda vez, aquí se corta.
-      const actual = useVisStore.getState().rangoZoom;
-      if (actual && actual[0] === nuevo[0] && actual[1] === nuevo[1]) return;
-
-      setRangoZoom(nuevo);
-    }, 200);
-  }, [setRangoZoom]);
-
-  useEffect(() => () => clearTimeout(temporizador.current), []);
-
-  /**
-   * Aplica el rango de zoom del store (el que fija el usuario arrastrando en esta gráfica o en la
-   * secuencia de radiobases). Elegir un handover en la tabla ya no lo toca: la gráfica muestra
-   * siempre el recorrido completo salvo que el usuario haga zoom.
-   *
-   * Se aplica sobre la instancia en lugar de reconstruir la opción para no perder el estado
-   * interno del gráfico ni provocar un remontaje.
-   */
-  useEffect(() => {
-    const instancia = referencia.current?.getEchartsInstance?.();
-    if (!instancia || !rangoZoom) return;
-
-    zoomProgramatico.current = true;
-    instancia.dispatchAction({
-      type: 'dataZoom',
-      startValue: new Date(rangoZoom[0]).getTime(),
-      endValue: new Date(rangoZoom[1]).getTime(),
-    });
-
-    // Se libera en el siguiente ciclo, cuando ECharts ya ha emitido su evento.
-    const id = setTimeout(() => {
-      zoomProgramatico.current = false;
-    }, 300);
-    return () => clearTimeout(id);
-  }, [rangoZoom]);
+  // Zoom compartido con la secuencia de radiobases: rueda del ratón y deslizador inferior.
+  const { referencia, onEvents } = useZoomSincronizado(opcion);
 
   const cobertura = series.data?.cobertura ?? [];
   // Con `keepPreviousData` se sigue viendo la gráfica anterior mientras llega la nueva: se atenúa
@@ -145,7 +76,7 @@ export default function TimelineChart() {
               opts={{ renderer: 'canvas' }}
               notMerge
               lazyUpdate
-              onEvents={{ dataZoom: alCambiarZoom }}
+              onEvents={onEvents}
             />
           </div>
 
