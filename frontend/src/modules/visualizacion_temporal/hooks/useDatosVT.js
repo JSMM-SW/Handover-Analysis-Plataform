@@ -28,6 +28,7 @@ import {
   obtenerSeries,
   obtenerSeriesCeldas,
   obtenerSesiones,
+  obtenerTodosLosHandovers,
   obtenerVentanaHandover,
 } from '../api/visualizacionTemporal.api.js';
 import {
@@ -95,6 +96,29 @@ export function useHandovers({ page = 1, pageSize = 50, orden = 'asc', alcance =
     ...COMUNES,
     queryKey: ['vt', 'handovers', filtros, page, pageSize, orden],
     queryFn: ({ signal }) => obtenerHandovers(filtros, { page, pageSize, orden, signal }),
+    enabled: filtros.sesionIds.length > 0,
+  });
+}
+
+/**
+ * **Todos** los eventos de handover con los filtros activos, sin paginar.
+ *
+ * Lo usan los marcadores de las gráficas temporales y la navegación del detalle: con una página
+ * de 500, la Sesión 4 (581 eventos) se quedaba sin los últimos 81 marcadores y el detalle decía
+ * «Handover 1 de 500».
+ *
+ * @param {Object} [opciones]
+ * @param {'analisis'|'graficas'} [opciones.alcance]  igual que en `useHandovers`
+ */
+export function useTodosLosHandovers({ alcance = 'analisis' } = {}) {
+  const filtrosAnalisis = useFiltros();
+  const filtrosGraficas = useFiltrosGraficas();
+  const filtros = alcance === 'graficas' ? filtrosGraficas : filtrosAnalisis;
+
+  return useQuery({
+    ...COMUNES,
+    queryKey: ['vt', 'handovers', 'todos', filtros],
+    queryFn: ({ signal }) => obtenerTodosLosHandovers(filtros, { signal }),
     enabled: filtros.sesionIds.length > 0,
   });
 }
@@ -265,8 +289,18 @@ export function useDeteccion() {
       }
       return combinarDetecciones(resumenes, fallidas);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       reiniciarSeleccion();
+      // Primero se cancelan las consultas en vuelo: las que salieron durante la detección leyeron
+      // la tabla de eventos a medio reescribir. Sin cancelarlas, `invalidateQueries` no relanza
+      // una consulta que aún no tiene datos, sino que espera a esa misma petición, y su
+      // resultado viejo quedaba como bueno (el detalle mostraba «Handover — de 581»).
+      //
+      // Las consultas de eventos siguen activas durante la detección a propósito: así se vuelven
+      // a pedir aquí, mientras `useDetectando` aún es `true` y nadie elige un evento. Si se
+      // desactivaran, al terminar asomaría un instante la lista vieja y se elegiría un evento
+      // que ya no existe.
+      await queryClient.cancelQueries({ queryKey: ['vt'] });
       return queryClient.invalidateQueries({ queryKey: ['vt'] });
     },
   });

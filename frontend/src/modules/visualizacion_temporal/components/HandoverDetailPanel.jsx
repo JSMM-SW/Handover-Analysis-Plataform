@@ -16,7 +16,8 @@ import AyudaContextual from './AyudaContextual.jsx';
 import CampoNumero from './CampoNumero.jsx';
 import { Cargando, ErrorConsulta, SinResultados } from './EstadoConsulta.jsx';
 import { IconoFlechaDerecha, IconoFlechaIzquierda } from './Iconos.jsx';
-import { useHandovers, useVentanaHandover } from '../hooks/useDatosVT.js';
+import { sessionName } from '../../../shared/sessionNames';
+import { useTodosLosHandovers, useVentanaHandover } from '../hooks/useDatosVT.js';
 import {
   SOMBREADO_VENTANA,
   formatearFechaHora,
@@ -55,7 +56,7 @@ export default function HandoverDetailPanel() {
 
   const { data, isLoading, isError, error, refetch, isFetching, isPlaceholderData } =
     useVentanaHandover();
-  const listado = useHandovers({ pageSize: 500 });
+  const listado = useTodosLosHandovers();
 
   const eventos = useMemo(() => listado.data?.items ?? [], [listado.data]);
   const indice = eventos.findIndex((e) => e.id_evento === idSeleccionado);
@@ -114,6 +115,13 @@ export default function HandoverDetailPanel() {
             {evento.tipo_tecnologia && (
               <span className="vt-etiqueta">{evento.tipo_tecnologia}</span>
             )}
+            {/* Con varias sesiones elegidas, dice de qué recorrido es el evento. */}
+            <span
+              className="vt-etiqueta vt-etiqueta--sesion"
+              title={evento.sesion_nombre ?? undefined}
+            >
+              {sessionName(evento)}
+            </span>
             {evento.confianza === 'baja' && (
               <span className="vt-etiqueta vt-etiqueta--baja">confianza baja</span>
             )}

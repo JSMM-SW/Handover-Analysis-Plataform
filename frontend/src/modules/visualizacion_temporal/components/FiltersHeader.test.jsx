@@ -160,7 +160,7 @@ describe('carga de sesiones', () => {
     expect(screen.getAllByRole('checkbox')).toHaveLength(2);
   });
 
-  it('cada opción muestra solo el nombre de la sesión', async () => {
+  it('cada opción muestra el nombre de la sesión y, entre paréntesis, sus mediciones', async () => {
     const usuario = userEvent.setup();
     renderizar();
 
@@ -169,8 +169,23 @@ describe('carga de sesiones', () => {
     await usuario.click(boton);
 
     const opcion = screen.getByRole('checkbox', { name: /Session_S1_20260701_080000/ });
-    expect(opcion.closest('label')).toHaveTextContent(/^Session_S1_20260701_080000$/);
-    expect(screen.queryByText(/mediciones/)).not.toBeInTheDocument();
+    expect(opcion.closest('label')).toHaveTextContent(
+      /^Session_S1_20260701_080000\s*\(600 mediciones\)$/,
+    );
+    expect(screen.getByRole('checkbox', { name: /Datos 1/ }).closest('label')).toHaveTextContent(
+      '(405 mediciones)',
+    );
+  });
+
+  it('el resumen del botón sigue mostrando solo el nombre', async () => {
+    const usuario = userEvent.setup();
+    renderizar();
+
+    await elegirSesion(usuario, 'Session_S1');
+
+    expect(screen.getByRole('button', { name: 'Sesión a analizar' })).toHaveTextContent(
+      /^Session_S1_20260701_080000$/,
+    );
   });
 });
 

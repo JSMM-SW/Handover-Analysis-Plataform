@@ -472,6 +472,13 @@
   color: var(--vt-texto);
 }
 
+.vt-multiselect__cantidad {
+  margin-left: -4px;
+  font-size: 0.8rem;
+  color: var(--vt-texto-suave);
+  white-space: nowrap;
+}
+
 /* ------------------------------------------------- Calendario de días con datos */
 
 .vt-fecha {
@@ -1429,6 +1436,120 @@ fieldset:disabled .vt-segmento {
   overflow-wrap: break-word;
 }
 
+/*
+ * Botón «Por tecnología» de la tarjeta «Handovers» y su popover. z-index propio, como la ayuda
+ * «?»: el popover cae encima de la tarjeta vecina y no debe quedar tapado por ella.
+ */
+.vt-popover {
+  position: relative;
+  z-index: 46;
+  align-self: flex-start;
+}
+
+.vt-popover__disparador {
+  margin-left: -10px;
+}
+
+.vt-popover__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  min-width: 220px;
+  max-width: min(300px, 86vw);
+  padding: 12px 14px 14px;
+  border: 1px solid var(--vt-borde);
+  border-radius: 10px;
+  background: var(--vt-superficie);
+  box-shadow: var(--vt-sombra-elevada);
+  animation: vt-aparecer 140ms ease-out;
+}
+
+.vt-popover__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.vt-popover__titulo {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--vt-texto);
+}
+
+.vt-popover__subtitulo {
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  color: var(--vt-texto-suave);
+}
+
+.vt-popover__cerrar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vt-texto-suave);
+  cursor: pointer;
+  transition:
+    background-color var(--vt-transicion),
+    color var(--vt-transicion);
+}
+
+.vt-popover__cerrar:hover {
+  background: var(--vt-hundido);
+  color: var(--vt-texto);
+}
+
+.vt-popover__cerrar:focus-visible {
+  outline: 2px solid var(--vt-acento);
+  outline-offset: 1px;
+}
+
+.vt-popover__lista {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vt-popover__fila {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 6px 0;
+  border-top: 1px solid var(--vt-borde);
+  font-size: 0.82rem;
+}
+
+.vt-popover__transicion {
+  font-weight: 600;
+  color: var(--vt-texto);
+  white-space: nowrap;
+}
+
+.vt-popover__flecha {
+  margin: 0 6px;
+  color: var(--vt-texto-suave);
+}
+
+.vt-popover__total {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--vt-texto);
+}
+
 
 
 
@@ -1797,6 +1918,13 @@ fieldset:disabled .vt-segmento {
 
 .vt-etiqueta--desconocido,
 .vt-tipo-corto--desconocido { background: var(--vt-hundido); color: var(--vt-texto-suave); border-color: var(--vt-borde); }
+
+/* La sesión es contexto, no una clasificación: contorno sin relleno para no competir con el tipo. */
+.vt-etiqueta--sesion {
+  background: transparent;
+  border-color: var(--vt-borde);
+  color: var(--vt-texto-suave);
+}
 
 /* ------------------------------------------------- Paginación */
 

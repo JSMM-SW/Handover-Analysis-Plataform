@@ -32,7 +32,7 @@ export const GLOSARIO = {
     breve:
       'Momento en que el teléfono deja de usar una antena y pasa a otra, sin cortar la conexión. Ocurre al desplazarse.',
     detalle:
-      'Es como pasar el testigo en una carrera de relevos: la red decide que otra antena atenderá mejor al teléfono y le traspasa la conexión.',
+      'Es como pasar el testigo en una carrera de relevos: la red decide que otra antena atenderá mejor al teléfono y le traspasa la conexión. En la tarjeta «Handovers», el botón «Por tecnología» muestra cuántos traspasos hubo de cada tecnología de origen a cada tecnología de destino: «LTE → LTE» dentro de 4G, «LTE → GSM» de 4G a 2G.',
     grupo: 'eventos',
   },
   rsrp_dbm: {
@@ -105,9 +105,9 @@ export const GLOSARIO = {
   tasa_ho: {
     titulo: 'Handovers por minuto',
     breve:
-      'Traspasos divididos entre los minutos de recorrido. Debajo, cuántos fueron dentro de una misma tecnología (LTE: 37) y cuántos de una a otra (LTE→WCDMA: 2).',
+      'Traspasos divididos entre los minutos de recorrido. Sirve para comparar recorridos de distinta duración.',
     detalle:
-      'Los minutos son la suma de lo que dura cada sesión, no el tiempo entre una y otra. La flecha va de la tecnología de origen a la de destino.',
+      'Los minutos son la suma de lo que dura cada sesión, no el tiempo entre una y otra.',
     grupo: 'lectura',
   },
   delta: {

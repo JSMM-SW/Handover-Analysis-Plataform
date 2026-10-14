@@ -17,8 +17,12 @@ export const API_BASE =
 
 export const BASE_MODULO = `${API_BASE}/visualizacion-temporal`;
 
-/** Milisegundos antes de abandonar una petición. Las series de 24 h pueden tardar. */
-const TIMEOUT_MS = 30000;
+/**
+ * Milisegundos antes de abandonar una petición. La primera consulta de una sesión grande descarga
+ * todas sus mediciones de la base (la Sesión 4, con 86 000, tarda unos 10 s); las siguientes salen
+ * de la caché del backend y tardan alrededor de un segundo.
+ */
+export const TIMEOUT_MS = 60000;
 
 /**
  * Error de API con el mensaje ya listo para mostrar.
@@ -87,11 +91,11 @@ async function extraerMensajeDeError(respuesta) {
  * Realiza una petición al módulo y devuelve el JSON ya parseado.
  *
  * @param {string} ruta      Ruta relativa al módulo, p. ej. '/sesiones'
- * @param {{method?: string, body?: unknown, signal?: AbortSignal}} [opciones]
+ * @param {{method?: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number}} [opciones]
  */
-export async function peticion(ruta, { method = 'GET', body, signal } = {}) {
+export async function peticion(ruta, { method = 'GET', body, signal, timeoutMs = TIMEOUT_MS } = {}) {
   const controlador = new AbortController();
-  const temporizador = setTimeout(() => controlador.abort(), TIMEOUT_MS);
+  const temporizador = setTimeout(() => controlador.abort(), timeoutMs);
 
   // Se respeta la cancelación que hace TanStack Query al cambiar de filtro.
   if (signal) signal.addEventListener('abort', () => controlador.abort(), { once: true });
