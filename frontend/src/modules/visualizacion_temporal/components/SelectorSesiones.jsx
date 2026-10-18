@@ -4,13 +4,15 @@
  * Un `<select multiple>` nativo obliga a usar Ctrl+clic, algo que casi nadie descubre solo. Aquí
  * se abre una lista con casillas: un clic añade o quita una sesión, y el botón resume lo elegido.
  *
- * Cada opción muestra **solo el nombre de la sesión**. La fecha, las mediciones y los handovers
+ * Cada opción muestra el nombre de la sesión y, entre paréntesis, cuántas mediciones tiene: así se
+ * ve de antemano qué sesiones son grandes y tardarán más en analizarse. La fecha y los handovers
  * de cada una se ven después en el resumen y en el calendario de los filtros.
  */
 
 import { IconoCerrar } from './Iconos.jsx';
 import { sessionName } from '../../../shared/sessionNames';
 import { useDesplegable } from '../hooks/useInterfaz.js';
+import { formatearMediciones } from '../utils/formatoResumen.js';
 
 /**
  * @param {Object} props
@@ -90,6 +92,9 @@ export default function SelectorSesiones({
                       onChange={() => onAlternar(sesion.sesion_id)}
                     />
                     <span className="vt-multiselect__nombre">{sessionName(sesion)}</span>
+                    <span className="vt-multiselect__cantidad">
+                      ({formatearMediciones(sesion.n_mediciones)})
+                    </span>
                   </label>
                 </li>
               );

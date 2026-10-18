@@ -721,8 +721,8 @@ def _visitas(tramos: list, eje: str) -> list[_Visita]:
 
     - `celda_clave`: cada tramo es una visita a su celda.
     - `psc_pci`: tramos **seguidos** con el mismo PCI/PSC son **una sola** visita. Pasar de la
-      celda de 700 MHz a la de 850 MHz de la misma antena, con el mismo PCI, no es «volver» a
-      ese PCI: el teléfono nunca lo dejó. Así el histograma cuenta lo mismo que se ve en la
+      celda del canal 700 a la del canal 850 de la misma antena (son EARFCN, números de canal, no
+      MHz), con el mismo PCI, no es «volver» a ese PCI: el teléfono nunca lo dejó. Así el histograma cuenta lo mismo que se ve en la
       secuencia de radiobases, donde esos tramos quedan a la misma altura.
     """
     visitas: list[_Visita] = []

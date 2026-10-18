@@ -344,7 +344,15 @@ export function useOpcionSecuenciaCeldas({
 
     return {
       animation: false,
-      grid: { left: 52, right: 20, top: 16, bottom: 30 },
+      // Abajo queda sitio para el deslizador de zoom, igual que en la línea de tiempo.
+      grid: { left: 52, right: 20, top: 16, bottom: 64 },
+      // `filterMode: 'none'`: el zoom recorta el eje sin quitar puntos. Con el filtro por defecto,
+      // un tramo que empieza antes de la ventana y acaba después perdía sus dos extremos y
+      // desaparecía justo al acercarse a él.
+      dataZoom: [
+        { type: 'inside', throttle: 80, filterMode: 'none' },
+        { ...deslizadorZoom(), filterMode: 'none' },
+      ],
       tooltip: {
         ...ESTILO_TOOLTIP,
         trigger: 'axis',

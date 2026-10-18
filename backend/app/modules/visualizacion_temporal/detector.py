@@ -54,13 +54,16 @@ PARAMETROS_RF = ("rsrp_dbm", "rsrq_db", "rssnr_db", "rscp_dbm", "rssi_dbm")
 # ------------------------------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Medicion:
     """Una medición de la celda servidora, en el formato del contrato (`docs/09`).
 
     Todos los parámetros RF son opcionales: `None` significa **sin medida válida**. Nunca se usa
     0 ni el centinela 2147483647 de la aplicación, porque 0 dB es un valor físicamente posible
     y confundirlo con "sin dato" falsearía los deltas (decisión D-5).
+
+    Lleva `slots` porque el repositorio guarda sesiones enteras en memoria (decenas de miles de
+    mediciones cada una) y sin `__dict__` cada instancia ocupa bastante menos.
     """
 
     id_medicion: str
