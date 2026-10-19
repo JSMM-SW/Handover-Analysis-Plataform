@@ -510,6 +510,41 @@
     color: var(--color-texto);
 }
 
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Grupos dentro del panel de resumen (alcance / volumen de datos /
+   clasificación), separados por una línea tenue. */
+.kpis-resumen-grupo + .kpis-resumen-grupo {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-borde);
+}
+
+.kpis-resumen-subtitulo {
+    margin: 0 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-primario);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
 /* Solo activa durante la captura del PDF (ver exportToPDF): obliga a la
    tabla de periodos a caber en el ancho de la tarjeta en vez de scrollear,
    repartiendo las columnas con table-layout: fixed. */
@@ -529,7 +564,6 @@
     padding: 3px 4px;
     word-break: break-word;
 }
-
 
 .kpis-historial-archivo {
     font-size: 13px;
@@ -551,3 +585,4 @@
     font-size: 12px;
     color: var(--color-texto-tenue);
 }
+

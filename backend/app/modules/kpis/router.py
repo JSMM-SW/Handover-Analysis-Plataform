@@ -119,7 +119,7 @@ def obtener_distribucion_dia_semana(
 def obtener_tendencia(
     start_date: date,
     end_date: date,
-    periodo: Literal["diario", "semanal", "mensual", "anual"] = "diario",
+    periodo: Literal["diario", "mensual", "anual"] = "diario",
     tecnologia: list[int] | None = Query(default=None),
     franja: list[Literal["manana", "tarde", "noche"]] | None = Query(default=None),
     sesion_label: list[int] | None = Query(default=None),

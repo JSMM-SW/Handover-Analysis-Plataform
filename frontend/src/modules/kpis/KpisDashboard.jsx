@@ -535,6 +535,29 @@ export default function KpisDashboard() {
             .map((sesion) => sessionName(sesion))
             .join(', ');
 
+    /**
+     * Rango de fechas de la(s) sesión(es) elegidas en el selector de
+     * Sesión, para mostrarlo junto al propio selector -- mismo patrón que
+     * `SessionSelector.jsx` del módulo de geoespacial. Null si no hay
+     * ninguna sesión seleccionada (equivalente a "todas") o si ninguna de
+     * las elegidas tiene mediciones todavía.
+     */
+    const rangoFechasSesionTexto = (() => {
+        if (sesionLabels.length === 0) return null;
+        const relevantes = sesiones.filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)));
+        const conFechas = relevantes.filter((sesion) => sesion.primera_medicion && sesion.ultima_medicion);
+        if (conFechas.length === 0) return null;
+        const inicio = conFechas.reduce(
+            (minimo, sesion) => (sesion.primera_medicion < minimo ? sesion.primera_medicion : minimo),
+            conFechas[0].primera_medicion,
+        );
+        const fin = conFechas.reduce(
+            (maximo, sesion) => (sesion.ultima_medicion > maximo ? sesion.ultima_medicion : maximo),
+            conFechas[0].ultima_medicion,
+        );
+        return `Del ${inicio.slice(0, 10)} al ${fin.slice(0, 10)}`;
+    })();
+
         /**
      * Punto de trendData que corresponde al periodo seleccionado con clic en
      * el gráfico "Evolución de KPIs" (Paso 10 del plan de refactor), o null
@@ -578,9 +601,8 @@ export default function KpisDashboard() {
      * Alterna la selección de un periodo al hacer clic sobre un punto del
      * gráfico "Evolución de KPIs": un clic en un punto nuevo lo selecciona,
      * un clic sobre el mismo punto ya seleccionado lo deselecciona.
-     *>Mediciones Registradas
-     * @param {object} eventoRecharts - evento de clic que entrega Recharts,
-     * con `activePayload` (el/los punto(s) bajo el cursor).
+     *
+     * @param {object} eventoRecharts - evento de clic que entrega Recharts,     * con `activePayload` (el/los punto(s) bajo el cursor).
      */
                 /**
      * Selecciona el periodo clickeado en el gráfico "Evolución de KPIs".
@@ -605,6 +627,32 @@ export default function KpisDashboard() {
     /** Limpia la selección de periodo y vuelve a mostrar el rango completo. */
     const limpiarSeleccionPeriodo = () => setPeriodoSeleccionado(null);
 
+    /**
+     * Arma una función de renderizado de punto para una línea de
+     * "Evolución de KPIs": el punto del periodo seleccionado se dibuja
+     * más grande y con un anillo alrededor, para que se note cuál está
+     * elegido además del texto "Mostrando el periodo...".
+     *
+     * @param {string} color - color de relleno del punto (el mismo de la línea).
+     * @param {number} radio - radio normal del punto, sin selección.
+     * @returns {Function} función `dot` que espera Recharts.
+     */
+    const crearPuntoEvolucion = (color, radio) => (props) => {
+        const { cx, cy, payload } = props;
+        const seleccionado = puntoSeleccionado && payload.periodo === puntoSeleccionado.periodo;
+        return (
+            <circle
+                key={`punto-${payload.periodo}`}
+                cx={cx}
+                cy={cy}
+                r={seleccionado ? radio + 4 : radio}
+                fill={color}
+                stroke={seleccionado ? colorTexto : 'none'}
+                strokeWidth={seleccionado ? 2 : 0}
+            />
+        );
+    };
+
 
 
 
@@ -619,12 +667,17 @@ export default function KpisDashboard() {
                     <p className="kpis-subtitle">Monitoreo y análisis del desempeño del proceso de handover en redes móviles</p>
                 </div>
                                 <div className="kpis-controls">
-                    <MultiSelectDropdown
-                        label="Sesión"
-                        options={opcionesSesion}
-                        selected={sesionLabels}
-                        onChange={setSesionLabels}
-                    />
+                    <div className="kpis-sesion-filter">
+                        <MultiSelectDropdown
+                            label="Sesión"
+                            options={opcionesSesion}
+                            selected={sesionLabels}
+                            onChange={setSesionLabels}
+                        />
+                        {rangoFechasSesionTexto && (
+                            <p className="kpis-sesion-rango-fechas">{rangoFechasSesionTexto}</p>
+                        )}
+                    </div>
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Ventana Temporal</span>
                         <VentanaTemporalSelector
@@ -656,7 +709,7 @@ export default function KpisDashboard() {
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
                             <option value="diario">Diario</option>
-                            <option value="semanal">Semanal</option>
+                            
                             <option value="mensual">Mensual</option>
                             <option value="anual">Anual</option>
                         </select>
@@ -735,7 +788,7 @@ export default function KpisDashboard() {
                         </div>
 
                         <div className="kpis-card">
-                            <h3 className="kpis-card-title">Riesgos de Movilidad</h3>
+                            <h3 className="kpis-card-title">KPIs de Handover</h3>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Ping-Pong (HOPP)</span>
                                 <span className="kpis-stat-value highlight-orange">{formatearTasa(resumenMostrado.tasa_hopp)}</span>
@@ -783,14 +836,16 @@ export default function KpisDashboard() {
 
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+                                        <YAxis yAxisId="handovers" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+                                        <YAxis yAxisId="mediciones" orientation="right" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Mediciones', angle: 90, position: 'insideRight', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={crearPuntoEvolucion(colorExitoso, 4)} />
 
-                                        <Line type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
-                                        <Line type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={crearPuntoEvolucion(colorFallido, 4)} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={crearPuntoEvolucion(colorIndeterminado, 3)} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={crearPuntoEvolucion(colorPingPong, 3)} />
+                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={crearPuntoEvolucion(colorPrimario, 3)} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -821,27 +876,7 @@ export default function KpisDashboard() {
                         </div>
                     </div>
 
-                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Mediciones Registradas ({ETIQUETAS_PERIODO[periodo]})</h3>
-                                                        <div style={{ height: '240px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={trendData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
-                                        <Legend verticalAlign="top" height={30} iconType="circle" />
-                                        <Bar dataKey="total_mediciones" fill={colorPrimario} name="Mediciones" radius={[4, 4, 0, 0]} />
-
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                        </div>
-                    </div>
-
-                                        <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
+                    <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                                                         <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
 
