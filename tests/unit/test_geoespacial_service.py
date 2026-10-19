@@ -86,10 +86,9 @@ def test_combines_technology_cell_and_bbox_filters():
     assert [p.id_registro for p in result.mediciones] == [rows[0].id_registro]
 
 
-def test_empty_and_overflow():
+def test_empty_and_more_than_former_fifty_thousand_limit():
     assert prepare_map([]).total == 0
-    with pytest.raises(ValueError, match="50.000"):
-        prepare_map([point(0)] * 50001)
+    assert prepare_map([point(0)] * 50001).total == 50001
 
 
 def test_accepts_exactly_fifty_thousand_measurements():

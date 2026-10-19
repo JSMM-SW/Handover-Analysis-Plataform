@@ -4,7 +4,7 @@
  * Espejo exacto de `backend/app/modules/visualizacion_temporal/router.py`.
  */
 
-import { construirQuery, peticion } from './client.js';
+import { TIMEOUT_MS, construirQuery, peticion } from './client.js';
 import { zonaHoraria } from '../utils/fechas.js';
 
 /**
@@ -44,6 +44,12 @@ export function obtenerDisponibilidad(sesionIds, { signal } = {}) {
 }
 
 /**
+ * La detección recorre siempre la sesión entera (no admite rango temporal) y además reescribe sus
+ * eventos, así que se le da más margen que a una consulta.
+ */
+const TIMEOUT_DETECCION_MS = 2 * TIMEOUT_MS;
+
+/**
  * `POST /sesiones/{id}/detectar-handovers` — ejecuta la detección (HU-C2-001).
  * @returns {Promise<import('../types/index.js').ResumenDeteccion>}
  */
@@ -57,6 +63,7 @@ export function detectarHandovers(sesionId, parametros = {}, { signal } = {}) {
       recalcular: parametros.recalcular ?? true,
     },
     signal,
+    timeoutMs: TIMEOUT_DETECCION_MS,
   });
 }
 
@@ -72,6 +79,31 @@ export function obtenerHandovers(filtros, { page = 1, pageSize = 50, orden = 'as
     orden,
   });
   return peticion(`/handovers${query}`, { signal });
+}
+
+/** Eventos por página al pedirlos todos: el máximo que admite `GET /handovers`. */
+const PAGINA_MAXIMA = 500;
+
+/**
+ * `GET /handovers`, todas las páginas — los marcadores de las gráficas y la navegación del detalle
+ * necesitan **todos** los eventos, no solo los primeros 500 (la Sesión 4 tiene 581).
+ *
+ * La primera página dice cuántos hay; las demás se piden a la vez. Devuelve la misma forma que
+ * `obtenerHandovers`, con todos los eventos en `items`.
+ * @returns {Promise<import('../types/index.js').PaginaHandovers>}
+ */
+export async function obtenerTodosLosHandovers(filtros, { signal } = {}) {
+  const pedir = (page) => obtenerHandovers(filtros, { page, pageSize: PAGINA_MAXIMA, signal });
+
+  const primera = await pedir(1);
+  const paginas = Math.ceil(primera.total / PAGINA_MAXIMA);
+  if (paginas <= 1) return primera;
+
+  const resto = await Promise.all(
+    Array.from({ length: paginas - 1 }, (_, indice) => pedir(indice + 2)),
+  );
+  const items = [primera, ...resto].flatMap((pagina) => pagina.items);
+  return { ...primera, page_size: items.length, items };
 }
 
 /**

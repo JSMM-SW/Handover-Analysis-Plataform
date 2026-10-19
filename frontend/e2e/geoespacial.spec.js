@@ -18,7 +18,7 @@ test('CSV sessions load without sheet or RSSI', async ({ page }) => {
   await expect(page.getByText('Session_55_312312_23132.csv')).toHaveCount(0);
   await page.locator('.geo-session-option input').first().check();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('1');
-  await expect(page.getByText('RSSI promedio').locator('..').locator('strong')).toHaveText('—');
+  await expect(page.getByText('Número de radios base').locator('..').locator('strong')).toHaveText('0');
   const map = page.locator('.geo-map');
   const box = await map.boundingBox();
   await map.hover({ position: { x: box.width / 2, y: box.height / 2 } });
@@ -35,6 +35,10 @@ const points = [0, 1, 2].map((index) => ({
   cell_id: index === 2 ? 20 : 10, tecnologia: 1, rsrp: -85 - index * 15, rssi: -75, rsrq: -8 - index * 4, rssnr: 12, hoja_origen: 'Datos 1',
 }));
 
+const signalSample = (point) => [point.latitud, point.longitud, point.rssi ?? null,
+  point.rsrp ?? null, point.rsrq ?? null, point.rssnr ?? null,
+  point.id_registro, point.timestamp_medicion, point.cell_id];
+
 async function setup(page) {
   await page.route('**/api/v1/geoespacial/**', async (route) => {
     const url = new URL(route.request().url());
@@ -46,6 +50,39 @@ async function setup(page) {
     return route.fulfill({ json: { mediciones: filtered, total: filtered.length, handovers: filtered.length ? [{ ...points[1], celda_origen: 5, nodo_origen: 100, node_id: 200 }] : [], total_handovers: filtered.length ? 1 : 0, tramos: filtered.length > 1 ? [filtered.map((p) => p.id_registro)] : [], advertencias: ['Mapa de calor de mediciones.'] } });
   });
 }
+
+test('large analyses keep exact statistics and refine the map on zoom', async ({ page }) => {
+  await setup(page);
+  const requests = [];
+  await page.route('**/geoespacial/mediciones?**', (route) => {
+    requests.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({ json: {
+      mediciones: points, tramos: [['point-0', 'point-2']], total: 60001,
+      handovers: [], total_handovers: 3, handovers_con_ubicacion: 3, handovers_sin_ubicacion: 0,
+      mapa_resumido: true, total_radios_base: 1200, promedios: { rssi: -70, rsrp: -95, rsrq: -12, rssnr: null },
+      limites: [[-0.2, -78.5], [-0.198, -78.498]], advertencias: [],
+      senales: points.map(signalSample),
+    } });
+  });
+  await page.route('**/geoespacial/mediciones/point-1*', (route) => route.fulfill({ json: points[1] }));
+  await page.goto('/geoespacial');
+  await page.locator('.geo-session-toggle').click();
+  await page.locator('.geo-session-option input').first().check();
+  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('60.001');
+  await expect(page.getByText('Número de radios base').locator('..').locator('strong')).toHaveText('1.200');
+  await expect.poll(() => requests.some((params) => params.has('vista_bbox'))).toBe(true);
+  const zoom = Number(requests.at(-1).get('zoom'));
+  await page.locator('.leaflet-control-zoom-in').click();
+  await expect.poll(() => Number(requests.at(-1).get('zoom'))).toBeGreaterThan(zoom);
+  await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('60.001');
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  await expect(page.getByText('RSSI promedio').locator('..').locator('strong')).toHaveText('-70 dBm');
+  const box = await page.locator('.geo-map').boundingBox();
+  await page.locator('.geo-map').click({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.getByRole('heading', { name: 'Detalle de medición original' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Detalle de medición original' })).toBeFocused();
+  await expect(page.locator('.geo-detail')).toContainText('-75 dBm');
+});
 
 test('geospatial panels, calendar and map controls follow the theme toggle', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('handover-analysis-tema', 'claro'));
@@ -73,6 +110,38 @@ test('geospatial panels, calendar and map controls follow the theme toggle', asy
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
 });
 
+test('100000 individual samples contribute to heat without 100000 interactive markers', async ({ page }) => {
+  test.setTimeout(60000);
+  await setup(page);
+  const samples = Array.from({ length: 100000 }, (_, i) => [
+    points[1].latitud, points[1].longitud, i < 25000 ? -110 : -70,
+    -100, null, 0, `sample-${i}`, points[1].timestamp_medicion, 10,
+  ]);
+  await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
+    mediciones: points, total: samples.length, handovers: [], total_handovers: 0,
+    tramos: [], advertencias: [], mapa_resumido: true,
+    limites: [[-0.2, -78.5], [-0.198, -78.498]], senales: samples,
+    promedios: { rssi: -80 },
+  } }));
+  await page.goto('/geoespacial');
+  await page.locator('.geo-session-toggle').click();
+  await page.locator('.geo-session-option input').first().check();
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  const heat = page.locator('.geo-signal-heat-layer');
+  await expect(heat).toHaveCount(1);
+  await expect(heat).toHaveAttribute('data-rendering', 'false', { timeout: 20000 });
+  const pixel = await heat.evaluate((canvas) => [...canvas.getContext('2d').getImageData(
+    Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data]);
+  // All samples yield -80 dBm (green), while the first original is -110 (red).
+  expect(pixel[1]).toBeGreaterThan(pixel[0]);
+  expect(pixel[3]).toBeGreaterThan(0);
+  const box = await page.locator('.geo-map').boundingBox();
+  await page.locator('.geo-map').hover({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(page.locator('.leaflet-tooltip .geo-handover-tooltip')).toContainText('RSSI: -110 dBm');
+  await expect(page.locator('.leaflet-tooltip .geo-handover-tooltip')).not.toContainText('agrupadas');
+  await expect(page.locator('.leaflet-overlay-pane path')).toHaveCount(0);
+});
+
 test('counts all detected handovers while mapping only those with GPS', async ({ page }) => {
   await setup(page);
   await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
@@ -85,7 +154,6 @@ test('counts all detected handovers while mapping only those with GPS', async ({
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
   await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true }).locator('..').locator('strong')).toHaveText('3');
-  await expect(page.locator('.geo-handover-coverage')).toHaveText('3 handovers detectados · 1 con ubicación · 2 sin ubicación');
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
   await expect(page.locator('.geo-stats').getByText('Handovers', { exact: true }).locator('..').locator('strong')).toHaveText('3');
 });
@@ -100,7 +168,7 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
   await expect(page.getByText('Datos analizados').locator('..').locator('strong')).toHaveText('3');
-  await expect(page.getByText('RSSI promedio').locator('..').locator('strong')).toHaveText('-75 dBm');
+  await expect(page.getByText('Número de radios base').locator('..').locator('strong')).toHaveText('0');
   await expect(page.locator('.leaflet-control-zoom-in')).toBeVisible();
   const filterBox = await page.getByRole('complementary', { name: 'Filtros geoespaciales' }).boundingBox();
   const mapBox = await page.locator('.geo-map').boundingBox();
@@ -131,11 +199,11 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   await expect(signalBubble).not.toContainText('RSSNR:');
   await expect(signalBubble).not.toContainText('RSRP:');
   await page.getByRole('checkbox', { name: 'Handovers', exact: true }).check();
-  await expect(page.locator('.leaflet-geo-handover-points-pane canvas')).toBeVisible();
+  await expect(page.locator('.leaflet-geo-handover-points-pane path')).toBeVisible();
   await expect(page.getByRole('radio', { name: 'RSSI', exact: true })).toBeChecked();
   await page.getByRole('radio', { name: 'RSRQ', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'Handovers', exact: true })).toBeChecked();
-  await expect(page.locator('.leaflet-geo-handover-points-pane canvas')).toBeVisible();
+  await expect(page.locator('.leaflet-geo-handover-points-pane path')).toBeVisible();
   await page.getByRole('checkbox', { name: 'Handovers', exact: true }).uncheck();
   await expect(page.locator('.geo-signal-legend')).toContainText('RSRQ ≤ -15 dB');
   await heatMap.hover({ position: { x: heatBox.width / 2, y: heatBox.height / 2 } });
@@ -215,6 +283,40 @@ test('navigation, map, layers, detail, filters and empty state', async ({ page }
   expect(errors).toEqual([]);
 });
 
+test('black handover dots take hover priority over individual heat measurements', async ({ page }) => {
+  await setup(page);
+  await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
+    mediciones: points, total: 60001, handovers: [{ ...points[1], celda_origen: 5 }],
+    total_handovers: 1, tramos: [], advertencias: [], mapa_resumido: true,
+    limites: [[-0.2, -78.5], [-0.198, -78.498]],
+    senales: points.map(signalSample),
+  } }));
+  await page.goto('/geoespacial');
+  await page.locator('.geo-session-toggle').click();
+  await page.locator('.geo-session-option input').first().check();
+  await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).check();
+  const dot = page.locator('.leaflet-geo-handover-points-pane path');
+  await expect(dot).toHaveCount(1);
+  await dot.hover();
+  const bubble = page.locator('.leaflet-tooltip .geo-handover-tooltip');
+  await expect(bubble).toHaveCount(1);
+  await expect(bubble).toContainText('Handover 5 → 10');
+  await expect(bubble).toContainText('Fecha:');
+  await expect(bubble).toContainText('Hora: 08:00:01');
+  await expect(bubble).not.toContainText('agrupadas');
+  await expect(bubble).not.toContainText('RSSI');
+  await page.getByRole('checkbox', { name: 'Handovers', exact: true }).uncheck();
+  await expect(dot).toHaveCount(0);
+  const map = page.locator('.geo-map');
+  const box = await map.boundingBox();
+  await map.hover({ position: { x: box.width / 2, y: box.height / 2 } });
+  await expect(bubble).toHaveCount(1);
+  await expect(bubble).toContainText('Medición · Celda 10');
+  await expect(bubble).toContainText('RSSI: -75 dBm');
+  await expect(bubble).not.toContainText('agrupadas');
+});
+
 test('signal heat includes clean measurements even without handovers', async ({ page }) => {
   await setup(page);
   await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
@@ -227,6 +329,7 @@ test('signal heat includes clean measurements even without handovers', async ({ 
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
   const heat = page.locator('.geo-signal-heat-layer');
   await expect(heat).toBeVisible();
+  await expect(heat).toHaveAttribute('data-rendering', 'false');
   expect(await heat.evaluate((canvas) => {
     const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
     return pixels.some((value, index) => index % 4 === 3 && value > 0);
@@ -238,7 +341,7 @@ test('signal heat includes clean measurements even without handovers', async ({ 
   await expect(page.locator('.geo-handover-tooltip')).toContainText('RSSI: -75 dBm');
 });
 
-test('RSSI average stays identical across tabs and excludes missing values', async ({ page }) => {
+test('routes show base station totals and heat shows RSSI average excluding missing values', async ({ page }) => {
   await setup(page);
   const mediciones = points.map((point, index) => ({ ...point, rssi: [-70, -81, null][index] }));
   await page.route('**/geoespacial/mediciones?**', (route) => route.fulfill({ json: {
@@ -249,11 +352,11 @@ test('RSSI average stays identical across tabs and excludes missing values', asy
   await page.getByRole('button', { name: /Selecciona las sesiones para analizar/ }).click();
   await page.locator('.geo-session-option input').first().check();
   const average = page.locator('.geo-stats').getByText('RSSI promedio', { exact: true }).locator('..').locator('strong');
-  await expect(average).toHaveText('-75,5 dBm');
+  await expect(page.getByText('Número de radios base').locator('..').locator('strong')).toHaveText('0');
   await page.getByRole('tab', { name: 'Mapa de calor', exact: true }).click();
   await expect(average).toHaveText('-75,5 dBm');
   await page.getByRole('tab', { name: 'Mapa de rutas y handovers' }).click();
-  await expect(average).toHaveText('-75,5 dBm');
+  await expect(page.getByText('Número de radios base').locator('..').locator('strong')).toHaveText('0');
 });
 
 test('explicit Ecuador offset and layer preferences survive reload', async ({ page }) => {

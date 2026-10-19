@@ -9,6 +9,11 @@
  * además de un icono y una ayuda «?» en lenguaje llano. Muestran **solo la cifra**: las
  * micro-gráficas de tendencia que llevaban antes confundían más de lo que explicaban.
  *
+ * «Handovers» lleva además un botón «Por tecnología» que abre un popover con el reparto de los
+ * traspasos de una tecnología a otra (`HandoversPorTecnologia`). Antes ese reparto era una línea
+ * de texto («LTE: 37 · LTE→WCDMA: 2») bajo «HO / minuto», que se leía mal y no pertenecía a esa
+ * tarjeta.
+ *
  * El ping-pong no se muestra en ninguna parte de la interfaz: el backend lo sigue calculando para
  * futuras implementaciones, pero el análisis no lo tiene en cuenta.
  *
@@ -17,11 +22,22 @@
 
 import AyudaContextual from './AyudaContextual.jsx';
 import { ErrorConsulta } from './EstadoConsulta.jsx';
+import HandoversPorTecnologia from './HandoversPorTecnologia.jsx';
 import { IconoAntena, IconoHandover, IconoPulso, IconoRecorrido, IconoRitmo } from './Iconos.jsx';
 import { useDetectando, useResumen } from '../hooks/useDatosVT.js';
 import { desgloseTecnologia, formatearDuracion } from '../utils/formatoResumen.js';
 
-function Tarjeta({ titulo, valor, detalle, icono, termino, tono = 'azul', principal = false, cargando = false }) {
+function Tarjeta({
+  titulo,
+  valor,
+  detalle,
+  icono,
+  termino,
+  tono = 'azul',
+  principal = false,
+  cargando = false,
+  children,
+}) {
   return (
     <article className={`vt-tarjeta vt-tarjeta--${tono}${principal ? ' vt-tarjeta--principal' : ''}`}>
       <div className="vt-tarjeta__cabecera">
@@ -38,6 +54,8 @@ function Tarjeta({ titulo, valor, detalle, icono, termino, tono = 'azul', princi
         )}
         {detalle && <span className="vt-tarjeta__detalle">{detalle}</span>}
       </div>
+
+      {!cargando && children}
     </article>
   );
 }
@@ -65,7 +83,9 @@ export default function SummaryCards() {
         termino="handover"
         principal
         cargando={isLoading}
-      />
+      >
+        <HandoversPorTecnologia filas={porTecnologia} />
+      </Tarjeta>
       <Tarjeta
         titulo="Celdas observadas"
         valor={numero(data?.radiobases_involucradas)}
@@ -98,7 +118,6 @@ export default function SummaryCards() {
       <Tarjeta
         titulo="HO / minuto"
         valor={data?.tasa_ho_por_minuto != null ? data.tasa_ho_por_minuto.toFixed(2) : null}
-        detalle={porTecnologia || null}
         icono={<IconoRitmo />}
         tono="ambar"
         termino="tasa_ho"

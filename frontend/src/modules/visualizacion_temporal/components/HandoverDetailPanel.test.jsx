@@ -21,6 +21,7 @@ vi.mock('echarts-for-react', () => ({
 const EVENTO = {
   id_evento: 'ev-1',
   sesion_id: 's1',
+  sesion_nombre: 'Sesión 4 · Session_31_20240308_171157.csv',
   timestamp_evento: '2026-07-01T13:01:30Z',
   celda_origen: { clave: 'LTE:7213766', psc_pci: 461 },
   celda_destino: { clave: 'LTE:7390405', psc_pci: 460 },
@@ -108,6 +109,16 @@ describe('cabecera del evento (CA1)', () => {
     expect(await screen.findByText('LTE:7213766')).toBeInTheDocument();
     expect(screen.getByText('LTE:7390405')).toBeInTheDocument();
     expect(screen.getByText(/Intra-frecuencia/)).toBeInTheDocument();
+  });
+
+  it('junto a la tecnología indica la sesión a la que pertenece el handover', async () => {
+    renderizar();
+
+    const sesion = await screen.findByText('Sesión 4');
+    expect(sesion).toHaveClass('vt-etiqueta--sesion');
+    expect(sesion.previousElementSibling).toHaveTextContent('LTE');
+    // El nombre completo, con el archivo de origen, queda en el título.
+    expect(sesion).toHaveAttribute('title', 'Sesión 4 · Session_31_20240308_171157.csv');
   });
 
   it('numera el handover dentro del listado', async () => {

@@ -75,7 +75,11 @@ async function waitForMap(element) {
     const tiles = [...element.querySelectorAll('img.leaflet-tile')];
     const ready = tiles.length && tiles.every((tile) => tile.complete && tile.naturalWidth > 0);
     const moving = element.querySelector('.leaflet-zoom-anim, .leaflet-pan-anim');
-    settled = ready && !moving ? settled + 1 : 0;
+    const heatPending = element.querySelector('.geo-signal-heat-layer[data-rendering="true"]');
+    if (element.querySelector('.geo-signal-heat-layer[data-error="true"]')) {
+      throw new Error('No se pudo dibujar el calor. Vuelve a seleccionar el parámetro antes de descargar.');
+    }
+    settled = ready && !moving && !heatPending ? settled + 1 : 0;
     if (settled >= 3) return;
     await delay(100);
   }

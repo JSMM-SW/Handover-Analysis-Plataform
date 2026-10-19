@@ -98,17 +98,26 @@ export function useAyudaContextual() {
 }
 
 /**
- * Desplegable propio (p. ej. el selector de varias sesiones): se cierra al hacer clic fuera o
- * con `Escape`, que es lo que el usuario espera de un `<select>` nativo.
+ * Desplegable propio (p. ej. el selector de varias sesiones o un popover): se cierra al hacer clic
+ * fuera o con `Escape`, que es lo que el usuario espera de un `<select>` nativo.
+ *
+ * Si se conecta `disparador` al botón que lo abre, al cerrarse con `Escape` o con `cerrar()` el
+ * foco vuelve a ese botón: sin eso, quien navega con teclado se queda sin foco al desaparecer el
+ * contenido. Un clic fuera no mueve el foco, porque el usuario ya lo ha llevado a otra parte.
  *
  * @returns {{abierto: boolean, alternar: () => void, cerrar: () => void,
- *   referencia: import('react').RefObject<HTMLElement>}}
+ *   referencia: import('react').RefObject<HTMLElement>,
+ *   disparador: import('react').RefObject<HTMLElement>}}
  */
 export function useDesplegable() {
   const [abierto, setAbierto] = useState(false);
   const referencia = useRef(null);
+  const disparador = useRef(null);
 
-  const cerrar = useCallback(() => setAbierto(false), []);
+  const cerrar = useCallback(() => {
+    setAbierto(false);
+    disparador.current?.focus();
+  }, []);
   const alternar = useCallback(() => setAbierto((valor) => !valor), []);
 
   useEffect(() => {
@@ -118,7 +127,7 @@ export function useDesplegable() {
       if (!referencia.current?.contains(evento.target)) setAbierto(false);
     };
     const alPulsarTecla = (evento) => {
-      if (evento.key === 'Escape') setAbierto(false);
+      if (evento.key === 'Escape') cerrar();
     };
 
     document.addEventListener('mousedown', alPulsarFuera);
@@ -127,9 +136,9 @@ export function useDesplegable() {
       document.removeEventListener('mousedown', alPulsarFuera);
       document.removeEventListener('keydown', alPulsarTecla);
     };
-  }, [abierto]);
+  }, [abierto, cerrar]);
 
-  return { abierto, alternar, cerrar, referencia };
+  return { abierto, alternar, cerrar, referencia, disparador };
 }
 
 /**

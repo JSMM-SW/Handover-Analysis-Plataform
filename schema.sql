@@ -115,6 +115,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_etl_execution_filename_activo
 CREATE INDEX IF NOT EXISTS idx_handover_record_execution_id
     ON handover_record (execution_id);
 
+-- Matches the geospatial keyset reader; avoids sorting a full session per page.
+CREATE INDEX IF NOT EXISTS idx_handover_record_execution_order
+    ON handover_record (execution_id, timestamp_medicion, report_index ASC NULLS LAST, id_registro);
+
 CREATE INDEX IF NOT EXISTS idx_handover_record_cell_id
     ON handover_record (cell_id);
 

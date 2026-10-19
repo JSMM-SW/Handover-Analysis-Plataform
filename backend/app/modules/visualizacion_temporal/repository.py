@@ -25,17 +25,35 @@ columnas que existan **en ese momento**: cada campo del contrato (`docs/09`) tom
 nueva del ETL y, si está vacía, la heredada (`cid ← cell_id`, `tech ← tecnologia`...). El
 resultado se cachea `SEGUNDOS_CACHE_ESQUEMA` segundos y se invalida solo si una consulta falla por
 una columna que ha desaparecido.
+
+Caché de mediciones por sesión
+------------------------------
+Con la Sesión 4 (86 388 mediciones) la consulta tarda ~0,2 s en Supabase, pero **bajar las filas**
+cuesta de 6 a 20 s: son ~19 MB en el protocolo de PostgreSQL. Y al elegir una sesión la interfaz
+pide a la vez series, tramos, resumen, histograma y detección, de modo que la sesión se descargaba
+cinco o seis veces en paralelo por la misma conexión y todas superaban los 30 s del navegador.
+
+Ahora las mediciones de cada sesión se descargan **una sola vez** y se guardan en memoria
+(`_CacheMediciones`); los filtros de fecha, franja horaria y tecnología se aplican sobre ellas
+(`filtrar_mediciones`). Antes de reutilizar una sesión se compara su huella con la de la base, así
+que si el Módulo 1 borra, añade o corrige filas, la sesión se vuelve a leer.
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from collections.abc import Callable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from datetime import time as dt_time
+from itertools import chain
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
@@ -55,6 +73,16 @@ TABLA_EVENTOS = "eventos_handover"
 #: Cada cuánto se vuelve a mirar el esquema del ETL. Una consulta a `information_schema` es
 #: barata, pero hacerla en cada petición añadiría un viaje de red a Supabase por endpoint.
 SEGUNDOS_CACHE_ESQUEMA = 60.0
+
+#: Mediciones que puede guardar en total la caché de sesiones (~0,55 KB cada una: la Sesión 4,
+#: con 86 388, ocupa unos 47 MB). Cuando se pasa, se descartan las sesiones usadas hace más
+#: tiempo; la última siempre se queda, aunque sola supere el límite.
+MAX_MEDICIONES_EN_CACHE = 300_000
+
+#: Segundos durante los que una sesión recién comprobada se sirve sin volver a mirar su huella.
+#: Cubre la ráfaga de peticiones que lanza la interfaz al elegir una sesión, que así no paga cada
+#: una su viaje de ida y vuelta a Supabase.
+SEGUNDOS_CONFIANZA_CACHE = 30.0
 
 #: Columnas mínimas de `handover_record` sin las que las filas reales no pueden leerse.
 _COLUMNAS_OBLIGATORIAS_ETL = frozenset({"id_registro", "execution_id", "timestamp_medicion"})
@@ -264,9 +292,164 @@ class _CacheEsquema:
 _cache_esquema = _CacheEsquema(SEGUNDOS_CACHE_ESQUEMA)
 
 
+@dataclass
+class _SesionEnCache:
+    huella: tuple
+    mediciones: list[Medicion]
+    comprobada: float
+
+
+class _CacheMediciones:
+    """Mediciones completas de las últimas sesiones consultadas, compartidas entre peticiones.
+
+    Las mediciones de una sesión no cambian una vez que el ETL la ha cargado, así que basta con
+    descargarlas una vez. Dos garantías:
+
+    - **Una sola descarga por sesión a la vez.** Las peticiones que piden una sesión mientras se
+      está descargando esperan a esa descarga y la reutilizan, en lugar de lanzar la suya.
+    - **Nunca se sirven datos viejos más de `segundos_confianza`.** Pasado ese tiempo se vuelve a
+      leer la huella de la sesión en la base, y si no coincide se descarga de nuevo.
+    """
+
+    def __init__(self, max_mediciones: int, segundos_confianza: float):
+        self._max_mediciones = max_mediciones
+        self._segundos_confianza = segundos_confianza
+        self._sesiones: OrderedDict[str, _SesionEnCache] = OrderedDict()
+        self._cerrojos: dict[str, threading.Lock] = {}
+        self._cerrojo = threading.Lock()
+
+    def obtener(
+        self,
+        sesion_id: str,
+        leer_huella: Callable[[], tuple],
+        leer_mediciones: Callable[[], list[Medicion]],
+    ) -> list[Medicion]:
+        """Mediciones de la sesión, de la caché si siguen vigentes o recién leídas si no.
+
+        `leer_huella` devuelve una tupla cuyo primer elemento es el número de filas; con 0 filas
+        la sesión no existe (o ya no) y no se guarda nada.
+        """
+        with self._cerrojo:
+            cerrojo_sesion = self._cerrojos.setdefault(sesion_id, threading.Lock())
+
+        with cerrojo_sesion:
+            with self._cerrojo:
+                entrada = self._sesiones.get(sesion_id)
+                if entrada is not None:
+                    self._sesiones.move_to_end(sesion_id)
+
+            if entrada is not None and time.monotonic() - entrada.comprobada < self._segundos_confianza:
+                return entrada.mediciones
+
+            huella = leer_huella()
+            if entrada is not None and entrada.huella == huella:
+                entrada.comprobada = time.monotonic()
+                return entrada.mediciones
+
+            mediciones = leer_mediciones() if huella[0] else []
+            with self._cerrojo:
+                if mediciones:
+                    self._sesiones[sesion_id] = _SesionEnCache(huella, mediciones, time.monotonic())
+                    self._sesiones.move_to_end(sesion_id)
+                    self._recortar()
+                else:
+                    self._sesiones.pop(sesion_id, None)
+            return mediciones
+
+    def _recortar(self) -> None:
+        """Descarta las sesiones usadas hace más tiempo hasta volver al límite de mediciones."""
+        total = sum(len(s.mediciones) for s in self._sesiones.values())
+        while total > self._max_mediciones and len(self._sesiones) > 1:
+            _, descartada = self._sesiones.popitem(last=False)
+            total -= len(descartada.mediciones)
+
+    def vaciar(self) -> None:
+        with self._cerrojo:
+            self._sesiones.clear()
+
+
+_cache_mediciones = _CacheMediciones(MAX_MEDICIONES_EN_CACHE, SEGUNDOS_CONFIANZA_CACHE)
+
+
 def invalidar_cache_esquema() -> None:
-    """Fuerza a releer el esquema del ETL en la próxima consulta."""
+    """Fuerza a releer el esquema del ETL en la próxima consulta.
+
+    También olvida las mediciones guardadas: se leyeron con la consulta del esquema anterior.
+    """
     _cache_esquema.invalidar()
+    _cache_mediciones.vaciar()
+
+
+def _instante(valor: datetime | None) -> datetime | None:
+    """Una fecha sin zona se toma en UTC, que es como la interpreta la sesión de Supabase."""
+    if valor is None or valor.tzinfo is not None:
+        return valor
+    return valor.replace(tzinfo=timezone.utc)
+
+
+def _hora_sin_zona(valor: dt_time | None) -> dt_time | None:
+    return valor.replace(tzinfo=None) if valor is not None else None
+
+
+def filtrar_mediciones(mediciones: list[Medicion], filtros) -> list[Medicion]:
+    """Aplica en memoria el bloque de filtros común (HU-C2-006). Devuelve siempre una lista nueva.
+
+    Es la réplica del `WHERE` que antes llevaba la consulta:
+
+    - `desde` y `hasta` acotan el instante, ambos incluidos.
+    - La franja horaria se compara **en la zona del usuario** y se aplica a cada día del rango:
+      con la zona `America/Guayaquil`, 16:00-17:00 son las 16:00-17:00 de Ecuador, no de UTC.
+    - Las tecnologías se comparan con `tech` tal cual. Una medición sin tecnología no pasa ningún
+      filtro de tecnología, igual que `NULL = ANY(...)` en SQL.
+    """
+    desde = _instante(getattr(filtros, "desde", None))
+    hasta = _instante(getattr(filtros, "hasta", None))
+    hora_inicio = _hora_sin_zona(getattr(filtros, "hora_inicio", None))
+    hora_fin = _hora_sin_zona(getattr(filtros, "hora_fin", None))
+    tecnologias = {
+        t.value if hasattr(t, "value") else str(t)
+        for t in getattr(filtros, "tecnologia", None) or []
+    }
+    zona = (
+        ZoneInfo(getattr(filtros, "zona_horaria", None) or "UTC")
+        if hora_inicio is not None or hora_fin is not None
+        else None
+    )
+
+    if desde is None and hasta is None and zona is None and not tecnologias:
+        return list(mediciones)
+
+    def pasa(medicion: Medicion) -> bool:
+        instante = medicion.timestamp_medicion
+        if desde is not None and instante < desde:
+            return False
+        if hasta is not None and instante > hasta:
+            return False
+        if tecnologias and medicion.tech not in tecnologias:
+            return False
+        if zona is not None:
+            hora_local = instante.astimezone(zona).time()
+            if hora_inicio is not None and hora_local < hora_inicio:
+                return False
+            if hora_fin is not None and hora_local > hora_fin:
+                return False
+        return True
+
+    return [m for m in mediciones if pasa(m)]
+
+
+def _orden_temporal(medicion: Medicion) -> tuple:
+    """`ORDER BY timestamp_medicion, report_index NULLS LAST`, para juntar varias sesiones."""
+    return (
+        medicion.timestamp_medicion,
+        medicion.report_index is None,
+        medicion.report_index or 0,
+    )
+
+
+def _texto_compartido(valor: str | None) -> str | None:
+    """Comparte entre filas los textos que se repiten (`LTE`, `CONNECTED`...) para ahorrar memoria."""
+    return sys.intern(valor) if isinstance(valor, str) else valor
 
 
 class VisualizacionTemporalRepository:
@@ -333,33 +516,6 @@ class VisualizacionTemporalRepository:
             parametros["zona_horaria"] = getattr(filtros, "zona_horaria", None) or "UTC"
         return condiciones
 
-    def _clausula_filtros(self, filtros) -> tuple[list[str], dict]:
-        """Traduce el bloque de filtros común a condiciones SQL parametrizadas (HU-C2-006).
-
-        Todo va como parámetro ligado: no se concatena ni un solo valor en el SQL. La sesión se
-        compara como texto (`::text`) para que la lista funcione igual si la columna es `uuid`.
-        """
-        condiciones = ["sesion_id::text = ANY(:sesion_ids)"]
-        parametros: dict[str, object] = {"sesion_ids": self._sesiones(filtros)}
-
-        if getattr(filtros, "desde", None) is not None:
-            condiciones.append("timestamp_medicion >= :desde")
-            parametros["desde"] = filtros.desde
-        if getattr(filtros, "hasta", None) is not None:
-            condiciones.append("timestamp_medicion <= :hasta")
-            parametros["hasta"] = filtros.hasta
-
-        condiciones += self._condiciones_de_hora(filtros, "timestamp_medicion", parametros)
-
-        tecnologias = getattr(filtros, "tecnologia", None) or []
-        if tecnologias:
-            condiciones.append("tech = ANY(:tecnologias)")
-            parametros["tecnologias"] = [
-                t.value if hasattr(t, "value") else str(t) for t in tecnologias
-            ]
-
-        return condiciones, parametros
-
     def obtener_mediciones(
         self,
         sesion_id: str,
@@ -378,19 +534,87 @@ class VisualizacionTemporalRepository:
         )
 
     def obtener_mediciones_filtradas(self, filtros) -> list[Medicion]:
-        """Igual que `obtener_mediciones` pero con el bloque de filtros completo (HU-C2-006)."""
-        condiciones, parametros = self._clausula_filtros(filtros)
+        """Igual que `obtener_mediciones` pero con el bloque de filtros completo (HU-C2-006).
+
+        Cada sesión sale de la caché (se descarga entera la primera vez) y los filtros se aplican
+        en memoria. Con varias sesiones se mezclan en un único orden temporal.
+        """
+        listas = [self._mediciones_de_sesion(s) for s in self._sesiones(filtros)]
+        mediciones = (
+            listas[0]
+            if len(listas) == 1
+            else sorted(chain.from_iterable(listas), key=_orden_temporal)
+        )
+        return filtrar_mediciones(mediciones, filtros)
+
+    def _mediciones_de_sesion(self, sesion_id: str) -> list[Medicion]:
+        """Todas las mediciones de una sesión, a través de la caché. No modificar la lista."""
+        return _cache_mediciones.obtener(
+            sesion_id,
+            leer_huella=lambda: self._leer_huella(sesion_id),
+            leer_mediciones=lambda: self._leer_mediciones_de_sesion(sesion_id),
+        )
+
+    def _leer_huella(self, sesion_id: str) -> tuple:
+        """Cuántas filas tiene la sesión en la base y la versión más reciente de cualquiera de ellas.
+
+        `xmin` identifica la transacción que escribió cada fila, así que cambia con cada INSERT o
+        UPDATE: si el Módulo 1 borra, añade o corrige mediciones de la sesión, la huella cambia.
+        Recorre el índice de `execution_id` y cuesta unos milisegundos.
+        """
+        fila = self._db.execute(
+            text(
+                f"""
+                SELECT count(*), max(h.xmin::text::bigint)
+                  FROM {TABLA_MEDICIONES_ETL} h
+                 WHERE h."execution_id" = :sesion_id
+                """
+            ),
+            {"sesion_id": sesion_id},
+        ).one()
+        return int(fila[0]), fila[1]
+
+    def _leer_mediciones_de_sesion(self, sesion_id: str) -> list[Medicion]:
+        """Descarga todas las mediciones de una sesión, ordenadas.
+
+        Lo caro es lo que viaja por la red, así que no se repite en cada fila lo que es igual en
+        toda la sesión: su identificador y, cuando es único, su nombre (solo un libro de Excel
+        con varias hojas da más de uno). Con la Sesión 4 eso reduce la descarga a la mitad.
+
+        La sesión se compara con `=` y no como texto: así PostgreSQL usa el índice de
+        `execution_id` en lugar de recorrer la tabla entera.
+        """
+        identidades = self._consultar_mediciones(
+            lambda fuente: f"""
+            SELECT DISTINCT m.sesion_id::text, m.sesion_nombre
+              FROM {fuente}
+             WHERE m.sesion_id = :sesion_id
+            """,
+            {"sesion_id": sesion_id},
+        ).all()
+        if not identidades:
+            return []
+
+        id_canonico = identidades[0][0]
+        nombre_unico = len(identidades) == 1
+        columnas = [
+            c
+            for c in _COLUMNAS_MEDICION
+            if c != "sesion_id" and not (nombre_unico and c == "sesion_nombre")
+        ]
 
         filas = self._consultar_mediciones(
             lambda fuente: f"""
-            SELECT {", ".join(_COLUMNAS_MEDICION)}
+            SELECT {", ".join(columnas)}
               FROM {fuente}
-             WHERE {" AND ".join(condiciones)}
-             ORDER BY timestamp_medicion ASC, report_index ASC NULLS LAST
+             WHERE m.sesion_id = :sesion_id
+             ORDER BY m.timestamp_medicion ASC, m.report_index ASC NULLS LAST
             """,
-            parametros,
-        ).mappings().all()
-        return [self._a_medicion(fila) for fila in filas]
+            {"sesion_id": sesion_id},
+        ).mappings()
+
+        nombre = _texto_compartido(identidades[0][1]) if nombre_unico else None
+        return [self._a_medicion(fila, id_canonico, nombre) for fila in filas]
 
     def listar_sesiones(self) -> list[dict]:
         """Sesiones disponibles, con sus totales. Alimenta el selector del header (HU-C2-006).
@@ -549,25 +773,29 @@ class VisualizacionTemporalRepository:
         """Cuántas medidas válidas hay de cada parámetro RF en la sesión.
 
         Sostiene el aviso explícito de "sin datos válidos" de la interfaz (decisión D-5).
-        Se agrupa solo por parámetro: una ejecución del ETL con varias hojas es una única sesión,
-        y agrupar también por nombre partiría el denominador.
+        Se cuenta solo por parámetro: una ejecución del ETL con varias hojas es una única sesión,
+        y contar también por nombre partiría el denominador.
+
+        Se calcula sobre las mediciones de la caché, que la detección y el resumen ya han
+        cargado: otra consulta solo repetiría el recorrido de la sesión en la base.
         """
-        valores = ", ".join(f"('{p}', m.{p})" for p in _PARAMETROS_RF)
-        resultado = self._consultar_mediciones(
-            lambda fuente: f"""
-            SELECT p.parametro,
-                   count(p.valor)                                            AS n_validos,
-                   count(*)                                                  AS n_mediciones,
-                   round(100.0 * count(p.valor) / NULLIF(count(*), 0), 1)    AS pct_validos
-              FROM {fuente}
-             CROSS JOIN LATERAL (VALUES {valores}) AS p(parametro, valor)
-             WHERE m.sesion_id = :sesion_id
-             GROUP BY p.parametro
-             ORDER BY p.parametro
-            """,
-            {"sesion_id": sesion_id},
-        )
-        return [dict(fila) for fila in resultado.mappings()]
+        mediciones = self._mediciones_de_sesion(sesion_id)
+        total = len(mediciones)
+        if not total:
+            return []
+
+        filas = []
+        for parametro in sorted(_PARAMETROS_RF):
+            n_validos = sum(1 for m in mediciones if getattr(m, parametro) is not None)
+            filas.append(
+                {
+                    "parametro": parametro,
+                    "n_validos": n_validos,
+                    "n_mediciones": total,
+                    "pct_validos": round(100.0 * n_validos / total, 1),
+                }
+            )
+        return filas
 
     # -------------------------------------------------------------------------------------
     # Escritura — solo eventos_handover
@@ -672,16 +900,20 @@ class VisualizacionTemporalRepository:
     # -------------------------------------------------------------------------------------
 
     @staticmethod
-    def _a_medicion(fila) -> Medicion:
-        """Convierte una fila de mediciones en el objeto puro que consume el detector."""
+    def _a_medicion(fila, sesion_id: str, sesion_nombre: str | None = None) -> Medicion:
+        """Convierte una fila de mediciones en el objeto puro que consume el detector.
+
+        `sesion_id` y `sesion_nombre` llegan aparte porque no viajan en cada fila; si la fila trae
+        su propio nombre (sesión con varios), manda el de la fila.
+        """
         return Medicion(
             id_medicion=str(fila["id_medicion"]),
-            sesion_id=str(fila["sesion_id"]),
-            sesion_nombre=fila["sesion_nombre"],
+            sesion_id=sesion_id,
+            sesion_nombre=_texto_compartido(fila.get("sesion_nombre", sesion_nombre)),
             report_index=fila["report_index"],
             timestamp_medicion=fila["timestamp_medicion"],
-            tech=fila["tech"],
-            net_type=fila["net_type"],
+            tech=_texto_compartido(fila["tech"]),
+            net_type=_texto_compartido(fila["net_type"]),
             cid=fila["cid"],
             node_id=fila["node_id"],
             psc_pci=fila["psc_pci"],
@@ -693,6 +925,6 @@ class VisualizacionTemporalRepository:
             rssnr_db=fila["rssnr_db"],
             rscp_dbm=fila["rscp_dbm"],
             rssi_dbm=fila["rssi_dbm"],
-            data_state=fila["data_state"],
-            call_state=fila["call_state"],
+            data_state=_texto_compartido(fila["data_state"]),
+            call_state=_texto_compartido(fila["call_state"]),
         )

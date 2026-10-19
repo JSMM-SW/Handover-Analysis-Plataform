@@ -37,17 +37,30 @@ export function signalRaster(points, metric, width, height, radius = 18) {
     if (distance >= radius * radius) continue;
     kernel.push([dx, dy, (Math.exp(-4.5 * distance / (radius * radius)) - edge) / (1 - edge)]);
   }
-  for (const { x, y, value } of points) {
+  // Samples rounded to the same raster pixel have the same kernel. Accumulate
+  // their sums/counts once, preserving every value and the original kernel.
+  // This is rasterization at screen resolution, not geographic averaging.
+  const sources = new Map();
+  for (const { x, y, value, weight: count = 1 } of points) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     const cx = Math.round(x), cy = Math.round(y);
     if (cx < -radius || cy < -radius || cx >= width + radius || cy >= height + radius) continue;
+    const key = `${cx},${cy}`;
+    if (!sources.has(key)) sources.set(key, { cx, cy, sum: 0, count: 0 });
+    const source = sources.get(key);
+    if (Number.isFinite(value) && count > 0) {
+      source.sum += value * count;
+      source.count += count;
+    }
+  }
+  for (const { cx, cy, sum, count } of sources.values()) {
     for (const [dx, dy, weight] of kernel) {
       const px = cx + dx, py = cy + dy;
       if (px < 0 || py < 0 || px >= width || py >= height) continue;
       const i = py * width + px;
-      if (Number.isFinite(value)) {
-        sums[i] += value * weight;
-        weights[i] += weight;
+      if (count > 0) {
+        sums[i] += sum * weight;
+        weights[i] += weight * count;
         opacity[i] = Math.max(opacity[i], weight);
       } else missing[i] = Math.max(missing[i], weight);
     }

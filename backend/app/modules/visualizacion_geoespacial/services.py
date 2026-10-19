@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 from .schemas import HandoverEvent, MapData, Measurement
 from .radio_bases import estimate_radio_bases
-from .constants import MAX_CONTINUITY_SECONDS, MAX_MEASUREMENTS
+from .constants import MAX_CONTINUITY_SECONDS
 
 
 def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None, hora_inicio=None, hora_fin=None,
@@ -13,10 +13,6 @@ def prepare_map(records, tecnologia=None, cell_id=None, bbox=None, desde=None, h
     Use Temporal events detected on complete sessions. GPS controls plotting,
     never whether an otherwise selected event contributes to the total.
     """
-    if len(records) > MAX_MEASUREMENTS:
-        limit = f"{MAX_MEASUREMENTS:,}".replace(",", ".")
-        raise ValueError(f"Hay más de {limit} mediciones. Reduce el intervalo de tiempo.")
-
     def session(row):
         return str(getattr(row, "execution_id", "")), row.hoja_origen or ""
 
