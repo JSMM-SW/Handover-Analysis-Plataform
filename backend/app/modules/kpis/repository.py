@@ -97,16 +97,22 @@ class KpisRepository:
         Las etiquetas que no existan se traducen a un UUID aleatorio cada
         una (garantiza cero resultados para esa sesión puntual, sin afectar
         a las demás que sí existen) en vez de lanzar un error.
+
+        Una sola consulta con IN (...) en vez de una por sesión: este
+        método se llama de forma independiente desde cada uno de los 5
+        endpoints que el dashboard carga en paralelo (summary, hourly,
+        franja-horaria, dia-semana, trend), así que el patrón anterior
+        (una consulta por sesión, en un loop) multiplicaba los viajes de
+        ida y vuelta a la base por 5 -- con varias sesiones seleccionadas,
+        se volvía notorio contra Supabase (base remota, no local).
         """
-        resultado = []
-        for sesion_label in sesiones:
-            ejecucion = (
-                self._db.query(EtlExecution)
-                .filter(EtlExecution.sesion_label == sesion_label)
-                .one_or_none()
-            )
-            resultado.append(ejecucion.execution_id if ejecucion else uuid.uuid4())
-        return resultado
+        ejecuciones = (
+            self._db.query(EtlExecution)
+            .filter(EtlExecution.sesion_label.in_(sesiones))
+            .all()
+        )
+        mapa = {ejecucion.sesion_label: ejecucion.execution_id for ejecucion in ejecuciones}
+        return [mapa.get(sesion_label, uuid.uuid4()) for sesion_label in sesiones]
 
     def _condicion_franjas(self, franjas: list[str]):
         """Arma la condición SQL (OR de rangos horarios) para una lista de

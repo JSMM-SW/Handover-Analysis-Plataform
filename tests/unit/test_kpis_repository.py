@@ -143,6 +143,49 @@ def test_secuencia_agrupa_por_sesion_antes_que_por_tiempo():
     engine.dispose()
 
 
+def test_obtener_secuencia_completa_filtra_por_varias_sesiones_en_una_sola_consulta():
+    """`sesion_label` con varias etiquetas (incluida una que no existe)
+    devuelve las mediciones de las sesiones reales, sin lanzar error por
+    la etiqueta inexistente -- cubre `_resolver_execution_ids_por_sesiones`
+    resolviendo todo en una sola consulta `IN (...)` en vez de una por
+    sesión (antes N+1, repetido en cada uno de los 5 endpoints que carga
+    el dashboard en paralelo)."""
+    engine = _crear_motor_sqlite()
+    EtlExecution.__table__.create(engine)
+    HandoverRecord.__table__.create(engine)
+    sesion_a = uuid4()
+    sesion_b = uuid4()
+
+    with Session(engine) as session:
+        session.add(EtlExecution(
+            execution_id=sesion_a, sesion_label=10, filename='A.csv',
+            status='completed', records_valid=1,
+        ))
+        session.add(EtlExecution(
+            execution_id=sesion_b, sesion_label=20, filename='B.csv',
+            status='completed', records_valid=1,
+        ))
+        session.add(HandoverRecord(
+            execution_id=sesion_a, timestamp_medicion=datetime(2026, 5, 5, 13, 0, 0, tzinfo=timezone.utc),
+            cell_id=1, tecnologia=1, rssi=-80, rsrp=-90,
+            archivo_origen='A.csv', origen_formato='csv',
+        ))
+        session.add(HandoverRecord(
+            execution_id=sesion_b, timestamp_medicion=datetime(2026, 5, 5, 14, 0, 0, tzinfo=timezone.utc),
+            cell_id=2, tecnologia=1, rssi=-80, rsrp=-90,
+            archivo_origen='B.csv', origen_formato='csv',
+        ))
+        session.commit()
+
+        secuencia = KpisRepository(session).obtener_secuencia_completa(
+            date(2026, 5, 5), date(2026, 5, 5), sesion_label=[10, 20, 999],
+        )
+
+        celdas = {registro[0] for registro in secuencia}
+        assert celdas == {1, 2}
+    engine.dispose()
+
+
 def test_listar_sesiones_incluye_primera_y_ultima_medicion():
     """Una sesión con varias mediciones devuelve la primera y la última
     (hora local, no UTC); una sesión sin ninguna medición en
