@@ -604,6 +604,32 @@ export default function KpisDashboard() {
     /** Limpia la selección de periodo y vuelve a mostrar el rango completo. */
     const limpiarSeleccionPeriodo = () => setPeriodoSeleccionado(null);
 
+    /**
+     * Arma una función de renderizado de punto para una línea de
+     * "Evolución de KPIs": el punto del periodo seleccionado se dibuja
+     * más grande y con un anillo alrededor, para que se note cuál está
+     * elegido además del texto "Mostrando el periodo...".
+     *
+     * @param {string} color - color de relleno del punto (el mismo de la línea).
+     * @param {number} radio - radio normal del punto, sin selección.
+     * @returns {Function} función `dot` que espera Recharts.
+     */
+    const crearPuntoEvolucion = (color, radio) => (props) => {
+        const { cx, cy, payload } = props;
+        const seleccionado = puntoSeleccionado && payload.periodo === puntoSeleccionado.periodo;
+        return (
+            <circle
+                key={`punto-${payload.periodo}`}
+                cx={cx}
+                cy={cy}
+                r={seleccionado ? radio + 4 : radio}
+                fill={color}
+                stroke={seleccionado ? colorTexto : 'none'}
+                strokeWidth={seleccionado ? 2 : 0}
+            />
+        );
+    };
+
 
 
 
@@ -786,12 +812,12 @@ export default function KpisDashboard() {
                                         <YAxis yAxisId="mediciones" orientation="right" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Mediciones', angle: 90, position: 'insideRight', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={crearPuntoEvolucion(colorExitoso, 4)} />
 
-                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
-                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={{ r: 3 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={crearPuntoEvolucion(colorFallido, 4)} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={crearPuntoEvolucion(colorIndeterminado, 3)} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={crearPuntoEvolucion(colorPingPong, 3)} />
+                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={crearPuntoEvolucion(colorPrimario, 3)} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
