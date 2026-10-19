@@ -84,3 +84,15 @@ class MapData(BaseModel):
     advertencias: list[str]
     radios_base: list[RadioBaseEstimate] = Field(default_factory=list)
     resumen_radios_base: RadioBaseSummary = Field(default_factory=RadioBaseSummary)
+    promedios: dict[str, float | None] = Field(default_factory=dict)
+    limites: list[list[float]] = Field(default_factory=list)
+    mapa_resumido: bool = False
+    tramos_omitidos: int = 0
+    # lat, lon, RSSI, RSRP, RSRQ, RSSNR, original id, timestamp, cell id.
+    # Compact samples preserve every visible measurement without sending all
+    # route/detail fields or creating an interactive marker per observation.
+    senales: list[tuple[float, float, int | None, int | None, int | None,
+                        int | None, UUID, datetime, int]] = Field(default_factory=list)
+    grupos_handovers: list[dict] = Field(default_factory=list)
+    total_radios_base: int | None = None
+    grupos_radios_base: list[dict] = Field(default_factory=list)

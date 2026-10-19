@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -79,6 +79,7 @@ def test_csv_without_sheet_or_rsrp(geo_client):
     {"bbox": "1,2,3"}, {"bbox": "nan,0,1,2"}, {"bbox": "10,0,5,2"},
     {"tecnologia": 4}, {"cell_id": 0},
     {"hora_inicio": "09:00", "hora_fin": "08:00"},
+    {"vista_bbox": "bad"}, {"zoom": 23},
 ])
 def test_invalid_filters_rejected_before_query(geo_client, filters):
     client, params, calls = geo_client
@@ -113,12 +114,35 @@ def test_db_errors_do_not_expose_connection_details():
     class BrokenSession:
         def execute(self, query):
             raise OperationalError("secret connection string", {}, Exception("secret"))
+        def rollback(self):
+            pass
     app.dependency_overrides[get_db] = lambda: BrokenSession()
     try:
         with TestClient(app) as client:
             response = client.get("/api/v1/geoespacial/ejecuciones")
         assert response.status_code == 503
         assert "secret" not in response.text
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_database_statement_timeout_is_reported_distinctly(caplog):
+    class CanceledQuery(Exception):
+        sqlstate = '57014'
+    class Session:
+        def execute(self, query):
+            raise OperationalError('private query', {}, CanceledQuery('private connection'))
+        def rollback(self):
+            pass
+    app.dependency_overrides[get_db] = lambda: Session()
+    try:
+        with TestClient(app) as client:
+            response = client.get('/api/v1/geoespacial/ejecuciones')
+        assert response.status_code == 504
+        assert 'tiempo de espera' in response.json()['detail']
+        assert '57014' in caplog.text
+        assert 'private' not in response.text
+        assert 'private' not in caplog.text
     finally:
         app.dependency_overrides.pop(get_db, None)
 
@@ -190,5 +214,89 @@ def test_handover_without_gps_is_counted_in_api_but_not_mapped():
         assert data['total_handovers'] == data['handovers_sin_ubicacion'] == 1
         assert data['handovers_con_ubicacion'] == 0
         assert data['handovers'] == []
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+
+def test_original_measurement_and_handover_details_are_loaded_by_id():
+    session_id = uuid4()
+    rows = [SimpleNamespace(id_registro=uuid4(), execution_id=session_id,
+                            timestamp_medicion=datetime(2026, 5, 5, 13, 0, i, tzinfo=timezone.utc),
+                            cell_id=10 if i < 2 else 20, node_id=100, tecnologia=1,
+                            latitud=-0.2, longitud=-78.5, hoja_origen=None, rssi=-75) for i in range(4)]
+
+    class Repository:
+        def measurement(self, record_id):
+            return next((row for row in rows if row.id_registro == record_id), None)
+
+        def execution(self, execution_id):
+            assert execution_id == session_id
+            return SimpleNamespace(execution_id=session_id)
+
+        def handovers(self, keys):
+            assert keys == [session_id]
+            return detectar_handovers([Medicion(id_medicion=str(row.id_registro), sesion_id=str(session_id),
+                                               timestamp_medicion=row.timestamp_medicion,
+                                               cid=row.cell_id, node_id=row.node_id, tech='LTE') for row in rows])
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        with TestClient(app) as client:
+            measurement = client.get(f'/api/v1/geoespacial/mediciones/{rows[2].id_registro}')
+            assert measurement.status_code == 200
+            assert measurement.json()['rssi'] == -75
+            event = client.get(f'/api/v1/geoespacial/handovers/{rows[2].id_registro}')
+            assert event.status_code == 200
+            assert event.json()['registro_anterior_id'] == str(rows[1].id_registro)
+            assert event.json()['celda_origen'] == 10
+            assert client.get(f'/api/v1/geoespacial/handovers/{rows[0].id_registro}').status_code == 404
+            assert client.get(f'/api/v1/geoespacial/mediciones/{uuid4()}').status_code == 404
+    finally:
+        app.dependency_overrides.pop(get_repository, None)
+
+
+def test_large_api_preserves_all_signal_samples_and_reuses_analysis_on_zoom():
+    session_id = uuid4()
+    start = datetime(2026, 5, 5, 13, tzinfo=timezone.utc)
+    rows = [SimpleNamespace(id_registro=uuid4(), execution_id=session_id,
+                            timestamp_medicion=start + timedelta(seconds=i),
+                            latitud=-0.2 + i * 0.000001, longitud=-78.5 + i * 0.000001,
+                            cell_id=10, node_id=None, tecnologia=1, hoja_origen=None,
+                            rssi=-100 if i % 2 else -80) for i in range(60001)]
+    calls = []
+
+    class Repository:
+        def execution(self, key):
+            return object() if key == session_id else None
+
+        def measurements(self, *args):
+            calls.append(1)
+            return rows
+
+        def handovers(self, keys):
+            return []
+
+    app.dependency_overrides[get_repository] = lambda: Repository()
+    try:
+        with TestClient(app) as client:
+            params = {'execution_id': str(session_id)}
+            response = client.get('/api/v1/geoespacial/mediciones', params=params)
+            assert response.status_code == 200
+            full = response.json()
+            assert full['total'] == 60001
+            assert full['mapa_resumido']
+            assert len(full['mediciones']) <= 6000
+            assert len(full['senales']) == 60001
+            assert {sample[6] for sample in full['senales']} == {str(row.id_registro) for row in rows}
+            assert full['senales'][0][2] == rows[0].rssi
+            assert full['senales'][0][7] == rows[0].timestamp_medicion.isoformat().replace('+00:00', 'Z')
+            response = client.get('/api/v1/geoespacial/mediciones', params=params | {
+                'zoom': 17, 'vista_bbox': '-78.5,-0.2,-78.49,-0.19'})
+            assert response.status_code == 200
+            detail = response.json()
+            assert detail['total'] == full['total']
+            assert detail['promedios'] == full['promedios']
+            assert detail['limites'] == full['limites']
+            assert calls == [1]
     finally:
         app.dependency_overrides.pop(get_repository, None)
