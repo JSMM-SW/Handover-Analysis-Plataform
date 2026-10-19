@@ -215,6 +215,10 @@ export default function KpisDashboard() {
     const [franjaDataPeriodo, setFranjaDataPeriodo] = useState(null);
     const [loadingPeriodo, setLoadingPeriodo] = useState(false);
     const [mostrarHistorial, setMostrarHistorial] = useState(false);
+    // Series de "Evolución de KPIs" que el usuario ocultó haciendo clic en su
+    // leyenda -- el gráfico cruza 5 series en 2 ejes y es difícil de leer con
+    // todas a la vez, así que se deja aislar unas pocas sin tocar los datos.
+    const [seriesEvolucionOcultas, setSeriesEvolucionOcultas] = useState(() => new Set());
 
 
 
@@ -628,6 +632,21 @@ export default function KpisDashboard() {
     const limpiarSeleccionPeriodo = () => setPeriodoSeleccionado(null);
 
     /**
+     * Muestra u oculta una serie de "Evolución de KPIs" al hacer clic en su
+     * entrada de la leyenda (patrón estándar de leyenda interactiva).
+     *
+     * @param {string} dataKey - el `dataKey` de la `<Line>` clickeada (ej. "ping_pongs").
+     */
+    const alternarSerieEvolucion = (dataKey) => {
+        setSeriesEvolucionOcultas((anterior) => {
+            const siguiente = new Set(anterior);
+            if (siguiente.has(dataKey)) siguiente.delete(dataKey);
+            else siguiente.add(dataKey);
+            return siguiente;
+        });
+    };
+
+    /**
      * Arma una función de renderizado de punto para una línea de
      * "Evolución de KPIs": el punto del periodo seleccionado se dibuja
      * más grande y con un anillo alrededor, para que se note cuál está
@@ -839,13 +858,29 @@ export default function KpisDashboard() {
                                         <YAxis yAxisId="handovers" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <YAxis yAxisId="mediciones" orientation="right" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Mediciones', angle: 90, position: 'insideRight', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
-                                        <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={crearPuntoEvolucion(colorExitoso, 4)} />
+                                        <Legend
+                                            verticalAlign="top"
+                                            height={50}
+                                            iconType="circle"
+                                            onClick={(entrada) => alternarSerieEvolucion(entrada.dataKey)}
+                                            formatter={(valor, entrada) => (
+                                                <span
+                                                    style={{
+                                                        cursor: 'pointer',
+                                                        color: seriesEvolucionOcultas.has(entrada.dataKey) ? colorTextoTenue : colorTexto,
+                                                        textDecoration: seriesEvolucionOcultas.has(entrada.dataKey) ? 'line-through' : 'none',
+                                                    }}
+                                                >
+                                                    {valor}
+                                                </span>
+                                            )}
+                                        />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={crearPuntoEvolucion(colorExitoso, 4)} hide={seriesEvolucionOcultas.has('exitosos')} />
 
-                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={crearPuntoEvolucion(colorFallido, 4)} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={crearPuntoEvolucion(colorIndeterminado, 3)} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={crearPuntoEvolucion(colorPingPong, 3)} />
-                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={crearPuntoEvolucion(colorPrimario, 3)} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={crearPuntoEvolucion(colorFallido, 4)} hide={seriesEvolucionOcultas.has('fallidos')} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={crearPuntoEvolucion(colorIndeterminado, 3)} hide={seriesEvolucionOcultas.has('indeterminados')} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={crearPuntoEvolucion(colorPingPong, 3)} hide={seriesEvolucionOcultas.has('ping_pongs')} />
+                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={crearPuntoEvolucion(colorPrimario, 3)} hide={seriesEvolucionOcultas.has('total_mediciones')} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
