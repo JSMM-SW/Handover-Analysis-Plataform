@@ -71,8 +71,8 @@ export default function App() {
           <p>Plataforma de handovers</p>
             <nav aria-label="Menú principal">
             <NavLink to="/ingesta">Procesamiento de datos</NavLink>
-            <NavLink to="/geoespacial">Visualización geoespacial</NavLink>
             <NavLink to="/visualizacion-temporal">Visualización temporal</NavLink>
+            <NavLink to="/geoespacial">Visualización geoespacial</NavLink>
             <NavLink to="/kpis">Indicadores de desempeño</NavLink>
           </nav>
 
