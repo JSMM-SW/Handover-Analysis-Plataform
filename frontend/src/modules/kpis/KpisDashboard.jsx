@@ -535,6 +535,29 @@ export default function KpisDashboard() {
             .map((sesion) => sessionName(sesion))
             .join(', ');
 
+    /**
+     * Rango de fechas de la(s) sesión(es) elegidas en el selector de
+     * Sesión, para mostrarlo junto al propio selector -- mismo patrón que
+     * `SessionSelector.jsx` del módulo de geoespacial. Null si no hay
+     * ninguna sesión seleccionada (equivalente a "todas") o si ninguna de
+     * las elegidas tiene mediciones todavía.
+     */
+    const rangoFechasSesionTexto = (() => {
+        if (sesionLabels.length === 0) return null;
+        const relevantes = sesiones.filter((sesion) => sesionLabels.includes(String(sesion.sesion_label)));
+        const conFechas = relevantes.filter((sesion) => sesion.primera_medicion && sesion.ultima_medicion);
+        if (conFechas.length === 0) return null;
+        const inicio = conFechas.reduce(
+            (minimo, sesion) => (sesion.primera_medicion < minimo ? sesion.primera_medicion : minimo),
+            conFechas[0].primera_medicion,
+        );
+        const fin = conFechas.reduce(
+            (maximo, sesion) => (sesion.ultima_medicion > maximo ? sesion.ultima_medicion : maximo),
+            conFechas[0].ultima_medicion,
+        );
+        return `Del ${inicio.slice(0, 10)} al ${fin.slice(0, 10)}`;
+    })();
+
         /**
      * Punto de trendData que corresponde al periodo seleccionado con clic en
      * el gráfico "Evolución de KPIs" (Paso 10 del plan de refactor), o null
@@ -644,12 +667,17 @@ export default function KpisDashboard() {
                     <p className="kpis-subtitle">Monitoreo y análisis del desempeño del proceso de handover en redes móviles</p>
                 </div>
                                 <div className="kpis-controls">
-                    <MultiSelectDropdown
-                        label="Sesión"
-                        options={opcionesSesion}
-                        selected={sesionLabels}
-                        onChange={setSesionLabels}
-                    />
+                    <div className="kpis-sesion-filter">
+                        <MultiSelectDropdown
+                            label="Sesión"
+                            options={opcionesSesion}
+                            selected={sesionLabels}
+                            onChange={setSesionLabels}
+                        />
+                        {rangoFechasSesionTexto && (
+                            <p className="kpis-sesion-rango-fechas">{rangoFechasSesionTexto}</p>
+                        )}
+                    </div>
                     <div className="kpis-date-filter">
                         <span className="kpis-date-label">Ventana Temporal</span>
                         <VentanaTemporalSelector

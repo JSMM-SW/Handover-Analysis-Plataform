@@ -510,6 +510,167 @@
     color: var(--color-texto);
 }
 
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+/* Rango de fechas de la sesión seleccionada, junto al selector (mismo
+   patrón que SessionSelector.jsx de geoespacial). */
+.kpis-sesion-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kpis-sesion-rango-fechas {
+    margin: 0;
+    font-size: 11px;
+    color: var(--color-primario);
+    background: var(--color-primario-suave);
+    padding: 3px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
 /* Solo activa durante la captura del PDF (ver exportToPDF): obliga a la
    tabla de periodos a caber en el ancho de la tarjeta en vez de scrollear,
    repartiendo las columnas con table-layout: fixed. */
