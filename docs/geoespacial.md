@@ -25,68 +25,53 @@ En producción, configurar el servidor web para resolver las rutas a `index.html
 
 ## Uso
 
-Abrir el desplegable, marcar una o varias sesiones y pulsar «Analizar sesiones»
-para cargar los mapas. Cambiar los checks no actualiza el análisis hasta pulsar
-el botón de nuevo. El selector muestra «Sesión N» mediante `sesion_label`
-y la cantidad de registros válidos. Las consultas siguen usando `execution_id`.
-Bajo la selección se muestra
-el intervalo de mediciones disponible, en hora de Ecuador, para orientar los
-filtros de fecha. Se consultan todas sus hojas, sin unir recorridos entre
-sesiones ni entre hojas diferentes. Los CSV no requieren hoja. El panel izquierdo filtra
-por fecha/hora de Ecuador (UTC-5), tecnología y zona visible del mapa.
-Las horas se seleccionan por minuto; «Hasta» incluye todo el minuto elegido.
+Seleccionar una o varias sesiones carga el análisis automáticamente. Los filtros
+horizontales separan fechas y franja horaria, con días disponibles y pasos de
+cinco minutos desde la hora inicial detectada. Las horas se interpretan en
+America/Guayaquil y el minuto final se incluye completo. Las consultas usan
+`execution_id`; los nombres visibles proceden de `sesion_label`.
 
-Las pestañas comparten filtros; sus capas son independientes:
+- Rutas: capas Trayectoria, Handovers y Radios Base.
+- Calor: parámetros RSSI, RSRP, RSRQ y RSSNR, con una casilla independiente para
+  mostrar handovers como puntos negros. La trayectoria permanece visible.
 
-- Mapa de rutas y handovers: capas Handovers, Trayectoria y Radios Base.
-- Mapa de calor: selección exclusiva entre Handovers, RSSI y RSRQ. Handovers
-  muestra concentración de eventos, sin círculos individuales. No incluye Trayectoria.
-  RSSI y RSRQ muestran manchas suaves de calor centradas en cada handover,
-  con radio de 36 píxeles de pantalla y desvanecimiento hacia los bordes.
-  En las superposiciones se calcula un promedio en dBm o dB ponderado por
-  distancia; un evento aislado conserva su valor. La densidad no empeora
-  artificialmente el color. Los datos ausentes no entran al promedio y se
-  muestran en gris donde no hay valores disponibles.
-  El degradado va de rojo (RSSI ≤ −100 dBm, RSRQ ≤ −15 dB) a verde
-  (RSSI ≥ −80 dBm, RSRQ ≥ −10 dB). Son rangos de visualización,
-  no umbrales calibrados de cobertura. El suavizado cambia con el zoom y no
-  rellena zonas alejadas de los eventos. Al pasar el cursor sobre un handover
-  se consultan sus valores originales. La capa y su leyenda se exportan en PNG.
+El calor representa todas las mediciones limpias con GPS que cumplen los filtros,
+no solo las asociadas a handovers. Los colores son rangos de visualización, no
+umbrales calibrados de cobertura. Los valores ausentes se excluyen de los
+promedios y aparecen en gris cuando no hay valores disponibles.
 
-La tarjeta Handovers cuenta los eventos de la consulta, independientemente de
-si su capa está visible. Datos analizados cuenta las mediciones. Un clic en
-un handover muestra celdas y nodos de origen/destino, fecha y coordenadas.
-Al pasar el cursor aparece una burbuja con fecha, hora de Ecuador, RSSI,
-RSRQ y RSSNR. Los valores ausentes aparecen como «Sin dato».
-En CSV, la hora proviene de `sys_time`: la ingesta la guarda en UTC y la
-burbuja la muestra de nuevo en hora de Ecuador, incluyendo segundos.
-RSSI ausente se representa en gris y se excluye del promedio. Los colores del mapa usan intervalos de RSSI en dBm (desde -80, de -100 a -80 y menor de -100); la intensidad del calor indica concentración de eventos, no calidad de señal.
+Datos analizados y los promedios de señal corresponden a las mediciones con GPS
+válido. Handovers incluye todos los eventos que cumplen los filtros, mostrando
+aparte cuántos tienen ubicación. El mapa dibuja los que tienen GPS válido.
+La hora proviene de `sys_time`, almacenada en UTC y presentada en hora de Ecuador.
 
-## Regla de handover
+Ajustar vista encuadra todo el conjunto analizado; no aplica un filtro geográfico.
+El tema claro/oscuro adapta paneles y controles sin alterar los colores de señal.
 
-Regla acordada con el usuario: `cell_id` cambia **y** `node_id` cambia respecto
-a la observación anterior del mismo recorrido. Cambiar solo uno no cuenta.
-Se calcula sobre registros ordenados por hoja y tiempo, antes de los filtros
-visuales. Se ubica el evento en la primera medición del destino.
+## Detección de handovers
 
-Se mantiene el criterio de continuidad de esta visualización: no comparar
-hojas diferentes, intervalos mayores de 60 segundos, tiempos repetidos ni
-identificadores ausentes/inválidos. La consulta lee hasta 60 segundos previos
-al inicio para detectar cambios en el borde temporal, sin mostrarlos como
-mediciones del intervalo. Los filtros se aplican sobre la medición de destino.
+Se reutiliza el detector de Temporal, por sesión completa antes de aplicar los
+filtros. Geoespacial lee las filas una sola vez y adapta sus campos al contrato
+del detector. Sus valores predeterminados son dos
+muestras de confirmación, un máximo de 30 segundos entre celdas y una ventana
+ping-pong de 10 segundos. El evento se ubica en la primera observación del destino.
+Son eventos inferidos; no confirman señalización ni éxito del procedimiento de red.
 
-La regla usa únicamente los registros persistidos, no confirma señalización
-ni éxito del procedimiento de red. Los Excel sin node_id no pueden producir
-eventos bajo esta regla. El calor usa exclusivamente eventos detectados,
-con igual peso, y su intensidad relativa varía con el zoom.
+Las rutas conservan sus propios cortes: hojas/sesiones diferentes, mediciones
+excluidas, horas repetidas e intervalos mayores de 60 segundos.
 
-La API admite hasta 20.000 registros leídos (incluido contexto temporal).
-Si se supera, pide reducir el intervalo, sin truncar silenciosamente.
-Las rutas se cortan en puntos excluidos por filtros, horas repetidas y huecos
-mayores de 60 segundos. La agrupación por hoja presupone un recorrido por hoja.
+## Conjuntos grandes
 
-La capa Radios Base calcula ubicaciones candidatas por celda, sin guardarlas
-en la base de datos. Ver [método, parámetros y limitaciones](radios_base_estimadas.md).
+No hay un límite fijo de 50.000 mediciones para el análisis. El backend conserva
+los conteos y promedios completos y envia una representación adaptada al zoom:
+trayectorias simplificadas, calor con todas las mediciones individuales de la
+vista y grupos de eventos/estimaciones. El cursor consulta la medición más cercana,
+sin crear un círculo interactivo por registro; el raster se calcula en un Worker.
+Los detalles originales se consultan bajo demanda. Ver
+[funcionamiento, presupuestos de dibujo y límites prácticos](geoespacial_datasets_grandes.md).
+
+La capa Radios Base estima posiciones por celda sin escribirlas en la base de
+datos. Ver [método, parámetros y limitaciones](radios_base_estimadas.md).
 No se implementa filtro por velocidad.
 
 ## Descargar la visualización
