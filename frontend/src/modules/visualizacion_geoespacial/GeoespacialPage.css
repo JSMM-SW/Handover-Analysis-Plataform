@@ -81,7 +81,7 @@
 @media (max-width: 600px) { .geo-filters { grid-template-columns: minmax(0, 1fr); } }
 .geo-filter-actions button { min-height: 40px; }
 .geo-results { min-width: 0; }
-.geo-handover-coverage { color: var(--color-texto-tenue); font-size: 13px; margin: -8px 0 16px; }
+.geo-render-note { font-size: 12px; color: var(--color-texto-tenue); }
 .geo-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--color-borde); }
 .geo-page .geo-tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 6px 6px 0 0; background: transparent; padding: 14px 16px; font-weight: 650; }
 .geo-page .geo-tabs button[aria-selected=true] { border-bottom-color: var(--color-acento); color: var(--color-acento); background: var(--color-exito-suave); }
