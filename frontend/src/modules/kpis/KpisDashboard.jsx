@@ -788,7 +788,7 @@ export default function KpisDashboard() {
                         </div>
 
                         <div className="kpis-card">
-                            <h3 className="kpis-card-title">Riesgos de Movilidad</h3>
+                            <h3 className="kpis-card-title">KPIs de Handover</h3>
                             <div className="kpis-stat">
                                 <span className="kpis-stat-label">Ping-Pong (HOPP)</span>
                                 <span className="kpis-stat-value highlight-orange">{formatearTasa(resumenMostrado.tasa_hopp)}</span>
