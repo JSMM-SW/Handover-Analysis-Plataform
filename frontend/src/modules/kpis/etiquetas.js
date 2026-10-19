@@ -9,4 +9,4 @@ export const ETIQUETAS_FRANJA = { manana: 'Mañana', tarde: 'Tarde', noche: 'Noc
 
 export const ETIQUETAS_TECNOLOGIA = { '0': 'Sin señal', '1': 'LTE / 4G', '2': '3G / UMTS', '3': '2G' };
 
-export const ETIQUETAS_PERIODO = { diario: 'Diario', semanal: 'Semanal', mensual: 'Mensual', anual: 'Anual' };
+export const ETIQUETAS_PERIODO = { diario: 'Diario', mensual: 'Mensual', anual: 'Anual' };

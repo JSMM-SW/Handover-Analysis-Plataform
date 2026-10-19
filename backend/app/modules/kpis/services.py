@@ -100,7 +100,7 @@ CLASIFICACION_A_CAMPO = {
     INDETERMINADO: "indeterminados",
 }
 
-PERIODOS_VALIDOS = ("diario", "semanal", "mensual", "anual")
+PERIODOS_VALIDOS = ("diario", "mensual", "anual")
 FRANJAS_VALIDAS = ("manana", "tarde", "noche")
 
 DIAS_SEMANA_ETIQUETAS = {
@@ -673,15 +673,9 @@ def calcular_distribucion_dia_semana(
 
 def _clave_periodo(timestamp, periodo: str) -> str:
     """Clave de agrupación para `calcular_tendencia`, según la periodicidad
-    elegida. La semana usa el calendario ISO (`isocalendar`) en vez de
-    `strftime("%W")` porque el numerado %W de Python no es el estándar ISO
-    y puede desalinear la primera/última semana del año.
-    """
+    elegida (diario/mensual/anual)."""
     if periodo == "diario":
         return timestamp.strftime("%Y-%m-%d")
-    if periodo == "semanal":
-        anio_iso, semana_iso, _ = timestamp.isocalendar()
-        return f"{anio_iso}-W{semana_iso:02d}"
     if periodo == "mensual":
         return timestamp.strftime("%Y-%m")
     return timestamp.strftime("%Y")  # anual
@@ -693,9 +687,6 @@ def _etiqueta_periodo(clave: str, periodo: str) -> str:
     if periodo == "diario":
         anio, mes, dia = clave.split("-")
         return  f"{dia}/{mes}/{anio[2:]}" 
-    if periodo == "semanal":
-        anio, semana = clave.split("-W")
-        return f"Sem {semana}/{anio}"
     if periodo == "mensual":
         anio, mes = clave.split("-")
         return f"{mes}/{anio}"
@@ -711,9 +702,6 @@ def _limites_periodo(clave: str, periodo: str) -> tuple[date, date]:
     if periodo == "diario":
         fecha = date.fromisoformat(clave)
         return fecha, fecha
-    if periodo == "semanal":
-        anio, semana = (int(valor) for valor in clave.split("-W"))
-        return date.fromisocalendar(anio, semana, 1), date.fromisocalendar(anio, semana, 7)
     if periodo == "mensual":
         anio, mes = (int(valor) for valor in clave.split("-"))
         ultimo_dia = calendar.monthrange(anio, mes)[1]
@@ -764,7 +752,7 @@ def calcular_tendencia(
 ) -> list[TrendResponse]:
 
     """Evolución de los KPIs de handover a lo largo del tiempo, agrupada por
-    `periodo` (diario/semanal/mensual/anual -- ver `PERIODOS_VALIDOS`).
+    `periodo` (diario/mensual/anual -- ver `PERIODOS_VALIDOS`).
 
     Cada punto trae, además de los conteos, las fechas que delimitan ese
     periodo (`fecha_inicio`/`fecha_fin`, vía `_limites_periodo`) y el total

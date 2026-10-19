@@ -709,7 +709,7 @@ export default function KpisDashboard() {
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
                             <option value="diario">Diario</option>
-                            <option value="semanal">Semanal</option>
+                            
                             <option value="mensual">Mensual</option>
                             <option value="anual">Anual</option>
                         </select>

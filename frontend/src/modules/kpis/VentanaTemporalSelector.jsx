@@ -24,41 +24,13 @@ function primerDiaDelAnio(anio) {
 function ultimoDiaDelAnio(anio) {
     return `${anio}-12-31`;
 }
-function esBisiesto(anio) {
-    return (anio % 4 === 0 && anio % 100 !== 0) || anio % 400 === 0;
-}
-function semanasEnAnioISO(anio) {
-    // Un año ISO-8601 tiene 53 semanas si el 31 de diciembre cae jueves,
-    // o si cae viernes y el año es bisiesto; si no, tiene 52.
-    const unDiciembre = new Date(Date.UTC(anio, 11, 31));
-    const diaSemana = unDiciembre.getUTCDay() || 7;
-    return diaSemana === 4 || (diaSemana === 5 && esBisiesto(anio)) ? 53 : 52;
-}
-function fechaDeSemanaISO(anio, semana, diaSemana) {
-    // diaSemana: 1=lunes ... 7=domingo. La semana 1 ISO es la que
-    // contiene el primer jueves del año (equivalente: la que contiene el
-    // 4 de enero) -- mismo criterio que usa kpis/services.py en el backend.
-    const cuatroEnero = new Date(Date.UTC(anio, 0, 4));
-    const diaSemanaCuatroEnero = cuatroEnero.getUTCDay() || 7;
-    const lunesSemana1 = new Date(cuatroEnero);
-    lunesSemana1.setUTCDate(cuatroEnero.getUTCDate() - diaSemanaCuatroEnero + 1);
-    const resultado = new Date(lunesSemana1);
-    resultado.setUTCDate(lunesSemana1.getUTCDate() + (semana - 1) * 7 + (diaSemana - 1));
-    return resultado.toISOString().slice(0, 10);
-}
-function primerDiaDeSemanaISO(anio, semana) {
-    return fechaDeSemanaISO(anio, semana, 1);
-}
-function ultimoDiaDeSemanaISO(anio, semana) {
-    return fechaDeSemanaISO(anio, semana, 7);
-}
 
 /**
  * Selector de ventana temporal que se adapta a la periodicidad elegida:
- * con "diario" deja escoger cualquier día; con "mensual"/"anual"/"semanal"
- * solo deja escoger la granularidad que corresponde (mes+año, año, o
- * semana+año) -- no tiene sentido pedir un día exacto para una gráfica
- * que de todas formas agrupa por mes/año/semana.
+ * con "diario" deja escoger cualquier día; con "mensual"/"anual" solo deja
+ * escoger la granularidad que corresponde (mes+año, o año) -- no tiene
+ * sentido pedir un día exacto para una gráfica que de todas formas agrupa
+ * por mes/año.
  *
  * Mantiene su propio estado granular y se lo comunica al padre ya
  * convertido a fechas ISO (`onChange(inicio, fin)`) -- el padre sigue
@@ -76,8 +48,6 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, a
     const [mesInicio, setMesInicio] = useState(() => (startDate ? mesDeFecha(startDate) : mesActual));
     const [anioFin, setAnioFin] = useState(() => (endDate ? anioDeFecha(endDate) : anioActual));
     const [mesFin, setMesFin] = useState(() => (endDate ? mesDeFecha(endDate) : mesActual));
-    const [semanaInicio, setSemanaInicio] = useState(1);
-    const [semanaFin, setSemanaFin] = useState(1);
 
     // `startDate`/`endDate` llegan vacíos en el primer render (antes de que
     // KpisDashboard ajuste la ventana automática a las sesiones cargadas);
@@ -103,11 +73,9 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, a
             onChange(primerDiaDelMes(anioInicio, mesInicio), ultimoDiaDelMes(anioFin, mesFin));
         } else if (periodo === 'anual') {
             onChange(primerDiaDelAnio(anioInicio), ultimoDiaDelAnio(anioFin));
-        } else if (periodo === 'semanal') {
-            onChange(primerDiaDeSemanaISO(anioInicio, semanaInicio), ultimoDiaDeSemanaISO(anioFin, semanaFin));
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [periodo, anioInicio, mesInicio, anioFin, mesFin, semanaInicio, semanaFin]);
+    }, [periodo, anioInicio, mesInicio, anioFin, mesFin]);
 
     if (periodo === 'diario') {
         return (
@@ -139,37 +107,13 @@ export default function VentanaTemporalSelector({ periodo, startDate, endDate, a
         );
     }
 
-    if (periodo === 'anual') {
-        return (
-            <div className="kpis-date-inputs">
-                <select className="kpis-input" value={anioInicio} onChange={(e) => setAnioInicio(Number(e.target.value))}>
-                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
-                </select>
-                <span className="kpis-date-separador">a</span>
-                <select className="kpis-input" value={anioFin} onChange={(e) => setAnioFin(Number(e.target.value))}>
-                    {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
-                </select>
-            </div>
-        );
-    }
-
-    // periodo === 'semanal'
+    // periodo === 'anual'
     return (
         <div className="kpis-date-inputs">
-            <select className="kpis-input" value={semanaInicio} onChange={(e) => setSemanaInicio(Number(e.target.value))}>
-                {Array.from({ length: semanasEnAnioISO(anioInicio) }, (_, i) => i + 1).map((semana) => (
-                    <option key={semana} value={semana}>Sem {semana}</option>
-                ))}
-            </select>
             <select className="kpis-input" value={anioInicio} onChange={(e) => setAnioInicio(Number(e.target.value))}>
                 {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
             </select>
             <span className="kpis-date-separador">a</span>
-            <select className="kpis-input" value={semanaFin} onChange={(e) => setSemanaFin(Number(e.target.value))}>
-                {Array.from({ length: semanasEnAnioISO(anioFin) }, (_, i) => i + 1).map((semana) => (
-                    <option key={semana} value={semana}>Sem {semana}</option>
-                ))}
-            </select>
             <select className="kpis-input" value={anioFin} onChange={(e) => setAnioFin(Number(e.target.value))}>
                 {aniosDisponibles.map((anio) => <option key={anio} value={anio}>{anio}</option>)}
             </select>

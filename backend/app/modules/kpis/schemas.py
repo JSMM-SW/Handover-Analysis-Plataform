@@ -149,7 +149,7 @@ class DiaSemanaResponse(BaseModel):
 
 class TrendResponse(BaseModel):
     """Un elemento de la respuesta de GET /kpis/trend: evolución de los KPIs
-    agrupada por periodo (diario/semanal/mensual/anual)."""
+    agrupada por periodo (diario/mensual/anual)."""
 
     periodo: str = Field(description="Clave de agrupación técnica, ordenable (ej. '2026-05-06', '2026-W19')")
     etiqueta: str = Field(description="Etiqueta legible para el eje de la gráfica (ej. '06/05/26', 'Sem 19/2026')")
@@ -193,7 +193,7 @@ class GuardarReporteRequest(BaseModel):
     tecnologia: list[int] = Field(default_factory=list, description="Vacío = todas")
     franja: list[Literal["manana", "tarde", "noche"]] = Field(default_factory=list, description="Vacío = todas")
     sesion_label: list[int] = Field(default_factory=list, description="Vacío = todas las sesiones")
-    periodicidad: Literal["diario", "semanal", "mensual", "anual"]
+    periodicidad: Literal["diario", "mensual", "anual"]
     periodo_seleccionado: str | None = Field(
         default=None, description="Clave del punto de /kpis/trend si había uno seleccionado (Paso 10)"
     )

@@ -559,7 +559,6 @@ def test_agrupar_eventos_cuenta_cada_categoria_por_grupo():
     "periodo, clave_esperada",
     [
         ("diario", "2026-05-05"),
-        ("semanal", "2026-W19"),
         ("mensual", "2026-05"),
         ("anual", "2026"),
     ],
@@ -569,20 +568,10 @@ def test_clave_periodo(periodo, clave_esperada):
     assert _clave_periodo(INSTANTE_BASE, periodo) == clave_esperada
 
 
-def test_clave_periodo_semanal_usa_calendario_iso_en_cambio_de_anio():
-    """El 1 de enero de 2027 (viernes) pertenece a la semana ISO 53 de
-    2026, no a la semana 0 de 2027 -- por eso se usa `isocalendar()` y no
-    `strftime('%W')`."""
-    primero_de_enero = datetime(2027, 1, 1, 12, 0, tzinfo=timezone.utc)
-
-    assert _clave_periodo(primero_de_enero, "semanal") == "2026-W53"
-
-
 @pytest.mark.parametrize(
     "clave, periodo, etiqueta_esperada",
     [
         ("2026-05-05", "diario", "05/05/26"),
-        ("2026-W19", "semanal", "Sem 19/2026"),
         ("2026-05", "mensual", "05/2026"),
         ("2026", "anual", "2026"),
     ],
@@ -597,9 +586,6 @@ def test_etiqueta_periodo(clave, periodo, etiqueta_esperada):
     "clave, periodo, inicio_esperado, fin_esperado",
     [
         ("2026-05-05", "diario", date(2026, 5, 5), date(2026, 5, 5)),
-        # Semana ISO 19 de 2026: lunes 04/05 a domingo 10/05 (mismo criterio
-        # que _clave_periodo -- el 5 de mayo de 2026 es martes de esa semana).
-        ("2026-W19", "semanal", date(2026, 5, 4), date(2026, 5, 10)),
         ("2026-05", "mensual", date(2026, 5, 1), date(2026, 5, 31)),
         ("2026", "anual", date(2026, 1, 1), date(2026, 12, 31)),
     ],
