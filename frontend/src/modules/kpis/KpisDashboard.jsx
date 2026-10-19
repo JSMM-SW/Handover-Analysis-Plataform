@@ -578,9 +578,8 @@ export default function KpisDashboard() {
      * Alterna la selección de un periodo al hacer clic sobre un punto del
      * gráfico "Evolución de KPIs": un clic en un punto nuevo lo selecciona,
      * un clic sobre el mismo punto ya seleccionado lo deselecciona.
-     *>Mediciones Registradas
-     * @param {object} eventoRecharts - evento de clic que entrega Recharts,
-     * con `activePayload` (el/los punto(s) bajo el cursor).
+     *
+     * @param {object} eventoRecharts - evento de clic que entrega Recharts,     * con `activePayload` (el/los punto(s) bajo el cursor).
      */
                 /**
      * Selecciona el periodo clickeado en el gráfico "Evolución de KPIs".
@@ -783,14 +782,16 @@ export default function KpisDashboard() {
 
                                         <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
                                         <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+                                        <YAxis yAxisId="handovers" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
+                                        <YAxis yAxisId="mediciones" orientation="right" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Mediciones', angle: 90, position: 'insideRight', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
                                         <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
                                         <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={{ r: 4 }} />
 
-                                        <Line type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
-                                        <Line type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={{ r: 4 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={{ r: 3 }} />
+                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
+                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={{ r: 3 }} />
                                     </LineChart>
                                 </ResponsiveContainer>
                             </div>
@@ -821,27 +822,7 @@ export default function KpisDashboard() {
                         </div>
                     </div>
 
-                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Mediciones Registradas ({ETIQUETAS_PERIODO[periodo]})</h3>
-                                                        <div style={{ height: '240px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <ComposedChart data={trendData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
-                                        <Legend verticalAlign="top" height={30} iconType="circle" />
-                                        <Bar dataKey="total_mediciones" fill={colorPrimario} name="Mediciones" radius={[4, 4, 0, 0]} />
-
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                        </div>
-                    </div>
-
-                                        <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
+                    <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
                         <div className="kpis-card" style={{ margin: 0 }}>
                                                         <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
 
