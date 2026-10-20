@@ -578,6 +578,58 @@
     white-space: nowrap;
 }
 
+.kpis-historial-item-header-row {
+    display: flex;
+    align-items: csenter;
+    gap: 8px;
+}
+
+.kpis-historial-btn-generar {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--color-borde);
+    color: var(--color-texto);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--fuente-base);
+}
+
+.kpis-historial-btn-generar:hover {
+    background: var(--color-superficie-hundida);
+}
+
+.kpis-historial-btn-generar:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Invisible para el usuario pero realmente pintado por el navegador (no
+   display:none ni left:-9999px): Chrome deja de renderizar por completo
+   las formas complejas de SVG (líneas, barras, arcos de dona -- no así
+   círculos simples) en contenido demasiado lejos del viewport, así que
+   .kpis-captura-oculta-contenedor se queda en la esquina (0,0), dentro
+   del viewport, y lo recorta visualmente con overflow:hidden en vez de
+   moverlo lejos. Aquí se monta ReporteImprimible oculto mientras se
+   regenera un PDF antiguo del historial. */
+.kpis-captura-oculta-contenedor {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.kpis-captura-oculta-contenido {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1200px;
+}
+
 .kpis-historial-item-filtros {
     display: flex;
     flex-wrap: wrap;
