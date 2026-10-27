@@ -375,14 +375,15 @@ export default function IngestaPage() {
                     <span className="ingesta-eyebrow">Módulo de ingesta</span>
                     <h1 className="ingesta-title">Carga de datos de handover</h1>
                     <p className="ingesta-subtitle">
-                        Sube uno o varios archivos CSV con mediciones de handover para
-                        validarlos, limpiarlos y estructurarlos como dataset listo para análisis.
+                        Sube archivos CSV con mediciones de handover para validarlos, limpiarlos y
+                        estructurarlos como dataset listo para análisis. Los archivos se procesan
+                        de uno en uno, en el orden en que los seleccionas.
                     </p>
                 </header>
 
                 <section className="ingesta-card">
                     <h2 className="ingesta-card-title">Archivos</h2>
-                    <p className="ingesta-card-hint">Formatos soportados: .csv — puedes seleccionar varios a la vez</p>
+                    <p className="ingesta-card-hint">Formato soportado: .csv — si eliges varios, se procesan uno tras otro</p>
 
                     <label
                         className={`ingesta-dropzone ${isDragging ? "is-dragging" : ""} ${items.length > 0 ? "has-file" : ""}`}
