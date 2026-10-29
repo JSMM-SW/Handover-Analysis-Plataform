@@ -12,175 +12,15 @@ import {
 
 import MultiSelectDropdown from './MultiSelectDropdown';
 import VentanaTemporalSelector from './VentanaTemporalSelector';
-import ResumenPanel from './ResumenPanel';
-import TablaPeriodos from './TablaPeriodos';
 import HistorialReportesModal from './HistorialReportesModal';
-import { formatearTasa } from '../../shared/formatearTasa';
+import ReporteImprimible from './ReporteImprimible';
 import { construirResumenDesdePeriodo } from '../../shared/resumenPeriodo';
 import { ETIQUETAS_FRANJA, ETIQUETAS_TECNOLOGIA, ETIQUETAS_PERIODO } from './etiquetas';
 
-
-
-
-
-import {
-    ComposedChart, LineChart, PieChart, Bar, Line, Pie, Cell,
-    XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-} from 'recharts';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import './KpisDashboard.css';
-
-/**
- * Lee el valor actual de una variable CSS del tema (ej. "--color-exito")
- * y lo mantiene sincronizado cuando el usuario alterna claro/oscuro.
- *
- * El nombre empieza con "use" (en inglés) a propósito: React exige ese
- * prefijo en toda función que llame a useState/useEffect para reconocerla
- * como hook (regla react-hooks/rules-of-hooks del lint).
- *
- * Los gráficos de Recharts se dibujan como SVG y reciben sus colores por
- * atributos (fill/stroke), no por CSS -- los navegadores no resuelven
- * `var(--token)` de forma confiable ahí (se ve todo en negro), y
- * html2canvas tampoco sabe interpretar `var(...)` al exportar el PDF.
- * Por eso se resuelve el valor real (ej. "#34d399") en JavaScript con
- * `getComputedStyle`, en vez de pasar el string `var(--token)` directo.
- *
- * El MutationObserver detecta cuando cambia `data-tema` en <html> (ya sea
- * por `alternarTema` en App.jsx o por `exportToPDF`, que fuerza el tema
- * oscuro durante la captura) para recalcular el color.
- *
- * @param {string} nombreVariable - nombre de la variable CSS, con "--".
- * @returns {string} el color ya resuelto (ej. "#34d399").
- */
-function useColorDeTema(nombreVariable) {
-    const [color, setColor] = useState('#000000');
-
-    useEffect(() => {
-        const raiz = document.documentElement;
-        const leerColor = () => {
-            const valor = getComputedStyle(raiz).getPropertyValue(nombreVariable).trim();
-            if (valor) setColor(valor);
-        };
-        leerColor();
-
-        const observador = new MutationObserver(leerColor);
-        observador.observe(raiz, { attributes: true, attributeFilter: ['data-tema'] });
-        return () => observador.disconnect();
-    }, [nombreVariable]);
-
-    return color;
-}
-
-/**
- * Espera a que el navegador pinte dos frames seguidos.
- *
- * Al cambiar `data-tema`, el MutationObserver de `useColorDeTema` agenda
- * un re-render de React; el primer frame deja que React aplique los nuevos
- * colores al DOM y el segundo garantiza que el navegador ya los pintó
- * antes de que html2canvas capture.
- *
- * @returns {Promise<void>} se resuelve después del segundo frame.
- */
-function esperarRepintado() {
-    return new Promise((resolver) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolver()));
-    });
-}
-
-/**
- * Calcula dónde debe caer cada salto de página del PDF para que ninguna
- * sección (tarjeta, gráfico o tabla) quede partida entre dos páginas.
- *
- * En vez de avanzar en incrementos fijos de `altoPagina` (como antes), si
- * el límite de una página cae DENTRO de una sección, el corte se adelanta
- * al inicio de esa sección -- esa sección completa pasa entera a la
- * siguiente página. Si una sola sección es más alta que una página
- * completa, no hay forma de evitar el corte y se divide donde alcanza.
- *
- * @param {Array<{inicio: number, fin: number}>} limites - posición (en mm,
- * mismas unidades que `altoPagina`/`altoTotal`) de cada sección dentro de
- * la imagen completa del dashboard.
- * @param {number} altoPagina - alto de una página del PDF, en mm.
- * @param {number} altoTotal - alto de la imagen completa del dashboard, en mm.
- * @returns {number[]} los puntos de corte, de 0 a `altoTotal` inclusive.
- */
-function calcularSaltosDePagina(limites, altoPagina, altoTotal) {
-    const saltos = [0];
-    let actual = 0;
-
-    while (actual < altoTotal - 0.01) {
-        const limitePagina = actual + altoPagina;
-        if (limitePagina >= altoTotal) {
-            saltos.push(altoTotal);
-            break;
-        }
-
-        const seccionCruzada = limites.find(
-            ({ inicio, fin }) => inicio < limitePagina - 0.01 && fin > limitePagina + 0.01
-        );
-        let corte = seccionCruzada ? seccionCruzada.inicio : limitePagina;
-        if (corte <= actual + 0.01) {
-            // La sección es más alta que una página completa: no se puede
-            // evitar el corte, se divide donde alcanza.
-            corte = limitePagina;
-        }
-
-        saltos.push(corte);
-        actual = corte;
-    }
-
-    return saltos;
-}
-
-/**
- * Contenido de tooltip para los gráficos de distribución (hora/franja/día
-
- * de la semana): además de las series que ya dibuja Recharts (exitosos,
- * fallidos, indeterminados, ping-pongs), agrega la línea "Mediciones
- * registradas", que no es una serie graficada sino contexto de volumen de
- * datos (Paso 9 del plan de refactor).
- *
- * Recibe los colores de superficie/borde/texto por parámetro (en vez de
- * leerlos con el hook useColorDeTema) porque es una función común usada por
- * los 3 gráficos, no un componente propio.
- *
- * @param {object} props - props estándar de un `content` de Recharts (`active`, `payload`, `label`).
- * @param {string} colorSuperficie - color de fondo del tooltip, ya resuelto.
- * @param {string} colorBorde - color del borde del tooltip, ya resuelto.
- * @param {string} colorTexto - color del texto del tooltip, ya resuelto.
- * @returns {JSX.Element | null} el tooltip, o null si no hay nada que mostrar.
- */
-function renderTooltipConMediciones({ active, payload, label }, colorSuperficie, colorBorde, colorTexto) {
-    if (!active || !payload || payload.length === 0) return null;
-
-    const totalMediciones = payload[0].payload.total_mediciones;
-
-    return (
-        <div style={{
-            backgroundColor: colorSuperficie,
-            border: `1px solid ${colorBorde}`,
-            borderRadius: '6px',
-            padding: '8px 12px',
-            color: colorTexto,
-            fontSize: '13px',
-        }}>
-            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>{label}</p>
-            {payload.map((entry) => (
-                <p key={entry.dataKey} style={{ margin: 0, color: entry.color }}>
-                    {entry.name}: {entry.value}
-                </p>
-            ))}
-            <p style={{ margin: '4px 0 0', paddingTop: '4px', borderTop: `1px solid ${colorBorde}` }}>
-                Mediciones registradas: {totalMediciones}
-            </p>
-        </div>
-    );
-}
+import { generarPdfDesdeElemento } from './pdfHelpers';
 
 const OPCIONES_TECNOLOGIA = [
-
-
     { value: '1', label: 'LTE / 4G' },
     { value: '2', label: '3G / UMTS' },
     { value: '3', label: '2G' },
@@ -207,7 +47,7 @@ export default function KpisDashboard() {
     const [franjaData, setFranjaData] = useState([]);
     const [diaSemanaData, setDiaSemanaData] = useState([]);
 
-        const [trendData, setTrendData] = useState([]);
+    const [trendData, setTrendData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [periodoSeleccionado, setPeriodoSeleccionado] = useState(null);
@@ -216,21 +56,7 @@ export default function KpisDashboard() {
     const [loadingPeriodo, setLoadingPeriodo] = useState(false);
     const [mostrarHistorial, setMostrarHistorial] = useState(false);
 
-
-
-
     const dashboardRef = useRef(null);
-
-    const colorExitoso = useColorDeTema('--color-exito');
-    const colorFallido = useColorDeTema('--color-error');
-    const colorIndeterminado = useColorDeTema('--color-texto-tenue');
-    const colorPingPong = useColorDeTema('--color-advertencia');
-    const colorBorde = useColorDeTema('--color-borde');
-    const colorTextoTenue = useColorDeTema('--color-texto-tenue');
-        const colorSuperficie = useColorDeTema('--color-superficie');
-    const colorTexto = useColorDeTema('--color-texto');
-    const colorPrimario = useColorDeTema('--color-primario');
-
 
     useEffect(() => {
         /**
@@ -276,15 +102,14 @@ export default function KpisDashboard() {
             }
         };
 
-                    if (startDate && endDate) {
+        if (startDate && endDate) {
             cargarDatos();
         }
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setPeriodoSeleccionado(null);
     }, [startDate, endDate, tecnologias, periodo, franjas, sesionLabels]);
 
-
-              useEffect(() => {
+    useEffect(() => {
         fetchSesiones().then(setSesiones).catch(() => setSesiones([]));
     }, []);
 
@@ -301,13 +126,12 @@ export default function KpisDashboard() {
          * gráfico, no un cambio de filtro) y no debe bloquear el resto del
          * dashboard con su propio estado de carga.
          */
-                if (!periodoSeleccionado) {
+        if (!periodoSeleccionado) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setHourlyDataPeriodo(null);
             setFranjaDataPeriodo(null);
             return;
         }
-
 
         const punto = trendData.find((item) => item.periodo === periodoSeleccionado);
         if (!punto) return;
@@ -345,7 +169,6 @@ export default function KpisDashboard() {
         };
     }, [periodoSeleccionado, trendData, tecnologias, franjas, sesionLabels]);
 
-
     useEffect(() => {
         /**
          * Ajusta la ventana temporal a la primera y última medición de las
@@ -367,7 +190,7 @@ export default function KpisDashboard() {
             (minimo, sesion) => (sesion.primera_medicion < minimo ? sesion.primera_medicion : minimo),
             conFechas[0].primera_medicion,
         );
-                const fin = conFechas.reduce(
+        const fin = conFechas.reduce(
             (maximo, sesion) => (sesion.ultima_medicion > maximo ? sesion.ultima_medicion : maximo),
             conFechas[0].ultima_medicion,
         );
@@ -380,8 +203,7 @@ export default function KpisDashboard() {
         setEndDate(fin.slice(0, 10));
     }, [sesionLabels, sesiones]);
 
-
-        /**
+    /**
      * Genera el PDF del dashboard con la apariencia del tema que el usuario
      * tiene activo en ese momento (claro u oscuro) -- a diferencia de antes
      * (Paso 11 del plan de refactor), ya no fuerza el tema oscuro durante la
@@ -399,7 +221,6 @@ export default function KpisDashboard() {
         const element = dashboardRef.current;
         if (!element) return;
 
-        const raiz = document.documentElement;
         const controles = element.querySelector('.kpis-controls');
         const resumenFiltros = element.querySelector('.kpis-filtros-resumen-pdf');
 
@@ -416,57 +237,12 @@ export default function KpisDashboard() {
         // desbordarse.
         element.classList.add('kpis-pdf-compacto');
 
-               try {
-            await esperarRepintado();
-
-            // Posición (en px CSS, antes de escalar) de cada sección que no
-            // debe partirse entre dos páginas, relativa al propio elemento
-            // capturado -- se mide ANTES de generar el canvas, con el DOM ya
-            // en su estado final (modo compacto, controles ocultos).
-            const rectRaiz = element.getBoundingClientRect();
-            const alturaTotalPx = element.scrollHeight;
-            const limitesSeccionPx = Array.from(
-                element.querySelectorAll('.kpis-resumen-panel, .kpis-card')
-            ).map((seccion) => {
-                const rect = seccion.getBoundingClientRect();
-                return { inicio: rect.top - rectRaiz.top, fin: rect.bottom - rectRaiz.top };
-            });
-
-            const fondoActual = getComputedStyle(raiz).getPropertyValue('--color-fondo').trim();
-
-            const canvas = await html2canvas(element, {
-                backgroundColor: fondoActual,
-                scale: 2,
-            });
-
-            const imgData = canvas.toDataURL('image/jpeg', 0.85);
-
-
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const anchoPdf = pdf.internal.pageSize.getWidth();
-            const altoPagina = pdf.internal.pageSize.getHeight();
-            const altoImagen = (canvas.height * anchoPdf) / canvas.width;
-
-            // Convierte los límites de cada sección de px CSS a mm del PDF,
-            // con la misma proporción que ya usa el resto de la imagen.
-            const pxAMm = altoImagen / alturaTotalPx;
-            const limitesSeccionMm = limitesSeccionPx.map(({ inicio, fin }) => ({
-                inicio: inicio * pxAMm,
-                fin: fin * pxAMm,
-            }));
-
-            const saltos = calcularSaltosDePagina(limitesSeccionMm, altoPagina, altoImagen);
-            for (let indice = 0; indice < saltos.length - 1; indice += 1) {
-                if (indice > 0) pdf.addPage();
-                pdf.addImage(imgData, 'JPEG', 0, -saltos[indice], anchoPdf, altoImagen);
-            }
-
-
+        try {
             const nombreArchivo = `Reporte_Handovers_${startDate}_al_${endDate}.pdf`;
-            pdf.save(nombreArchivo);
+            await generarPdfDesdeElemento(element, nombreArchivo);
 
-            // Guarda una entrada en el historial .
-            //  No se espera ni bloquea la descarga del PDF por esto -- si falla
+            // Guarda una entrada en el historial.
+            // No se espera ni bloquea la descarga del PDF por esto -- si falla
             // (ej. sin conexión al backend en ese instante), el usuario ya
             // tiene su PDF de todas formas.
             guardarReporteHistorial({
@@ -478,7 +254,18 @@ export default function KpisDashboard() {
                 sesion_label: sesionLabels.map(Number),
                 periodicidad: periodo,
                 periodo_seleccionado: periodoSeleccionado,
-                resultados: { resumen: resumenMostrado, tendencia: trendData },
+                // hora_dia/franja_horaria/dia_semana se agregan para que el
+                // historial pueda regenerar el PDF completo (con las 3
+                // gráficas de distribución) más adelante -- antes de esto
+                // solo se guardaba resumen+tendencia, insuficiente para
+                // reconstruir esas 3 gráficas.
+                resultados: {
+                    resumen: resumenMostrado,
+                    tendencia: trendData,
+                    hora_dia: hourlyMostrado,
+                    franja_horaria: franjaMostrado,
+                    dia_semana: diaSemanaData,
+                },
             }).catch(() => {});
         } finally {
             controles.style.display = 'flex';
@@ -487,18 +274,14 @@ export default function KpisDashboard() {
         }
     };
 
-
-
-
-        const hasData = summaryData && summaryData.total_handovers > 0;
+    const hasData = summaryData && summaryData.total_handovers > 0;
 
     const opcionesSesion = sesiones.map((sesion) => ({
-
         value: String(sesion.sesion_label),
         label: `${sessionName(sesion)} (${sesion.records_valid} registros)`,
     }));
 
-        const resumenSeleccion = (seleccion, etiquetas, allLabel = 'Todas') => {
+    const resumenSeleccion = (seleccion, etiquetas, allLabel = 'Todas') => {
         if (seleccion.length === 0) return allLabel;
         return seleccion.map((valor) => etiquetas[valor] ?? valor).join(', ');
     };
@@ -513,7 +296,7 @@ export default function KpisDashboard() {
         .flatMap((sesion) => [sesion.primera_medicion, sesion.ultima_medicion])
         .filter(Boolean);
     const anioActual = new Date().getFullYear();
-        const aniosDisponibles = fechasConDatos.length > 0
+    const aniosDisponibles = fechasConDatos.length > 0
         ? (() => {
             const anios = fechasConDatos.map((fecha) => Number(fecha.slice(0, 4)));
             const anioMin = Math.min(...anios);
@@ -558,7 +341,7 @@ export default function KpisDashboard() {
         return `Del ${inicio.slice(0, 10)} al ${fin.slice(0, 10)}`;
     })();
 
-        /**
+    /**
      * Punto de trendData que corresponde al periodo seleccionado con clic en
      * el gráfico "Evolución de KPIs" (Paso 10 del plan de refactor), o null
      * si no hay ninguno seleccionado.
@@ -574,15 +357,9 @@ export default function KpisDashboard() {
      * selección de un periodo nunca oculta ni muestra el dashboard, solo
      * cambia qué números se ven dentro de él.
      */
-     const resumenMostrado = puntoSeleccionado
+    const resumenMostrado = puntoSeleccionado
         ? construirResumenDesdePeriodo(puntoSeleccionado)
         : summaryData;
-
-        const pieData = resumenMostrado ? [
-        { name: 'Exitoso', value: resumenMostrado.exitosos, color: colorExitoso },
-        { name: 'Fallido', value: resumenMostrado.fallidos, color: colorFallido },
-        { name: 'Indeterminado', value: resumenMostrado.indeterminados, color: colorIndeterminado },
-    ] : [];
 
     // Datos para "Distribución de Handovers por Hora del Día" y
     // "Distribución por Franja Horaria": los del periodo seleccionado si ya
@@ -592,19 +369,10 @@ export default function KpisDashboard() {
     const franjaMostrado = (puntoSeleccionado && franjaDataPeriodo) ? franjaDataPeriodo : franjaData;
 
     const periodoTexto = puntoSeleccionado
-
-
         ? `${puntoSeleccionado.fecha_inicio} a ${puntoSeleccionado.fecha_fin} (periodo: ${puntoSeleccionado.etiqueta})`
         : `${startDate} a ${endDate}`;
 
     /**
-     * Alterna la selección de un periodo al hacer clic sobre un punto del
-     * gráfico "Evolución de KPIs": un clic en un punto nuevo lo selecciona,
-     * un clic sobre el mismo punto ya seleccionado lo deselecciona.
-     *
-     * @param {object} eventoRecharts - evento de clic que entrega Recharts,     * con `activePayload` (el/los punto(s) bajo el cursor).
-     */
-                /**
      * Selecciona el periodo clickeado en el gráfico "Evolución de KPIs".
      * Siempre reemplaza la selección anterior (patrón de "filtro cruzado"
      * de los dashboards BI: Power BI, Tableau, Grafana) en vez de hacer
@@ -627,46 +395,14 @@ export default function KpisDashboard() {
     /** Limpia la selección de periodo y vuelve a mostrar el rango completo. */
     const limpiarSeleccionPeriodo = () => setPeriodoSeleccionado(null);
 
-    /**
-     * Arma una función de renderizado de punto para una línea de
-     * "Evolución de KPIs": el punto del periodo seleccionado se dibuja
-     * más grande y con un anillo alrededor, para que se note cuál está
-     * elegido además del texto "Mostrando el periodo...".
-     *
-     * @param {string} color - color de relleno del punto (el mismo de la línea).
-     * @param {number} radio - radio normal del punto, sin selección.
-     * @returns {Function} función `dot` que espera Recharts.
-     */
-    const crearPuntoEvolucion = (color, radio) => (props) => {
-        const { cx, cy, payload } = props;
-        const seleccionado = puntoSeleccionado && payload.periodo === puntoSeleccionado.periodo;
-        return (
-            <circle
-                key={`punto-${payload.periodo}`}
-                cx={cx}
-                cy={cy}
-                r={seleccionado ? radio + 4 : radio}
-                fill={color}
-                stroke={seleccionado ? colorTexto : 'none'}
-                strokeWidth={seleccionado ? 2 : 0}
-            />
-        );
-    };
-
-
-
-
     return (
-
-
-
         <div className="kpis-shell" ref={dashboardRef}>
             <header className="kpis-header">
                 <div className="kpis-title-group">
                     <h2 className="kpis-title">KPIs y Reportes de Handover</h2>
                     <p className="kpis-subtitle">Monitoreo y análisis del desempeño del proceso de handover en redes móviles</p>
                 </div>
-                                <div className="kpis-controls">
+                <div className="kpis-controls">
                     <div className="kpis-sesion-filter">
                         <MultiSelectDropdown
                             label="Sesión"
@@ -705,16 +441,14 @@ export default function KpisDashboard() {
                         onChange={setFranjas}
                     />
                     <div className="kpis-date-filter">
-
                         <span className="kpis-date-label">Periodicidad (tendencia)</span>
                         <select className="kpis-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)}>
                             <option value="diario">Diario</option>
-                            
                             <option value="mensual">Mensual</option>
                             <option value="anual">Anual</option>
                         </select>
                     </div>
-                <div className="kpis-controls-action">
+                    <div className="kpis-controls-action">
                         <button className="kpis-btn-historial" onClick={() => setMostrarHistorial(true)}>
                             Historial
                         </button>
@@ -728,11 +462,10 @@ export default function KpisDashboard() {
                     <HistorialReportesModal onClose={() => setMostrarHistorial(false)} />
                 )}
 
-
                 {/* Solo visible durante la captura para el PDF (ver exportToPDF):
                     reemplaza a .kpis-controls, que html2canvas no captura bien
                     por tener <select>/<input type="date"> nativos. */}
-                                <div className="kpis-filtros-resumen-pdf" style={{ display: 'none' }}>
+                <div className="kpis-filtros-resumen-pdf" style={{ display: 'none' }}>
                     <span>Periodo: {startDate} a {endDate}</span>
                     <span>Tecnología: {resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}</span>
                     <span>Franja horaria: {resumenSeleccion(franjas, ETIQUETAS_FRANJA)}</span>
@@ -741,9 +474,7 @@ export default function KpisDashboard() {
                     {puntoSeleccionado && (
                         <span>Periodo seleccionado: {puntoSeleccionado.etiqueta} ({puntoSeleccionado.fecha_inicio} a {puntoSeleccionado.fecha_fin})</span>
                     )}
-
                 </div>
-
             </header>
 
             {loading && (
@@ -762,210 +493,22 @@ export default function KpisDashboard() {
                 </div>
             )}
 
-                        {!loading && !error && hasData && (
-                <>
-                                        <ResumenPanel
-                        sesionesTexto={sesionesTexto}
-                        periodoTexto={periodoTexto}
-                        tecnologiaTexto={resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}
-                        resumen={resumenMostrado}
-                    />
-
-                    <div className="kpis-grid">
-                        <div className="kpis-card">
-                            <h3 className="kpis-card-title">Total Handovers</h3>
-                            <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large">{resumenMostrado.total_handovers}</span>
-                            </div>
-                            <p className="kpis-stat-sub">de {resumenMostrado.total_mediciones} mediciones</p>
-                        </div>
-
-                                                <div className="kpis-card">
-                            <h3 className="kpis-card-title">Tasa de Handover</h3>
-                            <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large highlight-green">{formatearTasa(resumenMostrado.tasa_handover)}</span>
-                            </div>
-                        </div>
-
-                        <div className="kpis-card">
-                            <h3 className="kpis-card-title">KPIs de Handover</h3>
-                            <div className="kpis-stat">
-                                <span className="kpis-stat-label">Ping-Pong (HOPP)</span>
-                                <span className="kpis-stat-value highlight-orange">{formatearTasa(resumenMostrado.tasa_hopp)}</span>
-                            </div>
-                            <div className="kpis-stat">
-                                <span className="kpis-stat-label">Handover Innecesarios</span>
-                                <span className="kpis-stat-value highlight-red">{formatearTasa(resumenMostrado.tasa_innecesarios)}</span>
-                            </div>
-                            <div className="kpis-stat">
-                                <span className="kpis-stat-label">Handover Post Degradados (PHD)</span>
-                                <span className="kpis-stat-value highlight-red">{formatearTasa(resumenMostrado.tasa_phd)}</span>
-                            </div>
-                        </div>
-
-
-                        <div className="kpis-card">
-                            <h3 className="kpis-card-title">Handover Exitosos</h3>
-                            <div className="kpis-stat-main">
-                                <span className="kpis-stat-value large" style={{ color: colorExitoso }}>{formatearTasa(resumenMostrado.tasa_exito)}</span>
-                            </div>
-                            <p className="kpis-stat-sub">{resumenMostrado.exitosos} handovers exitosos</p>
-                        </div>
-
-                    </div>
-
-
-                                                            <div className="kpis-row-layout">
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <div className="kpis-card-header-row">
-                                <h3 className="kpis-card-title">Evolución de KPIs ({ETIQUETAS_PERIODO[periodo]})</h3>
-                                {puntoSeleccionado && (
-                                    <button type="button" className="kpis-btn-reset-periodo" onClick={limpiarSeleccionPeriodo}>
-                                        Ver todo el periodo
-                                    </button>
-                                )}
-                            </div>
-                            {puntoSeleccionado && (
-                                <p className="kpis-periodo-seleccionado-hint">
-                                    Mostrando el periodo <strong>{puntoSeleccionado.etiqueta}</strong>
-                                </p>
-                            )}
-                            <div className="kpis-chart-clickeable" style={{ height: '280px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                                                        <LineChart data={trendData} onClick={seleccionarPeriodo} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Periodo', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis yAxisId="handovers" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-                                        <YAxis yAxisId="mediciones" orientation="right" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Mediciones', angle: 90, position: 'insideRight', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
-                                        <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="exitosos" stroke={colorExitoso} strokeWidth={3} name="Exitosos" dot={crearPuntoEvolucion(colorExitoso, 4)} />
-
-                                        <Line yAxisId="handovers" type="monotone" dataKey="fallidos" stroke={colorFallido} strokeWidth={3} name="Fallidos" dot={crearPuntoEvolucion(colorFallido, 4)} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="indeterminados" stroke={colorIndeterminado} strokeWidth={2} name="Indeterminados" dot={crearPuntoEvolucion(colorIndeterminado, 3)} />
-                                        <Line yAxisId="handovers" type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={crearPuntoEvolucion(colorPingPong, 3)} />
-                                        <Line yAxisId="mediciones" type="monotone" dataKey="total_mediciones" stroke={colorPrimario} strokeWidth={2} strokeDasharray="5 3" name="Mediciones" dot={crearPuntoEvolucion(colorPrimario, 3)} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Distribución por Tipo de Evento</h3>
-                            <div style={{ height: '280px', width: '100%', marginTop: '10px', position: 'relative' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie data={pieData} innerRadius={70} outerRadius={95} paddingAngle={4} dataKey="value">
-                                            {pieData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.color} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ backgroundColor: colorSuperficie, borderColor: colorBorde, color: colorTexto }} />
-                                        <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div style={{ position: 'absolute', top: '42%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', pointerEvents: 'none' }}>
-                                    <span style={{ fontSize: '20px', fontWeight: 'bold', color: colorTexto, display: 'block' }}>{resumenMostrado.total_handovers}</span>
-                                    <span style={{ fontSize: '11px', color: colorTextoTenue, textTransform: 'uppercase' }}>Total Handovers</span>
-
-                                </div>
-
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="kpis-row-layout" style={{ marginTop: '24px' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                                                        <h3 className="kpis-card-title">Distribución de Handovers por Hora del Día</h3>
-
-                            {puntoSeleccionado && (
-                                <p className="kpis-periodo-seleccionado-hint">
-                                    {loadingPeriodo ? 'Cargando datos del periodo...' : (
-                                        <>Mostrando solo <strong>{puntoSeleccionado.etiqueta}</strong></>
-                                    )}
-                                </p>
-                            )}
-                            <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                                                                                         <ComposedChart data={hourlyMostrado} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="hora_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Hora del día', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-
-                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
-
-                                        <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                                                        <h3 className="kpis-card-title">Distribución por Franja Horaria</h3>
-                            {puntoSeleccionado && (
-                                <p className="kpis-periodo-seleccionado-hint">
-                                    {loadingPeriodo ? 'Cargando datos del periodo...' : (
-                                        <>Mostrando solo <strong>{puntoSeleccionado.etiqueta}</strong></>
-                                    )}
-                                </p>
-                            )}
-                            <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={franjaMostrado} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="franja_etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Franja Horaria', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-
-                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
-
-                                        <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
-                                    </ComposedChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Distribución por Día de la Semana</h3>
-                            <div style={{ height: '300px', width: '100%', marginTop: '20px' }}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={diaSemanaData} margin={{ top: 5, right: 10, bottom: 20, left: 10 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke={colorBorde} vertical={false} />
-                                        <XAxis dataKey="etiqueta" stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Día de la Semana', position: 'insideBottom', offset: -10, fill: colorTextoTenue, fontSize: 12 }} />
-                                        <YAxis stroke={colorTextoTenue} fontSize={12} tickLine={false} axisLine={false} label={{ value: 'Cantidad de Handovers', angle: -90, position: 'insideLeft', fill: colorTextoTenue, fontSize: 12, style: { textAnchor: 'middle' } }} />
-
-                                        <Tooltip content={(props) => renderTooltipConMediciones(props, colorSuperficie, colorBorde, colorTexto)} />
-
-                                        <Legend verticalAlign="top" height={50} iconType="circle" />
-                                        <Bar dataKey="exitosos" stackId="eventos" fill={colorExitoso} name="Exitosos" />
-                                        <Bar dataKey="fallidos" stackId="eventos" fill={colorFallido} name="Fallidos" />
-                                        <Bar dataKey="indeterminados" stackId="eventos" fill={colorIndeterminado} name="Indeterminados" radius={[4, 4, 0, 0]} />
-                                        <Line type="monotone" dataKey="ping_pongs" stroke={colorPingPong} strokeWidth={2} name="Ping-Pong" dot={{ r: 3 }} />
-                                    </ComposedChart>
-                                                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="kpis-row-layout" style={{ marginTop: '24px', gridTemplateColumns: '1fr' }}>
-                        <div className="kpis-card" style={{ margin: 0 }}>
-                            <h3 className="kpis-card-title">Tabla de Periodos ({ETIQUETAS_PERIODO[periodo]})</h3>
-                            <TablaPeriodos datos={trendData} />
-                        </div>
-                    </div>
-                </>
+            {!loading && !error && hasData && (
+                <ReporteImprimible
+                    resumen={resumenMostrado}
+                    tendencia={trendData}
+                    horaDia={hourlyMostrado}
+                    franjaHoraria={franjaMostrado}
+                    diaSemana={diaSemanaData}
+                    periodo={periodo}
+                    sesionesTexto={sesionesTexto}
+                    periodoTexto={periodoTexto}
+                    tecnologiaTexto={resumenSeleccion(tecnologias, ETIQUETAS_TECNOLOGIA)}
+                    puntoSeleccionado={puntoSeleccionado}
+                    loadingPeriodo={loadingPeriodo}
+                    onSeleccionarPeriodo={seleccionarPeriodo}
+                    onLimpiarSeleccionPeriodo={limpiarSeleccionPeriodo}
+                />
             )}
         </div>
     );
